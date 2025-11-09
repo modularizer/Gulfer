@@ -1,28 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, View, Platform } from 'react-native';
 import { Card, Title, useTheme, Dialog, Portal, TextInput, Button } from 'react-native-paper';
-import { Course, Round, Player } from '../src/types';
-import { getAllCourses, saveCourse, generateCourseId, deleteCourse } from '../src/services/storage/courseStorage';
-import { getAllRounds } from '../src/services/storage/roundStorage';
-import { importCourse } from '../src/services/courseExport';
-import { getShadowStyle } from '../src/utils';
+import { Course, Player } from '@/types';
+import { getAllCourses, saveCourse, generateCourseId, deleteCourse } from '@/services/storage/courseStorage';
+import { getAllRounds } from '@/services/storage/roundStorage';
+import { getShadowStyle } from '@/utils';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import {
   ListPageLayout,
   PlayerChip,
-  ImportDialog,
-} from '../src/components/common';
-import { useSelection } from '../src/hooks/useSelection';
-import { useListPage } from '../src/hooks/useListPage';
-import { listPageStyles } from '../src/styles/listPageStyles';
+} from '@/components/common';
+import { useSelection } from '@/hooks/useSelection';
+import { useListPage } from '@/hooks/useListPage';
+import { listPageStyles } from '@/styles/listPageStyles';
 
 export default function CoursesScreen() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
   const [newCourseDialog, setNewCourseDialog] = useState({ visible: false, name: '', holes: '9' });
-  const [importDialogVisible, setImportDialogVisible] = useState(false);
-  const [importText, setImportText] = useState('');
   const [bestScoresByCourse, setBestScoresByCourse] = useState<Map<string, Map<string, { player: Player; score: number }>>>(new Map());
   
   const loadCourses = useCallback(async () => {
@@ -92,7 +88,7 @@ export default function CoursesScreen() {
       if (selection.selectedCount > 0) {
         selection.toggleSelection(courseId);
       } else {
-        const { encodeNameForUrl } = await import('../src/utils/urlEncoding');
+        const { encodeNameForUrl } = await import('@/utils/urlEncoding');
         router.push(`/course/${encodeNameForUrl(courseName)}/overview`);
       }
     },
@@ -143,28 +139,6 @@ export default function CoursesScreen() {
     }
   }, [newCourseDialog, loadCourses, listPage]);
 
-  const handleImport = useCallback(async () => {
-    if (!importText.trim()) {
-      Alert.alert('Error', 'Please paste the course export text');
-      return;
-    }
-
-    try {
-      const newCourseId = await importCourse(importText);
-      setImportText('');
-      setImportDialogVisible(false);
-      await loadCourses();
-      const { encodeNameForUrl } = await import('../src/utils/urlEncoding');
-      const { getCourseById } = await import('../src/services/storage/courseStorage');
-      const importedCourse = await getCourseById(newCourseId);
-      if (importedCourse) {
-                    router.push(`/course/${encodeNameForUrl(importedCourse.name)}/overview`);
-      }
-    } catch (error) {
-      console.error('Error importing course:', error);
-      Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to import course');
-    }
-  }, [importText, loadCourses]);
 
   const getHoleCount = (course: Course): number => {
     if (Array.isArray(course.holes)) {
@@ -190,6 +164,14 @@ export default function CoursesScreen() {
         <TouchableOpacity 
           onPress={() => handleCoursePress(item.id, item.name)}
           onLongPress={() => handleCourseLongPress(item.id)}
+          delayLongPress={300}
+          {...(Platform.OS === 'web' ? {
+            onContextMenu: (e: any) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleCourseLongPress(item.id);
+            }
+          } : {})}
         >
           <Card style={[
             listPageStyles.card, 
@@ -232,8 +214,6 @@ export default function CoursesScreen() {
       currentValue="courses"
       addLabel="Add Course"
       onAdd={() => router.push('/course/add')}
-      importLabel="Import Course"
-      onImport={() => setImportDialogVisible(true)}
       items={filteredCourses}
       renderItem={renderCourseItem}
       keyExtractor={(item) => item.id.toString()}
@@ -290,18 +270,6 @@ export default function CoursesScreen() {
         </Dialog>
       </Portal>
 
-      <ImportDialog
-        visible={importDialogVisible}
-        title="Import Course"
-        helpText="Paste the course export text below."
-        importText={importText}
-        onImportTextChange={setImportText}
-        onDismiss={() => {
-          setImportDialogVisible(false);
-          setImportText('');
-        }}
-        onImport={handleImport}
-      />
     </ListPageLayout>
   );
 }

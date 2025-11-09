@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TouchableOpacity } from 'react-native';
-import { Round, Course } from '../src/types';
-import { getAllRounds, deleteRound, deleteRounds } from '../src/services/storage/roundStorage';
-import { getAllCourses } from '../src/services/storage/courseStorage';
+import { Round, Course } from '@/types';
+import { getAllRounds, deleteRound, deleteRounds } from '@/services/storage/roundStorage';
+import { getAllCourses } from '@/services/storage/courseStorage';
 import { router } from 'expo-router';
 import {
   ListPageLayout,
   RoundCard,
-} from '../src/components/common';
-import { useSelection } from '../src/hooks/useSelection';
-import { useListPage } from '../src/hooks/useListPage';
+} from '@/components/common';
+import { useSelection } from '@/hooks/useSelection';
+import { useListPage } from '@/hooks/useListPage';
 
 export default function RoundHistoryScreen() {
   const [rounds, setRounds] = useState<Round[]>([]);
@@ -91,17 +91,14 @@ export default function RoundHistoryScreen() {
       const isSelected = selection.isSelected(item.id);
 
       return (
-        <TouchableOpacity
+        <RoundCard
+          round={item}
+          courseHoleCount={expectedHoles}
+          showPhotos={true}
+          isSelected={isSelected}
           onPress={() => handleRoundPress(item.id)}
           onLongPress={() => handleRoundLongPress(item.id)}
-          style={isSelected && { opacity: 0.7 }}
-        >
-          <RoundCard
-            round={item}
-            courseHoleCount={expectedHoles}
-            showPhotos={true}
-          />
-        </TouchableOpacity>
+        />
       );
     },
     [handleRoundPress, handleRoundLongPress, selection, courses]

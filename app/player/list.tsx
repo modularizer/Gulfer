@@ -1,29 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, View, Platform } from 'react-native';
 import { Card, Title, useTheme, Chip, Text } from 'react-native-paper';
-import { User } from '../src/services/storage/userStorage';
-import { getAllUsers, saveUser, generateUserId, deleteUser } from '../src/services/storage/userStorage';
-import { getAllRounds } from '../src/services/storage/roundStorage';
-import { importPlayer } from '../src/services/playerExport';
-import { getShadowStyle } from '../src/utils';
+import { User } from '@/services/storage/userStorage';
+import { getAllUsers, saveUser, generateUserId, deleteUser } from '@/services/storage/userStorage';
+import { getAllRounds } from '@/services/storage/roundStorage';
+import { getShadowStyle } from '@/utils';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
 import {
   ListPageLayout,
   NameUsernameDialog,
-  ImportDialog,
-} from '../src/components/common';
-import { useSelection } from '../src/hooks/useSelection';
-import { useListPage } from '../src/hooks/useListPage';
-import { listPageStyles } from '../src/styles/listPageStyles';
+} from '@/components/common';
+import { useSelection } from '@/hooks/useSelection';
+import { useListPage } from '@/hooks/useListPage';
+import { listPageStyles } from '@/styles/listPageStyles';
 
 export default function PlayersScreen() {
   const [players, setPlayers] = useState<User[]>([]);
   const [playerRoundsCount, setPlayerRoundsCount] = useState<Map<string, number>>(new Map());
   const [playerCoursesCount, setPlayerCoursesCount] = useState<Map<string, number>>(new Map());
   const [newPlayerDialogVisible, setNewPlayerDialogVisible] = useState(false);
-  const [importDialogVisible, setImportDialogVisible] = useState(false);
-  const [importText, setImportText] = useState('');
   
   const loadPlayers = useCallback(async () => {
     try {
@@ -80,7 +76,7 @@ export default function PlayersScreen() {
       } else {
         const player = players.find(p => p.id === playerId);
         if (!player) return;
-        const { encodeNameForUrl } = await import('../src/utils/urlEncoding');
+        const { encodeNameForUrl } = await import('@/utils/urlEncoding');
         router.push(`/player/${encodeNameForUrl(player.name)}/overview`);
       }
     },
@@ -117,28 +113,6 @@ export default function PlayersScreen() {
     }
   }, [loadPlayers, listPage]);
 
-  const handleImport = useCallback(async () => {
-    if (!importText.trim()) {
-      Alert.alert('Error', 'Please paste the player export text');
-      return;
-    }
-
-    try {
-      const newPlayerId = await importPlayer(importText);
-      setImportText('');
-      setImportDialogVisible(false);
-      await loadPlayers();
-      const { encodeNameForUrl } = await import('../src/utils/urlEncoding');
-      const { getUserById } = await import('../src/services/storage/userStorage');
-      const importedPlayer = await getUserById(newPlayerId);
-      if (importedPlayer) {
-                    router.push(`/player/${encodeNameForUrl(importedPlayer.name)}/overview`);
-      }
-    } catch (error) {
-      console.error('Error importing player:', error);
-      Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to import player');
-    }
-  }, [importText, loadPlayers]);
 
   const theme = useTheme();
 
@@ -152,6 +126,14 @@ export default function PlayersScreen() {
         <TouchableOpacity
           onPress={() => handlePlayerPress(item.id)}
           onLongPress={() => handlePlayerLongPress(item.id)}
+          delayLongPress={300}
+          {...(Platform.OS === 'web' ? {
+            onContextMenu: (e: any) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handlePlayerLongPress(item.id);
+            }
+          } : {})}
         >
           <Card style={[
             listPageStyles.card, 
@@ -161,7 +143,18 @@ export default function PlayersScreen() {
             <Card.Content>
               <View style={listPageStyles.cardHeader}>
                 <View style={{ flex: 1 }}>
-                  <Title style={listPageStyles.cardTitle}>{item.name}</Title>
+                  <View style={styles.nameRow}>
+                    <Title style={listPageStyles.cardTitle}>{item.name}</Title>
+                    {item.isCurrentUser && (
+                      <Chip 
+                        style={styles.currentUserChip} 
+                        textStyle={styles.currentUserChipText}
+                        compact
+                      >
+                        You
+                      </Chip>
+                    )}
+                  </View>
                   {(roundsCount > 0 || coursesCount > 0) && (
                     <View style={styles.statsRow}>
                       {roundsCount > 0 && (
@@ -182,11 +175,6 @@ export default function PlayersScreen() {
                     </View>
                   )}
                 </View>
-                {item.isCurrentUser && (
-                  <Chip style={styles.currentUserChip} icon="account">
-                    You
-                  </Chip>
-                )}
               </View>
             </Card.Content>
           </Card>
@@ -201,8 +189,6 @@ export default function PlayersScreen() {
       currentValue="players"
       addLabel="Add Player"
       onAdd={() => router.push('/player/add')}
-      importLabel="Import Player"
-      onImport={() => setImportDialogVisible(true)}
       items={players}
       renderItem={renderPlayerItem}
       keyExtractor={(item) => item.id.toString()}
@@ -227,23 +213,16 @@ export default function PlayersScreen() {
         onSave={handleSaveNewPlayer}
       />
 
-      <ImportDialog
-        visible={importDialogVisible}
-        title="Import Player"
-        helpText="Paste the player export text below."
-        importText={importText}
-        onImportTextChange={setImportText}
-        onDismiss={() => {
-          setImportDialogVisible(false);
-          setImportText('');
-        }}
-        onImport={handleImport}
-      />
     </ListPageLayout>
   );
 }
 
 const styles = {
+  nameRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+  },
   statsRow: {
     flexDirection: 'row' as const,
     marginTop: 4,
@@ -252,6 +231,20 @@ const styles = {
     fontSize: 14,
   },
   currentUserChip: {
-    height: 28,
+    height: 18,
+    minHeight: 18,
+    maxHeight: 18,
+    paddingHorizontal: 6,
+    paddingVertical: 0,
+    marginLeft: 6,
+    marginVertical: 0,
+    alignSelf: 'center',
+  },
+  currentUserChipText: {
+    fontSize: 10,
+    lineHeight: 14,
+    paddingVertical: 0,
+    marginVertical: 0,
+    height: 14,
   },
 };

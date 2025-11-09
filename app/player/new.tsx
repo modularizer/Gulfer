@@ -2,9 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Button, Dialog, Portal, TextInput, useTheme, Text } from 'react-native-paper';
 import { router } from 'expo-router';
-import { User } from '../../src/services/storage/userStorage';
-import { saveUser, generateUserId } from '../../src/services/storage/userStorage';
-import { ErrorDialog } from '../../src/components/common';
+import { User } from '@/services/storage/userStorage';
+import { saveUser, generateUserId } from '@/services/storage/userStorage';
+import { ErrorDialog } from '@/components/common';
 
 export default function NewPlayerScreen() {
   const theme = useTheme();
@@ -24,7 +24,7 @@ export default function NewPlayerScreen() {
       };
 
       await saveUser(newUser);
-      const { encodeNameForUrl } = await import('../../src/utils/urlEncoding');
+      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       router.push(`/player/${encodeNameForUrl(newUser.name)}/overview`);
     } catch (error) {
       console.error('Error saving player:', error);

@@ -7,10 +7,10 @@ let DateTimePicker: any;
 if (Platform.OS !== 'web') {
   DateTimePicker = require('@react-native-community/datetimepicker').default;
 }
-import { createNewRound } from '../src/services/storage/roundStorage';
-import { getCurrentUserName, getUserIdForPlayerName } from '../src/services/storage/userStorage';
-import { getLastUsedCourse, getLatestAddedCourse } from '../src/services/storage/courseStorage';
-import { Player } from '../src/types';
+import { createNewRound } from '@/services/storage/roundStorage';
+import { getCurrentUserName, getUserIdForPlayerName } from '@/services/storage/userStorage';
+import { getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
+import { Player } from '@/types';
 
 type RoundType = 'play-now' | 'past' | 'future' | null;
 

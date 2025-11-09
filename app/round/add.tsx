@@ -7,13 +7,13 @@ let DateTimePicker: any;
 if (Platform.OS !== 'web') {
   DateTimePicker = require('@react-native-community/datetimepicker').default;
 }
-import { createNewRound } from '../src/services/storage/roundStorage';
-import { getCurrentUserName, getUsernameForPlayerName } from '../src/services/storage/userStorage';
-import { getLastUsedCourse, getLatestAddedCourse } from '../src/services/storage/courseStorage';
-import { importRound } from '../src/services/roundExport';
-import { getImportMappingInfo, createManualMappings } from '../src/services/importMapping';
-import { Player } from '../src/types';
-import ImportMappingDialog from '../src/components/common/ImportMappingDialog';
+import { createNewRound } from '@/services/storage/roundStorage';
+import { getCurrentUserName, getUsernameForPlayerName } from '@/services/storage/userStorage';
+import { getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
+import { importRound } from '@/services/roundExport';
+import { getImportMappingInfo, createManualMappings } from '@/services/importMapping';
+import { Player } from '@/types';
+import ImportMappingDialog from '@/components/common/ImportMappingDialog';
 
 type RoundType = 'play-now' | 'past' | 'future' | null;
 

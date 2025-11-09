@@ -2,9 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Button, Dialog, Portal, TextInput, useTheme, Text } from 'react-native-paper';
 import { router } from 'expo-router';
-import { Course } from '../../src/types';
-import { saveCourse, generateCourseId } from '../../src/services/storage/courseStorage';
-import { ErrorDialog } from '../../src/components/common';
+import { Course } from '@/types';
+import { saveCourse, generateCourseId } from '@/services/storage/courseStorage';
+import { ErrorDialog } from '@/components/common';
 
 export default function NewCourseScreen() {
   const theme = useTheme();
@@ -34,7 +34,7 @@ export default function NewCourseScreen() {
       };
 
       await saveCourse(newCourse);
-      const { encodeNameForUrl } = await import('../../src/utils/urlEncoding');
+      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       router.push(`/course/${encodeNameForUrl(newCourse.name)}/overview`);
     } catch (error) {
       console.error('Error saving course:', error);

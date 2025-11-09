@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
-import { Course, Round, Player } from '../../../src/types';
-import { getCourseById } from '../../../src/services/storage/courseStorage';
-import { getAllRounds } from '../../../src/services/storage/roundStorage';
-import { exportCourse } from '../../../src/services/courseExport';
+import { Course, Round, Player } from '@/types';
+import { getCourseById } from '@/services/storage/courseStorage';
+import { getAllRounds } from '@/services/storage/roundStorage';
+import { exportCourse } from '@/services/courseExport';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useFooterCenterButton } from '../../../src/components/common/Footer';
+import { useFooterCenterButton } from '@/components/common/Footer';
 import {
   DetailPageLayout,
   HeroSection,
@@ -14,15 +14,16 @@ import {
   RoundCard,
   PlayerChip,
   ErrorDialog,
-} from '../../../src/components/common';
-import { useExport } from '../../../src/hooks/useExport';
-import { detailPageStyles } from '../../../src/styles/detailPageStyles';
-import { listPageStyles } from '../../../src/styles/listPageStyles';
+} from '@/components/common';
+import { useExport } from '@/hooks/useExport';
+import { detailPageStyles } from '@/styles/detailPageStyles';
+import { listPageStyles } from '@/styles/listPageStyles';
 
 const { width, height } = Dimensions.get('window');
 
 export default function CourseDetailScreen() {
   const { id: encodedNameParam } = useLocalSearchParams<{ id: string }>();
+  const theme = useTheme();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
@@ -42,8 +43,8 @@ export default function CourseDetailScreen() {
       }
 
       try {
-        const { decodeNameFromUrl } = await import('../../../src/utils/urlEncoding');
-        const { getCourseByName } = await import('../../../src/services/storage/courseStorage');
+        const { decodeNameFromUrl } = await import('@/utils/urlEncoding');
+        const { getCourseByName } = await import('@/services/storage/courseStorage');
         const courseName = decodeNameFromUrl(encodedNameParam);
         
         const loadedCourse = await getCourseByName(courseName);
@@ -103,7 +104,7 @@ export default function CourseDetailScreen() {
   const { registerCenterButtonHandler } = useFooterCenterButton();
   useEffect(() => {
     if (encodedNameParam && course) {
-      const { encodeNameForUrl } = require('../../../src/utils/urlEncoding');
+      const { encodeNameForUrl } = require('@/utils/urlEncoding');
       registerCenterButtonHandler(() => {
         const encodedName = encodeNameForUrl(course.name);
         router.push(`/course/${encodedName}/holes`);
@@ -129,7 +130,6 @@ export default function CourseDetailScreen() {
     return null;
   }
 
-  const theme = useTheme();
   const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
 
   return (

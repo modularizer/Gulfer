@@ -4,26 +4,32 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { Card, Text, Chip, useTheme } from 'react-native-paper';
 import { Round, Player } from '../../types';
 import { getShadowStyle } from '../../utils';
 import PlayerChip from './PlayerChip';
+import HashedImage from './HashedImage';
 import { router } from 'expo-router';
 
 interface RoundCardProps {
   round: Round;
   onPress?: () => void;
+  onLongPress?: () => void;
   showCourse?: boolean;
   courseHoleCount?: number;
+  showPhotos?: boolean;
+  isSelected?: boolean;
 }
 
 export default function RoundCard({
   round,
   onPress,
+  onLongPress,
   showCourse = true,
   courseHoleCount,
   showPhotos = false,
+  isSelected = false,
 }: RoundCardProps) {
   const theme = useTheme();
 
@@ -61,8 +67,24 @@ export default function RoundCard({
   };
 
   return (
-    <TouchableOpacity onPress={handlePress}>
-      <Card style={[styles.card, { backgroundColor: theme.colors.surface }, getShadowStyle(2)]}>
+    <TouchableOpacity 
+      onPress={handlePress} 
+      onLongPress={onLongPress} 
+      delayLongPress={300}
+      activeOpacity={0.7}
+      {...(Platform.OS === 'web' && onLongPress ? {
+        onContextMenu: (e: any) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onLongPress();
+        }
+      } : {})}
+    >
+      <Card style={[
+        styles.card, 
+        { backgroundColor: isSelected ? theme.colors.primaryContainer : theme.colors.surface }, 
+        getShadowStyle(2)
+      ]}>
         <Card.Content>
           <View style={styles.header}>
             <Text style={[styles.date, { color: theme.colors.onSurface }]}>

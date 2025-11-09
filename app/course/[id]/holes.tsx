@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { Course, Hole } from '../../../src/types';
-import HolesTable from '../../../src/components/common/HolesTable';
-import { getCourseByName, saveCourse } from '../../../src/services/storage/courseStorage';
+import { Course, Hole } from '@/types';
+import HolesTable from '@/components/common/HolesTable';
+import { getCourseByName, saveCourse } from '@/services/storage/courseStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 
 export default function CourseHolesScreen() {

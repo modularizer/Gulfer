@@ -1,16 +1,19 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import { Button, Dialog, Portal, TextInput, useTheme, Text } from 'react-native-paper';
 import { router } from 'expo-router';
-import { Course } from '../../src/types';
-import { saveCourse, generateCourseId } from '../../src/services/storage/courseStorage';
-import { ErrorDialog } from '../../src/components/common';
+import { Course } from '@/types';
+import { saveCourse, generateCourseId, getCourseById } from '@/services/storage/courseStorage';
+import { importCourse } from '@/services/courseExport';
+import { ErrorDialog, ImportDialog } from '@/components/common';
 
 export default function AddCourseScreen() {
   const theme = useTheme();
   const [name, setName] = useState('');
   const [holes, setHoles] = useState('9');
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
+  const [importDialogVisible, setImportDialogVisible] = useState(false);
+  const [importText, setImportText] = useState('');
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
@@ -34,13 +37,38 @@ export default function AddCourseScreen() {
       };
 
       await saveCourse(newCourse);
-      const { encodeNameForUrl } = await import('../../src/utils/urlEncoding');
+      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       router.push(`/course/${encodeNameForUrl(newCourse.name)}/overview`);
     } catch (error) {
       console.error('Error saving course:', error);
       setErrorDialog({ visible: true, title: 'Error', message: 'Failed to save course' });
     }
   }, [name, holes]);
+
+  const handleImport = useCallback(async () => {
+    if (!importText.trim()) {
+      Alert.alert('Error', 'Please paste the course export text');
+      return;
+    }
+
+    try {
+      const newCourseId = await importCourse(importText);
+      setImportText('');
+      setImportDialogVisible(false);
+      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
+      const importedCourse = await getCourseById(newCourseId);
+      if (importedCourse) {
+        router.push(`/course/${encodeNameForUrl(importedCourse.name)}/overview`);
+      }
+    } catch (error) {
+      console.error('Error importing course:', error);
+      setErrorDialog({
+        visible: true,
+        title: 'Import Error',
+        message: error instanceof Error ? error.message : 'Failed to import course',
+      });
+    }
+  }, [importText]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -84,7 +112,28 @@ export default function AddCourseScreen() {
         >
           Save Course
         </Button>
+        <Button
+          mode="outlined"
+          icon="import"
+          onPress={() => setImportDialogVisible(true)}
+          style={styles.importButton}
+        >
+          Import Course
+        </Button>
       </View>
+
+      <ImportDialog
+        visible={importDialogVisible}
+        title="Import Course"
+        helpText="Paste the course export text below."
+        importText={importText}
+        onImportTextChange={setImportText}
+        onDismiss={() => {
+          setImportDialogVisible(false);
+          setImportText('');
+        }}
+        onConfirm={handleImport}
+      />
 
       <ErrorDialog
         visible={errorDialog.visible}
@@ -121,6 +170,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   saveButton: {
+    marginTop: 8,
+  },
+  importButton: {
     marginTop: 8,
   },
 });

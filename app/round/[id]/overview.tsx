@@ -2,17 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text } from 'react-native-paper';
-import { Player, Round } from '../../../src/types';
-import PhotoGallery from '../../../src/components/common/PhotoGallery';
-import CourseSelector from '../../../src/components/common/CourseSelector';
-import PlayerChip from '../../../src/components/common/PlayerChip';
-import NameUsernameDialog from '../../../src/components/common/NameUsernameDialog';
-import { getRoundById, saveRound } from '../../../src/services/storage/roundStorage';
-import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '../../../src/services/storage/userStorage';
-import { getAllCourses } from '../../../src/services/storage/courseStorage';
-import { exportRound } from '../../../src/services/roundExport';
+import { Player, Round } from '@/types';
+import PhotoGallery from '@/components/common/PhotoGallery';
+import CourseSelector from '@/components/common/CourseSelector';
+import PlayerChip from '@/components/common/PlayerChip';
+import NameUsernameDialog from '@/components/common/NameUsernameDialog';
+import { getRoundById, saveRound } from '@/services/storage/roundStorage';
+import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
+import { getAllCourses } from '@/services/storage/courseStorage';
+import { exportRound } from '@/services/roundExport';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useFooterCenterButton } from '../../../src/components/common/Footer';
+import { useFooterCenterButton } from '@/components/common/Footer';
 import { Platform, Share, Alert, Clipboard } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
@@ -117,7 +117,7 @@ export default function RoundOverviewScreen() {
   const saveRoundData = useCallback(async () => {
     if (!round) return;
 
-    const { getAllCourses } = await import('../../../src/services/storage/courseStorage');
+    const { getAllCourses } = await import('@/services/storage/courseStorage');
     let courseName: string | undefined = round.courseName;
     if (selectedCourseId) {
       const courses = await getAllCourses();
@@ -296,7 +296,7 @@ export default function RoundOverviewScreen() {
           {photos.length === 0 && (
             <View style={styles.logoContainer}>
               <Image 
-                source={require('../../assets/favicon.png')} 
+                source={require('../../../assets/favicon.png')} 
                 style={styles.logoImage}
                 resizeMode="contain"
               />
@@ -333,7 +333,7 @@ export default function RoundOverviewScreen() {
                   size={20}
                   iconColor={theme.colors.primary}
                   onPress={() => {
-                    const { encodeNameForUrl } = require('../../../src/utils/urlEncoding');
+                    const { encodeNameForUrl } = require('@/utils/urlEncoding');
                     const encodedCourseName = encodeNameForUrl(round.courseName!);
                     router.push(`/course/${encodedCourseName}/overview`);
                   }}

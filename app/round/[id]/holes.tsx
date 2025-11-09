@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Button, Dialog, Portal, Text, useTheme } from 'react-native-paper';
-import { Scorecard } from '../../../src/components/Scorecard';
-import { Player, Score, Round } from '../../../src/types';
-import { saveRound, getRoundById } from '../../../src/services/storage/roundStorage';
-import { getAllCourses } from '../../../src/services/storage/courseStorage';
+import { Scorecard } from '@/components/Scorecard';
+import { Player, Score, Round } from '@/types';
+import { saveRound, getRoundById } from '@/services/storage/roundStorage';
+import { getAllCourses } from '@/services/storage/courseStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 
 export default function ScorecardPlayScreen() {
