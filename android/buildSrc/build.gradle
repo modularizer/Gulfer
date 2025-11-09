@@ -1,0 +1,22 @@
+plugins {
+    id 'groovy-gradle-plugin'
+}
+
+repositories {
+    mavenCentral()
+    google()
+}
+
+dependencies {
+    implementation 'com.android.tools.build:gradle:8.3.0'
+}
+
+gradlePlugin {
+    plugins {
+        expoModuleGradlePlugin {
+            id = 'expo-module-gradle-plugin'
+            implementationClass = 'ExpoModuleGradlePlugin'
+        }
+    }
+}
+
