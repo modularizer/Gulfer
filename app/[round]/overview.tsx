@@ -179,7 +179,7 @@ export default function RoundOverviewScreen() {
           icon="arrow-left"
           size={24}
           iconColor={theme.colors.onSurface}
-          onPress={() => router.push('/round-history')}
+          onPress={() => router.push('/rounds')}
           style={styles.backButton}
         />
       </View>
@@ -279,6 +279,7 @@ export default function RoundOverviewScreen() {
                           isWinner && styles.winnerChipText,
                         ]}
                         icon={isWinner ? 'crown' : undefined}
+                        onPress={() => router.push(`/player/${encodeURIComponent(player.name)}`)}
                       >
                         {player.name}: {total}
                       </Chip>

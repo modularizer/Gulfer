@@ -39,7 +39,7 @@ export default function Footer({ customCenterHandler }: FooterProps) {
 
   return (
     <HillFooter
-      onHistoryPress={() => router.push('/round-history')}
+      onHistoryPress={() => router.push('/rounds')}
       onNewRoundPress={handleCenterPress}
       onProfilePress={() => router.push('/profile')}
       showCenterButton={!isPlayPage}
