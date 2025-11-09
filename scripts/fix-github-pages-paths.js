@@ -48,15 +48,16 @@ function fixPathsInFile(filePath) {
       // Replace /_expo/ in string literals (both single and double quotes, and template literals)
       // Pattern: quote, slash, _expo, slash
       if (content.includes('/_expo/')) {
+        const replacement = basePath + '/_expo/';
         // Replace in double-quoted strings: "/_expo/"
-        content = content.replace(/"\/_expo\//g, `"${basePath}/_expo/`);
+        content = content.replace(/"\/_expo\//g, '"' + replacement);
         // Replace in single-quoted strings: '/_expo/'
-        content = content.replace(/'\/_expo\//g, `'${basePath}/_expo/`);
+        content = content.replace(/'\/_expo\//g, "'" + replacement);
         // Replace in template literals: `/_expo/`
-        content = content.replace(/`\/_expo\//g, ``${basePath}/_expo/`);
+        content = content.replace(/`\/_expo\//g, '`' + replacement);
         // Also handle cases where it might be concatenated: + "/_expo/"
-        content = content.replace(/\+\s*"\/_expo\//g, `+ "${basePath}/_expo/`);
-        content = content.replace(/\+\s*'\/_expo\//g, `+ '${basePath}/_expo/`);
+        content = content.replace(/\+\s*"\/_expo\//g, '+ "' + replacement);
+        content = content.replace(/\+\s*'\/_expo\//g, "+ '" + replacement);
         modified = true;
       }
     }
