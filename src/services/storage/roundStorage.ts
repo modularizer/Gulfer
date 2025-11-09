@@ -118,7 +118,6 @@ export async function createNewRound(initialData: {
   notes?: string;
   photos?: string[];
   courseName?: string;
-  gameType?: 'golf' | 'disc-golf';
   date?: number; // Optional custom date (Unix timestamp)
 }): Promise<Round> {
   const date = initialData.date || Date.now();
@@ -134,7 +133,6 @@ export async function createNewRound(initialData: {
     notes: initialData.notes,
     photos: initialData.photos,
     courseName: initialData.courseName,
-    gameType: initialData.gameType || 'disc-golf',
   };
 
   await saveRound(newRound);

@@ -51,12 +51,11 @@ export default function Footer({ customCenterHandler }: FooterProps) {
         const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
         const courseName = defaultCourse ? defaultCourse.name : undefined;
         
-        const newRound = await createNewRound({
-          players: [defaultPlayer],
-          gameType: 'disc-golf',
-          courseName,
-          date: Date.now(),
-        });
+               const newRound = await createNewRound({
+                 players: [defaultPlayer],
+                 courseName,
+                 date: Date.now(),
+               });
         
         router.replace(`/${newRound.id}/overview`);
       } catch (error) {

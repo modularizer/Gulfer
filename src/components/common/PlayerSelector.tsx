@@ -9,11 +9,13 @@ import NameUsernameDialog from './NameUsernameDialog';
 interface PlayerSelectorProps {
   players: Player[];
   onPlayersChange: (players: Player[]) => void;
+  hideHeader?: boolean;
 }
 
 export default function PlayerSelector({
   players,
   onPlayersChange,
+  hideHeader = false,
 }: PlayerSelectorProps) {
   const theme = useTheme();
   const [knownUsers, setKnownUsers] = useState<User[]>([]);
@@ -129,94 +131,107 @@ export default function PlayerSelector({
     }
   }, [knownUsers, players]);
 
+  const addPlayerMenu = (
+    <Menu
+      visible={addPlayerMenuVisible}
+      onDismiss={() => setAddPlayerMenuVisible(false)}
+      anchor={
+        <Button
+          mode="text"
+          icon="account-plus"
+          onPress={handleAddPlayerPress}
+          textColor={theme.colors.primary}
+          compact
+        >
+          Add
+        </Button>
+      }
+    >
+      {knownUsers
+        .filter((user) => !user.isCurrentUser && !players.some((p) => p.name === user.name)) // Exclude current user and players already in round
+        .map((user) => (
+          <Menu.Item
+            key={user.id}
+            onPress={async () => {
+              const username = user.username || await getUsernameForPlayerName(user.name);
+              const newPlayer: Player = {
+                id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                name: user.name,
+                username,
+              };
+              onPlayersChange([...players, newPlayer]);
+              setAddPlayerMenuVisible(false);
+            }}
+            title={user.name}
+          />
+        ))}
+      <Menu.Item
+        onPress={() => {
+          setPlayerDialog({ visible: true, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined });
+          setAddPlayerMenuVisible(false);
+        }}
+        title="+ Add New Player"
+        titleStyle={{ color: theme.colors.primary }}
+      />
+    </Menu>
+  );
+
   return (
     <>
       <View style={styles.playersSection}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-            Players
-          </Text>
-          <Menu
-            visible={addPlayerMenuVisible}
-            onDismiss={() => setAddPlayerMenuVisible(false)}
-            anchor={
-              <Button
-                mode="text"
-                icon="account-plus"
-                onPress={handleAddPlayerPress}
-                textColor={theme.colors.primary}
-                compact
-              >
-                Add
-              </Button>
-            }
-          >
-            {knownUsers
-              .filter((user) => !user.isCurrentUser && !players.some((p) => p.name === user.name)) // Exclude current user and players already in round
-              .map((user) => (
-                <Menu.Item
-                  key={user.id}
-                  onPress={async () => {
-                    const username = user.username || await getUsernameForPlayerName(user.name);
-                    const newPlayer: Player = {
-                      id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                      name: user.name,
-                      username,
-                    };
-                    onPlayersChange([...players, newPlayer]);
-                    setAddPlayerMenuVisible(false);
-                  }}
-                  title={user.name}
-                />
-              ))}
-            <Menu.Item
-              onPress={() => {
-                setPlayerDialog({ visible: true, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined });
-                setAddPlayerMenuVisible(false);
-              }}
-              title="+ Add New Player"
-              titleStyle={{ color: theme.colors.primary }}
-            />
-          </Menu>
-        </View>
+        {!hideHeader && (
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+              Players
+            </Text>
+            {addPlayerMenu}
+          </View>
+        )}
+        {hideHeader && (
+          <View style={styles.addButtonContainer}>
+            {addPlayerMenu}
+          </View>
+        )}
         
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.playersList}
-        >
-          {players.map((player) => (
-            <TouchableOpacity
-              key={player.id}
-              onPress={() => handleEditPlayer(player.id)}
-              activeOpacity={0.7}
-            >
-              <Surface 
-                style={[
-                  styles.playerChip, 
-                  { backgroundColor: theme.colors.surfaceVariant },
-                  getShadowStyle(1),
-                ]}
+        {!hideHeader && (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.playersList}
+          >
+            {players.map((player) => (
+              <TouchableOpacity
+                key={player.id}
+                onPress={() => handleEditPlayer(player.id)}
+                activeOpacity={0.7}
               >
-                <Text style={[styles.playerName, { color: theme.colors.onSurfaceVariant }]}>
-                  {player.name}
-                </Text>
-                {players.length > 1 && (
-                  <IconButton
-                    icon="close"
-                    size={18}
-                    iconColor={theme.colors.onSurfaceVariant}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleRemovePlayer(player.id);
-                    }}
-                    style={styles.removePlayerButton}
-                  />
-                )}
-              </Surface>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+                <Surface 
+                  style={[
+                    styles.playerChip, 
+                    { backgroundColor: theme.colors.surfaceVariant },
+                    getShadowStyle(1),
+                  ]}
+                >
+                  <Text style={[styles.playerName, { color: theme.colors.onSurfaceVariant }]}>
+                    {player.name}
+                  </Text>
+                  {players.length > 1 && (
+                    <IconButton
+                      icon="close"
+                      size={18}
+                      iconColor={theme.colors.onSurfaceVariant}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleRemovePlayer(player.id);
+                      }}
+                      style={styles.removePlayerButton}
+                    />
+                  )}
+                </Surface>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {/* Add/Edit Player Dialog */}
@@ -279,6 +294,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
+  },
+  addButtonContainer: {
     marginBottom: 12,
   },
   sectionTitle: {

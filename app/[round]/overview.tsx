@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text, Chip } from 'react-native-paper';
+import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text } from 'react-native-paper';
 import { Player, Round } from '../../src/types';
 import PhotoGallery from '../../src/components/common/PhotoGallery';
 import CourseSelector from '../../src/components/common/CourseSelector';
-import PlayerSelector from '../../src/components/common/PlayerSelector';
+import PlayerChip from '../../src/components/common/PlayerChip';
+import NameUsernameDialog from '../../src/components/common/NameUsernameDialog';
 import { getRoundById, saveRound } from '../../src/services/storage/roundStorage';
-import { getCurrentUserName } from '../../src/services/storage/userStorage';
+import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUsernameForPlayerName, User } from '../../src/services/storage/userStorage';
 import { getAllCourses } from '../../src/services/storage/courseStorage';
+import { exportRound } from '../../src/services/roundExport';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFooterCenterButton } from '../../src/components/common/Footer';
+import { Platform, Share, Alert, Clipboard } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,6 +30,9 @@ export default function RoundOverviewScreen() {
   const [courses, setCourses] = useState<any[]>([]);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
+  const [addPlayerDialogVisible, setAddPlayerDialogVisible] = useState(false);
+  const [editPlayerDialog, setEditPlayerDialog] = useState({ visible: false, playerId: '', initialName: '', initialUsername: '' });
+  const [copySuccess, setCopySuccess] = useState(false);
 
 
   // Load current user name and update "You" player
@@ -139,6 +145,100 @@ export default function RoundOverviewScreen() {
     setPlayers(newPlayers);
   }, []);
 
+  const handleSaveNewPlayer = useCallback(async (name: string, username: string) => {
+    try {
+      // Save to known users first
+      const newUser: User = {
+        id: generateUserId(),
+        name,
+        username,
+      };
+      await saveUser(newUser);
+      
+      const newPlayer: Player = {
+        id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name,
+        username,
+      };
+      setPlayers([...players, newPlayer]);
+      setAddPlayerDialogVisible(false);
+    } catch (error) {
+      console.error('Error saving player:', error);
+      setErrorDialog({ visible: true, title: 'Error', message: 'Failed to save player' });
+    }
+  }, [players]);
+
+  const handleSaveEditPlayer = useCallback(async (name: string, username: string) => {
+    try {
+      const updatedPlayers = players.map((p) => {
+        if (p.id === editPlayerDialog.playerId) {
+          return { ...p, name, username };
+        }
+        return p;
+      });
+      setPlayers(updatedPlayers);
+      setEditPlayerDialog({ visible: false, playerId: '', initialName: '', initialUsername: '' });
+    } catch (error) {
+      console.error('Error updating player:', error);
+      setErrorDialog({ visible: true, title: 'Error', message: 'Failed to update player' });
+    }
+  }, [players, editPlayerDialog.playerId]);
+
+  const handleEditPlayer = useCallback((playerId: string) => {
+    const player = players.find((p) => p.id === playerId);
+    if (player) {
+      setEditPlayerDialog({
+        visible: true,
+        playerId,
+        initialName: player.name,
+        initialUsername: player.username || '',
+      });
+    }
+  }, [players]);
+
+  const handleRemovePlayer = useCallback((playerId: string) => {
+    if (players.length === 1) {
+      setWarningDialog({ visible: true, message: 'You must have at least one player' });
+      return;
+    }
+    setPlayers(players.filter((p) => p.id !== playerId));
+  }, [players]);
+
+  const handleExportRound = useCallback(async () => {
+    if (!roundId) return;
+    
+    try {
+      const exportedText = await exportRound(roundId);
+      
+      // Copy to clipboard
+      if (Platform.OS === 'web') {
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(exportedText);
+        } else {
+          // Fallback for older browsers
+          const textArea = document.createElement('textarea');
+          textArea.value = exportedText;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+        }
+      } else {
+        // React Native
+        Clipboard.setString(exportedText);
+      }
+      
+      // Show success feedback
+      setCopySuccess(true);
+      setTimeout(() => {
+        setCopySuccess(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Error exporting round:', error);
+      setErrorDialog({ visible: true, title: 'Export Error', message: error instanceof Error ? error.message : 'Failed to export round' });
+    }
+  }, [roundId]);
+
   const handleStartRound = useCallback(() => {
     if (!roundId) return;
     router.push(`/${roundId}/play`);
@@ -242,60 +342,104 @@ export default function RoundOverviewScreen() {
         </View>
 
         {/* Players Section */}
-        {round.scores && round.scores.length > 0 ? (
-          // Show player badges with scores if game has been played
-          <View style={styles.playersSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-                Players
-              </Text>
-            </View>
-            {(() => {
-              // Calculate total score for each player
-              const playerScores = players.map((player) => {
-                const total = round.scores!
-                  .filter((s) => s.playerId === player.id)
-                  .reduce((sum, s) => sum + s.throws, 0);
-                return { player, total };
-              });
+        <View style={styles.playersSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+              Players
+            </Text>
+            <IconButton
+              icon={copySuccess ? "check" : "content-copy"}
+              size={20}
+              iconColor={copySuccess ? theme.colors.primary : theme.colors.primary}
+              onPress={handleExportRound}
+              style={styles.exportButton}
+            />
+          </View>
+          {(() => {
+            // Calculate total score for each player (0 if no scores)
+            const playerScores = players.map((player) => {
+              const total = round.scores && round.scores.length > 0
+                ? round.scores
+                    .filter((s) => s.playerId === player.id)
+                    .reduce((sum, s) => sum + s.throws, 0)
+                : 0;
+              return { player, total };
+            });
 
-              // Find winner (lowest score wins in golf/disc golf)
+            // Find winner (lowest score wins in golf/disc golf) - only if scores exist
+            let winner: typeof playerScores[0] | undefined;
+            if (round.scores && round.scores.length > 0 && playerScores.length > 0) {
               const winnerScore = Math.min(...playerScores.map((ps) => ps.total));
-              const winner = playerScores.find((ps) => ps.total === winnerScore);
+              winner = playerScores.find((ps) => ps.total === winnerScore);
+            }
 
-              return (
+            const hasScores = round.scores && round.scores.length > 0;
+            
+            return (
+              <>
                 <View style={styles.playersContainer}>
                   {playerScores.map(({ player, total }) => {
                     const isWinner = winner && player.id === winner.player.id;
                     return (
-                      <Chip
-                        key={player.id}
-                        style={[
-                          styles.playerChip,
-                          isWinner && styles.winnerChip,
-                        ]}
-                        textStyle={[
-                          styles.playerChipText,
-                          isWinner && styles.winnerChipText,
-                        ]}
-                        icon={isWinner ? 'crown' : undefined}
-                        onPress={() => router.push(`/player/${encodeURIComponent(player.username || player.name)}`)}
-                      >
-                        {player.name}: {total}
-                      </Chip>
+                      <View key={player.id} style={styles.playerChipWrapper}>
+                        <PlayerChip
+                          player={player}
+                          score={total}
+                          isWinner={isWinner}
+                          onPress={() => router.push(`/player/${encodeURIComponent(player.username || player.name)}`)}
+                        />
+                        {!hasScores && players.length > 1 && (
+                          <IconButton
+                            icon="close"
+                            size={18}
+                            iconColor={theme.colors.error}
+                            onPress={() => handleRemovePlayer(player.id)}
+                            style={styles.removeButton}
+                          />
+                        )}
+                      </View>
                     );
                   })}
                 </View>
-              );
-            })()}
-          </View>
-        ) : (
-          // Show PlayerSelector for editing when no scores
-          <PlayerSelector
-            players={players}
-            onPlayersChange={handlePlayersChange}
-          />
-        )}
+                {/* Add button - only show if no scores */}
+                {!hasScores && (
+                  <View style={styles.addButtonRow}>
+                    <Button
+                      mode="text"
+                      icon="account-plus"
+                      onPress={() => setAddPlayerDialogVisible(true)}
+                      textColor={theme.colors.primary}
+                      compact
+                    >
+                      Add Player
+                    </Button>
+                  </View>
+                )}
+              </>
+            );
+          })()}
+        </View>
+
+        {/* Add Player Dialog */}
+        <NameUsernameDialog
+          visible={addPlayerDialogVisible}
+          title="Add Player"
+          nameLabel="Player Name"
+          onDismiss={() => setAddPlayerDialogVisible(false)}
+          onSave={handleSaveNewPlayer}
+        />
+
+        {/* Edit Player Dialog */}
+        <NameUsernameDialog
+          visible={editPlayerDialog.visible}
+          title="Edit Player"
+          nameLabel="Player Name"
+          initialName={editPlayerDialog.initialName}
+          initialUsername={editPlayerDialog.initialUsername}
+          excludeUserId={undefined} // Could look up user ID if needed
+          onDismiss={() => setEditPlayerDialog({ visible: false, playerId: '', initialName: '', initialUsername: '' })}
+          onSave={handleSaveEditPlayer}
+        />
 
         {/* Notes Section */}
         <View style={styles.notesSection}>
@@ -435,21 +579,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginBottom: 8,
   },
-  playerChip: {
-    height: 36,
-    borderRadius: 8,
+  playerChipWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  winnerChip: {
-    backgroundColor: '#FFD700',
+  removeButton: {
+    margin: 0,
   },
-  playerChipText: {
-    fontSize: 13,
-    fontWeight: '500',
+  addButtonRow: {
+    marginTop: 8,
   },
-  winnerChipText: {
-    color: '#000',
-    fontWeight: 'bold',
+  exportButton: {
+    margin: 0,
   },
   inputSection: {
     paddingHorizontal: 24,

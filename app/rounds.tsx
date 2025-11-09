@@ -6,8 +6,10 @@ import {
   RefreshControl,
   TouchableOpacity,
   ScrollView,
+  Platform,
+  Alert,
 } from 'react-native';
-import { Card, Title, Paragraph, useTheme, Menu, Chip, Button, IconButton, Dialog, Portal, Text } from 'react-native-paper';
+import { Card, Title, Paragraph, useTheme, Menu, Chip, Button, IconButton, Dialog, Portal, Text, TextInput } from 'react-native-paper';
 import { Round, Course, Player, Score } from '../src/types';
 import { getAllRounds, deleteRound } from '../src/services/storage/roundStorage';
 import { getAllCourses } from '../src/services/storage/courseStorage';
@@ -65,6 +67,7 @@ export default function RoundHistoryScreen() {
     await loadRounds();
     setRefreshing(false);
   }, [loadRounds]);
+
 
   const handleRoundPress = useCallback(
     (roundId: string) => {

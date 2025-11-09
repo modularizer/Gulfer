@@ -42,7 +42,6 @@ export interface Round {
   photos?: string[]; // Image hashes (for deduplication)
   courseName?: string;
   notes?: string;
-  gameType: 'golf' | 'disc-golf';
   // Phase 2: GPS data
   gpsPath?: GPSPathPoint[];
   throwLocations?: ThrowLocation[];

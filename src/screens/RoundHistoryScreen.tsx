@@ -37,20 +37,15 @@ export default function RoundHistoryScreen({ navigation }: Props) {
       // Sort by date, most recent first
       const sorted = loadedRounds.sort((a, b) => b.date - a.date);
       setRounds(sorted);
-      applyFilters(sorted, searchQuery, gameTypeFilter);
+      applyFilters(sorted, searchQuery);
     } catch (error) {
       console.error('Error loading rounds:', error);
     }
-  }, [searchQuery, gameTypeFilter]);
+  }, [searchQuery]);
 
   const applyFilters = useCallback(
-    (roundsToFilter: Round[], query: string, typeFilter: 'all' | 'golf' | 'disc-golf') => {
+    (roundsToFilter: Round[], query: string) => {
       let filtered = roundsToFilter;
-
-      // Apply game type filter
-      if (typeFilter !== 'all') {
-        filtered = filtered.filter((r) => r.gameType === typeFilter);
-      }
 
       // Apply search query
       if (query.trim()) {
@@ -73,8 +68,8 @@ export default function RoundHistoryScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    applyFilters(rounds, searchQuery, gameTypeFilter);
-  }, [searchQuery, gameTypeFilter, rounds, applyFilters]);
+    applyFilters(rounds, searchQuery);
+  }, [searchQuery, rounds, applyFilters]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -103,13 +98,6 @@ export default function RoundHistoryScreen({ navigation }: Props) {
             <Card.Content>
               <View style={styles.roundHeader}>
                 <Title style={styles.roundTitle}>{item.title}</Title>
-                <Chip
-                  mode="outlined"
-                  style={styles.gameTypeChip}
-                  textStyle={styles.gameTypeText}
-                >
-                  {item.gameType === 'disc-golf' ? 'Disc Golf' : 'Golf'}
-                </Chip>
               </View>
               {item.courseName && (
                 <Paragraph style={styles.courseName}>{item.courseName}</Paragraph>
@@ -141,29 +129,6 @@ export default function RoundHistoryScreen({ navigation }: Props) {
           value={searchQuery}
           style={styles.searchbar}
         />
-        <View style={styles.filterContainer}>
-          <Chip
-            selected={gameTypeFilter === 'all'}
-            onPress={() => setGameTypeFilter('all')}
-            style={styles.filterChip}
-          >
-            All
-          </Chip>
-          <Chip
-            selected={gameTypeFilter === 'disc-golf'}
-            onPress={() => setGameTypeFilter('disc-golf')}
-            style={styles.filterChip}
-          >
-            Disc Golf
-          </Chip>
-          <Chip
-            selected={gameTypeFilter === 'golf'}
-            onPress={() => setGameTypeFilter('golf')}
-            style={styles.filterChip}
-          >
-            Golf
-          </Chip>
-        </View>
       </View>
 
       {filteredRounds.length === 0 ? (
@@ -228,12 +193,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  gameTypeChip: {
-    height: 28,
-  },
-  gameTypeText: {
-    fontSize: 12,
   },
   courseName: {
     fontSize: 14,

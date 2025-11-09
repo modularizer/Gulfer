@@ -150,7 +150,6 @@ export default function ScorecardPlayScreen() {
         scores,
         courseName: courseName.trim() || undefined,
         notes: notes.trim() || undefined,
-        gameType: 'disc-golf',
         photos: photos.length > 0 ? photos : undefined,
       };
 

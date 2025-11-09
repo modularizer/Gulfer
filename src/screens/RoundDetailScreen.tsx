@@ -113,9 +113,6 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
                 <Paragraph style={styles.courseName}>{round.courseName}</Paragraph>
               )}
               <View style={styles.metaRow}>
-                <Chip mode="outlined" style={styles.gameTypeChip}>
-                  {round.gameType === 'disc-golf' ? 'Disc Golf' : 'Golf'}
-                </Chip>
                 <Paragraph style={styles.date}>{formatDate(round.date)}</Paragraph>
               </View>
             </View>
@@ -228,9 +225,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  gameTypeChip: {
-    height: 28,
   },
   date: {
     fontSize: 14,
