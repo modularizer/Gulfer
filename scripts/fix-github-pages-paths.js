@@ -2,14 +2,13 @@
 
 /**
  * Post-build script to fix asset paths for GitHub Pages
- * Replaces absolute paths with relative paths or base path
+ * Replaces absolute paths with relative paths
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const distDir = path.join(__dirname, '..', 'dist');
-const basePath = process.env.EXPO_PUBLIC_BASE_PATH || '';
 
 function fixPathsInFile(filePath) {
   try {
@@ -18,46 +17,44 @@ function fixPathsInFile(filePath) {
 
     // For HTML files, fix href, src, and manifest attributes
     if (filePath.endsWith('.html')) {
-      // Replace absolute paths starting with /_expo/ with base path
+      // Replace absolute paths starting with /_expo/ with relative path
       if (content.includes('/_expo/')) {
-        content = content.replace(/\/_expo\//g, `${basePath}/_expo/`);
+        content = content.replace(/\/_expo\//g, './_expo/');
         modified = true;
       }
 
       // Replace absolute paths for href (but not // for protocols)
       if (content.includes('href="/') && !content.includes('href="//')) {
-        content = content.replace(/href="\//g, `href="${basePath}/`);
+        content = content.replace(/href="\//g, 'href="./');
         modified = true;
       }
 
       // Replace absolute paths for src (but not // for protocols)
       if (content.includes('src="/') && !content.includes('src="//')) {
-        content = content.replace(/src="\//g, `src="${basePath}/`);
+        content = content.replace(/src="\//g, 'src="./');
         modified = true;
       }
 
       // Fix manifest path
       if (content.includes('manifest="/')) {
-        content = content.replace(/manifest="\//g, `manifest="${basePath}/`);
+        content = content.replace(/manifest="\//g, 'manifest="./');
         modified = true;
       }
     }
 
     // For JavaScript files, fix string literals containing /_expo/
     if (filePath.endsWith('.js')) {
-      // Replace /_expo/ in string literals (both single and double quotes, and template literals)
-      // Pattern: quote, slash, _expo, slash
+      // Replace /_expo/ in string literals with relative path
       if (content.includes('/_expo/')) {
-        const replacement = basePath + '/_expo/';
-        // Replace in double-quoted strings: "/_expo/"
-        content = content.replace(/"\/_expo\//g, '"' + replacement);
-        // Replace in single-quoted strings: '/_expo/'
-        content = content.replace(/'\/_expo\//g, "'" + replacement);
-        // Replace in template literals: `/_expo/`
-        content = content.replace(/`\/_expo\//g, '`' + replacement);
-        // Also handle cases where it might be concatenated: + "/_expo/"
-        content = content.replace(/\+\s*"\/_expo\//g, '+ "' + replacement);
-        content = content.replace(/\+\s*'\/_expo\//g, "+ '" + replacement);
+        // Replace in double-quoted strings: "/_expo/" -> "./_expo/"
+        content = content.replace(/"\/_expo\//g, '"./_expo/');
+        // Replace in single-quoted strings: '/_expo/' -> './_expo/'
+        content = content.replace(/'\/_expo\//g, "'./_expo/");
+        // Replace in template literals: `/_expo/` -> `./_expo/`
+        content = content.replace(/`\/_expo\//g, '`./_expo/');
+        // Also handle cases where it might be concatenated: + "/_expo/" -> + "./_expo/"
+        content = content.replace(/\+\s*"\/_expo\//g, '+ "./_expo/');
+        content = content.replace(/\+\s*'\/_expo\//g, "+ './_expo/");
         modified = true;
       }
     }
@@ -87,7 +84,7 @@ function walkDir(dir) {
 }
 
 if (fs.existsSync(distDir)) {
-  console.log(`Fixing paths with base path: ${basePath || '(root)'}`);
+  console.log('Converting absolute paths to relative paths...');
   walkDir(distDir);
   console.log('Path fixing complete!');
 } else {
