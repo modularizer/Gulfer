@@ -14,8 +14,23 @@ export function registerServiceWorker() {
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
+      // Get base path - if we're at /repo-name/index.html, base is /repo-name
+      // If we're at /index.html (root), base is empty
+      let basePath = '';
+      const pathname = window.location.pathname;
+      
+      // Remove /index.html or trailing slash to get base
+      const pathWithoutIndex = pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
+      
+      // If pathname has more than just /, we're in a subdirectory
+      if (pathWithoutIndex && pathWithoutIndex !== '/') {
+        basePath = pathWithoutIndex;
+      }
+      
+      const swPath = `${basePath}/sw.js`.replace('//', '/');
+      
       navigator.serviceWorker
-        .register('/sw.js')
+        .register(swPath)
         .then((registration) => {
           console.log('Service Worker registered:', registration.scope);
         })

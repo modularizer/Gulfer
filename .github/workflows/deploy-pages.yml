@@ -31,8 +31,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Get repository name
+        id: repo
+        run: |
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+          echo "name=$REPO_NAME" >> $GITHUB_OUTPUT
+          echo "Repository name: $REPO_NAME"
+
       - name: Build web
-        run: npm run build:web
+        run: |
+          # Get repository name for base path
+          REPO_NAME="${{ steps.repo.outputs.name }}"
+          # Check if this is a user/organization pages site (serves from root)
+          if [[ "$REPO_NAME" == *.github.io ]]; then
+            BASE_PATH=""
+          else
+            BASE_PATH="/$REPO_NAME"
+          fi
+          echo "Building with base path: $BASE_PATH"
+          # Build with base path - Expo Router will use this for asset paths
+          EXPO_PUBLIC_BASE_PATH="$BASE_PATH" npm run build:web
 
       - name: Verify build output
         run: |

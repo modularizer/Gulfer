@@ -2,7 +2,7 @@
   "name": "Gulfer",
   "short_name": "Gulfer",
   "description": "A cross-platform golf and disc golf tracking application",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
