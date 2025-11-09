@@ -197,9 +197,6 @@ export default function RoundHistoryScreen() {
                     </>
                   )}
                 </Text>
-                <Text style={[styles.completionBadge, { color: theme.colors.onSurface }]}>
-                  {isComplete ? '✓' : '○'}
-                </Text>
               </View>
 
               {/* Images */}
@@ -327,7 +324,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   roundDate: {
-    fontSize: 16,
+    fontSize: 14,
     flex: 1,
   },
   boldText: {

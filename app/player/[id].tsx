@@ -150,9 +150,16 @@ export default function PlayerDetailScreen() {
           style={styles.backButton}
         />
         <View style={styles.headerContent}>
-          <Text style={[styles.headerName, { color: theme.colors.onSurface }]}>
-            {player.name}
-          </Text>
+          <View style={styles.headerNameRow}>
+            <Text style={[styles.headerName, { color: theme.colors.onSurface }]}>
+              {player.name}
+            </Text>
+            {playerRounds.length > 0 && (
+              <Text style={[styles.roundsCount, { color: theme.colors.onSurfaceVariant }]}>
+                {playerRounds.length} {playerRounds.length === 1 ? 'round' : 'rounds'}
+              </Text>
+            )}
+          </View>
           {player.isCurrentUser && (
             <Chip style={styles.currentUserChip} icon="account">
               You
@@ -370,10 +377,18 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     gap: 12,
   },
+  headerNameRow: {
+    flexDirection: 'column',
+    flex: 1,
+  },
   headerName: {
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  roundsCount: {
+    fontSize: 14,
+    marginTop: 2,
   },
   scrollView: {
     flex: 1,

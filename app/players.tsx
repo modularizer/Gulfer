@@ -9,6 +9,7 @@ import {
 import { Card, Title, Paragraph, useTheme, Chip, Button, Dialog, Portal, TextInput, Text } from 'react-native-paper';
 import { User } from '../src/services/storage/userStorage';
 import { getAllUsers, saveUser, generateUserId, deleteUser } from '../src/services/storage/userStorage';
+import { getAllRounds } from '../src/services/storage/roundStorage';
 import { getShadowStyle } from '../src/utils';
 import { router } from 'expo-router';
 import {
@@ -20,6 +21,8 @@ import {
 
 export default function PlayersScreen() {
   const [players, setPlayers] = useState<User[]>([]);
+  const [playerRoundsCount, setPlayerRoundsCount] = useState<Map<string, number>>(new Map());
+  const [playerCoursesCount, setPlayerCoursesCount] = useState<Map<string, number>>(new Map());
   const [refreshing, setRefreshing] = useState(false);
   const [newPlayerDialogVisible, setNewPlayerDialogVisible] = useState(false);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
@@ -30,6 +33,32 @@ export default function PlayersScreen() {
     try {
       const loadedPlayers = await getAllUsers();
       setPlayers(loadedPlayers);
+      
+      // Count rounds and courses for each player
+      const allRounds = await getAllRounds();
+      const roundsCountMap = new Map<string, number>();
+      const coursesCountMap = new Map<string, number>();
+      
+      loadedPlayers.forEach(player => {
+        const playerRounds = allRounds.filter(round => {
+          return round.players.some(p => p.username === player.username) && 
+                 round.scores && round.scores.length > 0;
+        });
+        
+        roundsCountMap.set(player.id, playerRounds.length);
+        
+        // Count unique courses
+        const uniqueCourses = new Set<string>();
+        playerRounds.forEach(round => {
+          if (round.courseName) {
+            uniqueCourses.add(round.courseName.trim());
+          }
+        });
+        coursesCountMap.set(player.id, uniqueCourses.size);
+      });
+      
+      setPlayerRoundsCount(roundsCountMap);
+      setPlayerCoursesCount(coursesCountMap);
     } catch (error) {
       console.error('Error loading players:', error);
     }
@@ -124,6 +153,8 @@ export default function PlayersScreen() {
   const renderPlayerItem = useCallback(
     ({ item }: { item: User }) => {
       const isSelected = selectedPlayerIds.has(item.id);
+      const roundsCount = playerRoundsCount.get(item.id) || 0;
+      const coursesCount = playerCoursesCount.get(item.id) || 0;
       
       return (
         <TouchableOpacity
@@ -137,7 +168,28 @@ export default function PlayersScreen() {
           ]}>
             <Card.Content>
               <View style={styles.playerHeader}>
-                <Title style={styles.playerTitle}>{item.name}</Title>
+                <View style={styles.playerInfo}>
+                  <Title style={styles.playerTitle}>{item.name}</Title>
+                  {(roundsCount > 0 || coursesCount > 0) && (
+                    <View style={styles.statsRow}>
+                      {roundsCount > 0 && (
+                        <Text style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                          {roundsCount} {roundsCount === 1 ? 'round' : 'rounds'}
+                        </Text>
+                      )}
+                      {roundsCount > 0 && coursesCount > 0 && (
+                        <Text style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                          {' • '}
+                        </Text>
+                      )}
+                      {coursesCount > 0 && (
+                        <Text style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                          {coursesCount} {coursesCount === 1 ? 'course' : 'courses'}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
                 {item.isCurrentUser && (
                   <Chip style={styles.currentUserChip} icon="account">
                     You
@@ -149,7 +201,7 @@ export default function PlayersScreen() {
         </TouchableOpacity>
       );
     },
-    [handlePlayerPress, handlePlayerLongPress, selectedPlayerIds, theme.colors.primaryContainer]
+    [handlePlayerPress, handlePlayerLongPress, selectedPlayerIds, playerRoundsCount, playerCoursesCount, theme.colors.primaryContainer, theme.colors.onSurfaceVariant]
   );
 
   return (
@@ -252,10 +304,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  playerInfo: {
+    flex: 1,
+  },
   playerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    flex: 1,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  statText: {
+    fontSize: 14,
   },
   currentUserChip: {
     height: 28,
