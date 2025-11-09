@@ -118,18 +118,20 @@ export default function NewRoundScreen() {
   };
 
   const handleImportRound = useCallback(async () => {
+    console.log('handleImportRound called, importText length:', importText.length);
     if (!importText.trim()) {
       Alert.alert('Error', 'Please paste the round export text');
       return;
     }
 
     try {
+      console.log('Calling importRound...');
       const newRoundId = await importRound(importText);
+      console.log('Import successful, new round ID:', newRoundId);
       setImportText('');
       setImportDialogVisible(false);
-      Alert.alert('Success', 'Round imported successfully!', [
-        { text: 'OK', onPress: () => router.replace(`/${newRoundId}/overview`) }
-      ]);
+      // Navigate immediately to the round overview
+      router.replace(`/${newRoundId}/overview`);
     } catch (error) {
       console.error('Error importing round:', error);
       Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to import round');

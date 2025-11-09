@@ -72,10 +72,52 @@ export async function getRoundById(roundId: string): Promise<Round | null> {
 export async function deleteRound(roundId: string): Promise<void> {
   try {
     const rounds = await getAllRounds();
+    const initialLength = rounds.length;
     const filtered = rounds.filter((r) => r.id !== roundId);
+    
+    // Verify that a round was actually found and removed
+    if (filtered.length === initialLength) {
+      console.warn(`Round with ID "${roundId}" not found for deletion`);
+      return; // Round doesn't exist, consider it already deleted
+    }
+    
     await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
+    
+    // Verify the deletion was successful
+    const verifyRounds = await getAllRounds();
+    if (verifyRounds.find((r) => r.id === roundId)) {
+      throw new Error('Round deletion verification failed - round still exists in storage');
+    }
   } catch (error) {
     console.error('Error deleting round:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete multiple rounds by IDs (more efficient than calling deleteRound multiple times)
+ */
+export async function deleteRounds(roundIds: string[]): Promise<void> {
+  try {
+    const rounds = await getAllRounds();
+    const initialLength = rounds.length;
+    const filtered = rounds.filter((r) => !roundIds.includes(r.id));
+    
+    if (filtered.length === initialLength) {
+      console.warn(`None of the provided round IDs were found for deletion`);
+      return;
+    }
+    
+    await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
+    
+    // Verify the deletions were successful
+    const verifyRounds = await getAllRounds();
+    const stillExists = roundIds.filter(id => verifyRounds.find((r) => r.id === id));
+    if (stillExists.length > 0) {
+      throw new Error(`Round deletion verification failed - rounds still exist: ${stillExists.join(', ')}`);
+    }
+  } catch (error) {
+    console.error('Error deleting rounds:', error);
     throw error;
   }
 }

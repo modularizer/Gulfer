@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Card, Title, Paragraph, useTheme, Menu, Chip, Button, IconButton, Dialog, Portal, Text, TextInput } from 'react-native-paper';
 import { Round, Course, Player, Score } from '../src/types';
-import { getAllRounds, deleteRound } from '../src/services/storage/roundStorage';
+import { getAllRounds, deleteRound, deleteRounds } from '../src/services/storage/roundStorage';
 import { getAllCourses } from '../src/services/storage/courseStorage';
 import { router } from 'expo-router';
 import HashedImage from '../src/components/common/HashedImage';
@@ -102,9 +102,12 @@ export default function RoundHistoryScreen() {
 
   const handleDeleteSelected = useCallback(async () => {
     try {
-      // Delete all selected rounds
-      for (const roundId of selectedRoundIds) {
-        await deleteRound(roundId);
+      // Delete all selected rounds at once (more efficient and avoids race conditions)
+      const roundIdsArray = Array.from(selectedRoundIds);
+      if (roundIdsArray.length === 1) {
+        await deleteRound(roundIdsArray[0]);
+      } else {
+        await deleteRounds(roundIdsArray);
       }
       // Clear selection and reload rounds
       setSelectedRoundIds(new Set());

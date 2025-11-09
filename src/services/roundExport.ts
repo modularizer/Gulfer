@@ -84,7 +84,8 @@ function parseExportText(exportText: string): ParsedExportData {
       i++;
       while (i < lines.length && lines[i].trim().startsWith('Hole ')) {
         const scoreLine = lines[i].trim();
-        const holeMatch = scoreLine.match(/Hole (\d+): (.+)/);
+        // Match both formats: "Hole 1: ..." and "Hole 1 (Par ?, ?m): ..."
+        const holeMatch = scoreLine.match(/Hole (\d+)(?: \(Par [^,)]+, [^)]+\))?: (.+)/);
         if (holeMatch) {
           const holeNumber = parseInt(holeMatch[1], 10);
           const scoresStr = holeMatch[2];
@@ -307,8 +308,17 @@ export async function exportRound(roundId: string): Promise<string> {
  */
 export async function importRound(exportText: string): Promise<string> {
   try {
+    console.log('Starting import round...');
+    console.log('Export text length:', exportText.length);
     // Parse the export text using the shared parsing function
     const parsed = parseExportText(exportText);
+    console.log('Parsed data:', {
+      title: parsed.title,
+      dateTimestamp: parsed.dateTimestamp,
+      courseName: parsed.courseName,
+      playersCount: parsed.players.length,
+      scoresCount: parsed.scores.length,
+    });
     
     const {
       title,
