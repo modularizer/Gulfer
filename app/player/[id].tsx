@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { IconButton, useTheme, Text, Card, Chip } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
-import { getAllUsers, User } from '../../src/services/storage/userStorage';
+import { getAllUsers, getUserByUsername, User } from '../../src/services/storage/userStorage';
 import { getAllRounds, Round } from '../../src/services/storage/roundStorage';
 import { getAllCourses, Course } from '../../src/services/storage/courseStorage';
 import { getShadowStyle } from '../../src/utils';
@@ -30,11 +30,10 @@ export default function PlayerDetailScreen() {
       }
 
       try {
-        // Decode the player name from URL
-        const playerName = decodeURIComponent(playerNameParam);
-        // Load player by name
-        const users = await getAllUsers();
-        const foundPlayer = users.find(u => u.name === playerName);
+        // Decode the username from URL (username is used as the route parameter)
+        const username = decodeURIComponent(playerNameParam);
+        // Load player by username
+        const foundPlayer = await getUserByUsername(username);
         if (!foundPlayer) {
           setTimeout(() => router.push('/players'), 1000);
           return;
@@ -47,9 +46,12 @@ export default function PlayerDetailScreen() {
         setAllCourses(loadedCourses);
 
         // Find all rounds where this player participated
-        // Match by name (since we're using names as IDs)
+        // Match by username (preferred) or name (fallback for old data)
         const playerRounds = allRounds.filter(round => {
-          const playerInRound = round.players.find(p => p.name === foundPlayer.name);
+          const playerInRound = round.players.find(p => 
+            p.username === foundPlayer.username || 
+            (!p.username && p.name === foundPlayer.name)
+          );
           return playerInRound && round.scores && round.scores.length > 0;
         });
 
@@ -71,8 +73,11 @@ export default function PlayerDetailScreen() {
           const course = loadedCourses.find(c => c.name === round.courseName);
           if (!course) return;
 
-          // Find the player in this round (match by name)
-          const playerInRound = round.players.find(p => p.name === foundPlayer.name);
+          // Find the player in this round (match by username or name)
+          const playerInRound = round.players.find(p => 
+            p.username === foundPlayer.username || 
+            (!p.username && p.name === foundPlayer.name)
+          );
           if (!playerInRound) return;
 
           // Calculate player's score for this round (match by player ID from the round)
@@ -232,8 +237,11 @@ export default function PlayerDetailScreen() {
                   hour12: true,
                 });
 
-                // Find the player in this round
-                const playerInRound = round.players.find(p => p.name === player!.name);
+                // Find the player in this round (match by username or name)
+                const playerInRound = round.players.find(p => 
+                  p.username === player!.username || 
+                  (!p.username && p.name === player!.name)
+                );
                 const playerScores = playerInRound 
                   ? round.scores!.filter(s => s.playerId === playerInRound.id)
                   : [];
@@ -300,7 +308,7 @@ export default function PlayerDetailScreen() {
                                     isCurrentPlayer && !isWinner && styles.currentPlayerChipText,
                                   ]}
                                   icon={isWinner ? 'crown' : undefined}
-                                  onPress={() => router.push(`/player/${encodeURIComponent(p.name)}`)}
+                                  onPress={() => router.push(`/player/${encodeURIComponent(p.username || p.name)}`)}
                                 >
                                   {p.name}: {total}
                                 </Chip>

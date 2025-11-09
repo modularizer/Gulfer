@@ -279,7 +279,7 @@ export default function RoundOverviewScreen() {
                           isWinner && styles.winnerChipText,
                         ]}
                         icon={isWinner ? 'crown' : undefined}
-                        onPress={() => router.push(`/player/${encodeURIComponent(player.name)}`)}
+                        onPress={() => router.push(`/player/${encodeURIComponent(player.username || player.name)}`)}
                       >
                         {player.name}: {total}
                       </Chip>

@@ -21,16 +21,11 @@ import {
   DeleteConfirmationDialog,
 } from '../src/components/common';
 
-type SortOrder = 'newest' | 'oldest';
-
 export default function RoundHistoryScreen() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [filteredRounds, setFilteredRounds] = useState<Round[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  const [courseMenuVisible, setCourseMenuVisible] = useState(false);
-  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [selectedRoundIds, setSelectedRoundIds] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -46,25 +41,15 @@ export default function RoundHistoryScreen() {
   }, []);
 
   const applyFilters = useCallback(
-    (roundsToFilter: Round[], courseId: string | null, order: SortOrder) => {
-      let filtered = roundsToFilter;
-
-      // Apply course filter
-      if (courseId) {
-        const selectedCourse = courses.find(c => c.id === courseId);
-        if (selectedCourse) {
-          filtered = filtered.filter((r) => r.courseName === selectedCourse.name);
-        }
-      }
-
-      // Apply sort order
-      const sorted = filtered.sort((a, b) => {
-        return order === 'newest' ? b.date - a.date : a.date - b.date;
+    (roundsToFilter: Round[]) => {
+      // Sort by newest first (default)
+      const sorted = roundsToFilter.sort((a, b) => {
+        return b.date - a.date;
       });
 
       setFilteredRounds(sorted);
     },
-    [courses]
+    []
   );
 
   useEffect(() => {
@@ -72,8 +57,8 @@ export default function RoundHistoryScreen() {
   }, []);
 
   useEffect(() => {
-    applyFilters(rounds, selectedCourseId, sortOrder);
-  }, [rounds, selectedCourseId, sortOrder, applyFilters]);
+    applyFilters(rounds);
+  }, [rounds, applyFilters]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -132,7 +117,6 @@ export default function RoundHistoryScreen() {
     setSelectedRoundIds(new Set());
   }, []);
 
-  const selectedCourse = courses.find(c => c.id === selectedCourseId);
   const theme = useTheme();
 
   const renderRoundItem = useCallback(
@@ -263,66 +247,17 @@ export default function RoundHistoryScreen() {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <SegmentedButtonsHeader currentValue="rounds" />
-      <View style={styles.filterContainer}>
-        <View style={styles.filterRow}>
-          <Menu
-            visible={courseMenuVisible}
-            onDismiss={() => setCourseMenuVisible(false)}
-            anchor={
-              <Chip
-                icon="filter"
-                onPress={() => setCourseMenuVisible(true)}
-                style={styles.filterChip}
-              >
-                {selectedCourse ? selectedCourse.name : 'All Courses'}
-              </Chip>
-            }
-          >
-            <Menu.Item
-              onPress={() => {
-                setSelectedCourseId(null);
-                setCourseMenuVisible(false);
-              }}
-              title="All Courses"
-            />
-            {courses.map((course) => (
-              <Menu.Item
-                key={course.id}
-                onPress={() => {
-                  setSelectedCourseId(course.id);
-                  setCourseMenuVisible(false);
-                }}
-                title={course.name}
-              />
-            ))}
-          </Menu>
-          <Menu
-            visible={false}
-            onDismiss={() => {}}
-            anchor={
-              <Chip
-                icon={sortOrder === 'newest' ? 'sort-descending' : 'sort-ascending'}
-                onPress={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
-                style={styles.filterChip}
-              >
-                {sortOrder === 'newest' ? 'Newest First' : 'Oldest First'}
-              </Chip>
-            }
-          >
-            <Menu.Item
-              onPress={() => {
-                setSortOrder('newest');
-              }}
-              title="Newest First"
-            />
-            <Menu.Item
-              onPress={() => {
-                setSortOrder('oldest');
-              }}
-              title="Oldest First"
-            />
-          </Menu>
-        </View>
+      
+      {/* Add Round Button */}
+      <View style={styles.addButtonContainer}>
+        <Button
+          mode="contained"
+          icon="plus"
+          onPress={() => router.push('/add-round')}
+          style={styles.addButton}
+        >
+          Add Round
+        </Button>
       </View>
 
       {filteredRounds.length === 0 ? (
@@ -364,18 +299,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  filterContainer: {
+  addButtonContainer: {
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
-  filterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  filterChip: {
-    height: 32,
+  addButton: {
+    alignSelf: 'flex-start',
   },
   listContent: {
     padding: 16,

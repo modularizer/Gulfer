@@ -1,25 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { useTheme } from 'react-native-paper';
-import { router } from 'expo-router';
-import { useFooterCenterButton } from '../src/components/common/Footer';
 
 export default function HomeScreen() {
   const theme = useTheme();
-  const { registerCenterButtonHandler } = useFooterCenterButton();
-
-  // Ensure center button always goes to new-round on home page
-  useEffect(() => {
-    const handleNewRound = () => {
-      router.push('/new-round');
-    };
-    
-    registerCenterButtonHandler(handleNewRound);
-    
-    return () => {
-      registerCenterButtonHandler(null);
-    };
-  }, [registerCenterButtonHandler]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>

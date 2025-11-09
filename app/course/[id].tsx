@@ -184,7 +184,7 @@ export default function CourseDetailScreen() {
                     key={player.id}
                     style={styles.bestScoreChip}
                     textStyle={styles.bestScoreChipText}
-                    onPress={() => router.push(`/player/${encodeURIComponent(player.name)}`)}
+                    onPress={() => router.push(`/player/${encodeURIComponent(player.username || player.name)}`)}
                   >
                     {player.name}: {score}
                   </Chip>
@@ -259,7 +259,7 @@ export default function CourseDetailScreen() {
                                       isWinner && styles.winnerChipText,
                                     ]}
                                     icon={isWinner ? 'crown' : undefined}
-                                    onPress={() => router.push(`/player/${encodeURIComponent(player.name)}`)}
+                                    onPress={() => router.push(`/player/${encodeURIComponent(player.username || player.name)}`)}
                                   >
                                     {player.name}: {total}
                                   </Chip>

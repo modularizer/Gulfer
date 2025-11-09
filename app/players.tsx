@@ -15,12 +15,13 @@ import {
   SegmentedButtonsHeader,
   SelectionActionBar,
   DeleteConfirmationDialog,
+  NameUsernameDialog,
 } from '../src/components/common';
 
 export default function PlayersScreen() {
   const [players, setPlayers] = useState<User[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [newPlayerDialog, setNewPlayerDialog] = useState({ visible: false, name: '' });
+  const [newPlayerDialogVisible, setNewPlayerDialogVisible] = useState(false);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -58,7 +59,9 @@ export default function PlayersScreen() {
           return newSet;
         });
       } else {
-        router.push(`/player/${encodeURIComponent(playerName)}`);
+        const player = players.find(p => p.id === playerId);
+        const identifier = player?.username || playerName;
+        router.push(`/player/${encodeURIComponent(identifier)}`);
       }
     },
     [selectedPlayerIds.size]
@@ -95,27 +98,23 @@ export default function PlayersScreen() {
     setSelectedPlayerIds(new Set());
   }, []);
 
-  const handleSaveNewPlayer = useCallback(async () => {
-    if (!newPlayerDialog.name.trim()) {
-      setErrorDialog({ visible: true, title: 'Error', message: 'Player name is required' });
-      return;
-    }
-
+  const handleSaveNewPlayer = useCallback(async (name: string, username: string) => {
     try {
       const newUser: User = {
         id: generateUserId(),
-        name: newPlayerDialog.name.trim(),
+        name,
+        username,
       };
 
       await saveUser(newUser);
-      setNewPlayerDialog({ visible: false, name: '' });
+      setNewPlayerDialogVisible(false);
       // Reload players to show the new one
       await loadPlayers();
     } catch (error) {
       console.error('Error saving player:', error);
       setErrorDialog({ visible: true, title: 'Error', message: 'Failed to save player' });
     }
-  }, [newPlayerDialog, loadPlayers]);
+  }, [loadPlayers]);
 
   const theme = useTheme();
 
@@ -159,7 +158,7 @@ export default function PlayersScreen() {
         <Button
           mode="contained"
           icon="plus"
-          onPress={() => setNewPlayerDialog({ visible: true, name: '' })}
+          onPress={() => setNewPlayerDialogVisible(true)}
           style={styles.addButton}
         >
           Add Player
@@ -198,35 +197,13 @@ export default function PlayersScreen() {
       />
 
       {/* Add New Player Dialog */}
-      <Portal>
-        <Dialog
-          visible={newPlayerDialog.visible}
-          onDismiss={() => setNewPlayerDialog({ visible: false, name: '' })}
-        >
-          <Dialog.Title>Add New Player</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Player Name"
-              value={newPlayerDialog.name}
-              onChangeText={(name) => setNewPlayerDialog(prev => ({ ...prev, name }))}
-              mode="outlined"
-              style={styles.dialogInput}
-              placeholder="Enter player name"
-              autoFocus
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button
-              onPress={() => setNewPlayerDialog({ visible: false, name: '' })}
-            >
-              Cancel
-            </Button>
-            <Button onPress={handleSaveNewPlayer} mode="contained">
-              Save
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <NameUsernameDialog
+        visible={newPlayerDialogVisible}
+        title="Add New Player"
+        nameLabel="Player Name"
+        onDismiss={() => setNewPlayerDialogVisible(false)}
+        onSave={handleSaveNewPlayer}
+      />
 
       {/* Error Dialog */}
       <Portal>

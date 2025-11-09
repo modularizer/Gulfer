@@ -205,7 +205,7 @@ export default function CoursesScreen() {
                   {bestScoresArray
                     .sort((a, b) => a.score - b.score)
                     .map(({ player, score }) => {
-                      const isWinner = winner && player.name === winner.player.name;
+                      const isWinner = winner && (player.username || player.name) === (winner.player.username || winner.player.name);
                       return (
                         <PlayerChip
                           key={player.name}

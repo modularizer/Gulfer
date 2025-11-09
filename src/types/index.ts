@@ -5,6 +5,7 @@
 export interface Player {
   id: string;
   name: string;
+  username?: string; // Optional for backward compatibility, but should be set
 }
 
 export interface Hole {

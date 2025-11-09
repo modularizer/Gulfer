@@ -9,4 +9,5 @@ export { default as PlayerChip } from './PlayerChip';
 export { default as SegmentedButtonsHeader } from './SegmentedButtonsHeader';
 export { default as SelectionActionBar } from './SelectionActionBar';
 export { default as DeleteConfirmationDialog } from './DeleteConfirmationDialog';
+export { default as NameUsernameDialog } from './NameUsernameDialog';
 

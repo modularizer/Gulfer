@@ -5,6 +5,7 @@ import { Scorecard } from '../../src/components/Scorecard';
 import { Player, Score, Round } from '../../src/types';
 import { saveRound, generateRoundId } from '../../src/services/storage/roundStorage';
 import { getAllCourses } from '../../src/services/storage/courseStorage';
+import { getUsernameForPlayerName } from '../../src/services/storage/userStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 
 export default function ScorecardPlayScreen() {
@@ -15,12 +16,29 @@ export default function ScorecardPlayScreen() {
     location?: string;
   }>();
 
-  // Parse players from URL params
-  const initialPlayers: Player[] = params.players 
-    ? JSON.parse(decodeURIComponent(params.players))
-    : [{ id: 'player_1', name: 'You' }];
-
-  const [players, setPlayers] = useState<Player[]>(initialPlayers);
+  // Parse players from URL params and ensure they have usernames
+  const [players, setPlayers] = useState<Player[]>([]);
+  
+  useEffect(() => {
+    const loadInitialPlayers = async () => {
+      const parsedPlayers: Player[] = params.players 
+        ? JSON.parse(decodeURIComponent(params.players))
+        : [{ id: 'player_1', name: 'You' }];
+      
+      // Ensure all players have usernames
+      const playersWithUsernames = await Promise.all(parsedPlayers.map(async (p) => {
+        if (!p.username) {
+          const username = await getUsernameForPlayerName(p.name);
+          return { ...p, username };
+        }
+        return p;
+      }));
+      
+      setPlayers(playersWithUsernames);
+    };
+    
+    loadInitialPlayers();
+  }, [params.players]);
   const [holes, setHoles] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9]);
   const [scores, setScores] = useState<Score[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -77,11 +95,13 @@ export default function ScorecardPlayScreen() {
     setPlayerNameDialog({ visible: true, playerId: '' });
   }, []);
 
-  const handleConfirmAddPlayer = useCallback(() => {
+  const handleConfirmAddPlayer = useCallback(async () => {
     if (newPlayerName.trim()) {
+      const username = await getUsernameForPlayerName(newPlayerName.trim());
       const newPlayer: Player = {
         id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: newPlayerName.trim(),
+        username,
       };
       setPlayers((prev) => [...prev, newPlayer]);
       setNewPlayerName('');

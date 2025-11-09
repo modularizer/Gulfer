@@ -1,18 +1,106 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { usePathname } from 'expo-router';
 import Footer, { FooterContext } from './Footer';
+import { getAllUsers, saveUser, saveCurrentUserName, User } from '../../services/storage/userStorage';
+import NameUsernameDialog from './NameUsernameDialog';
 
 interface AppLayoutProps {
   children: React.ReactNode;
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
+  const pathname = usePathname();
   const [customCenterHandler, setCustomCenterHandler] = useState<(() => void) | null>(null);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
+  const [initialName, setInitialName] = useState('');
 
   const registerCenterButtonHandler = useCallback((handler: (() => void) | null) => {
     setCustomCenterHandler(() => handler);
   }, []);
+
+  // Check if username is set on mount and on navigation changes
+  useEffect(() => {
+    const checkUsername = async () => {
+      // Don't show modal on /you page (that page is for setting username)
+      if (pathname === '/you') {
+        setShowNameModal(false);
+        setIsChecking(false);
+        return;
+      }
+
+      try {
+        const users = await getAllUsers();
+        const currentUser = users.find(u => u.isCurrentUser);
+        
+        if (!currentUser || !currentUser.username) {
+          // No username set, show modal
+          setShowNameModal(true);
+        } else {
+          // Username is set, hide modal if it was showing
+          setShowNameModal(false);
+        }
+      } catch (error) {
+        console.error('Error checking username:', error);
+      } finally {
+        setIsChecking(false);
+      }
+    };
+
+    checkUsername();
+  }, [pathname]); // Re-check when pathname changes (navigation)
+
+  // Load initial name when modal should be shown
+  useEffect(() => {
+    const loadInitialName = async () => {
+      if (showNameModal && !isChecking) {
+        try {
+          const users = await getAllUsers();
+          const currentUser = users.find(u => u.isCurrentUser);
+          if (currentUser?.name) {
+            setInitialName(currentUser.name);
+          } else {
+            setInitialName('');
+          }
+        } catch (error) {
+          console.error('Error loading initial name:', error);
+          setInitialName('');
+        }
+      }
+    };
+    loadInitialName();
+  }, [showNameModal, isChecking]);
+
+  const handleSaveName = async (name: string, username: string) => {
+    try {
+      const users = await getAllUsers();
+      const currentUser = users.find(u => u.isCurrentUser);
+
+      if (currentUser) {
+        // Update existing user
+        currentUser.name = name;
+        currentUser.username = username;
+        await saveUser(currentUser);
+      } else {
+        // Create new user
+        const newUser: User = {
+          id: 'current_user',
+          name,
+          username,
+          isCurrentUser: true,
+        };
+        await saveUser(newUser);
+        // Also save to current user name storage
+        await saveCurrentUserName(name);
+      }
+
+      setShowNameModal(false);
+    } catch (error) {
+      console.error('Error saving name:', error);
+    }
+  };
 
   return (
     <FooterContext.Provider value={{ registerCenterButtonHandler, customCenterHandler }}>
@@ -24,6 +112,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <Footer customCenterHandler={customCenterHandler} />
         </SafeAreaView>
       </View>
+
+      {/* Name Modal */}
+      {showNameModal && !isChecking && (
+        <NameUsernameDialog
+          visible={true}
+          title="Welcome!"
+          nameLabel="Your Name"
+          initialName={initialName}
+          onDismiss={null} // Non-dismissible
+          onSave={handleSaveName}
+        />
+      )}
     </FooterContext.Provider>
   );
 }

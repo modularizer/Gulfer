@@ -119,15 +119,16 @@ export async function createNewRound(initialData: {
   photos?: string[];
   courseName?: string;
   gameType?: 'golf' | 'disc-golf';
+  date?: number; // Optional custom date (Unix timestamp)
 }): Promise<Round> {
-  const now = Date.now();
+  const date = initialData.date || Date.now();
   const roundId = generateRoundId();
-  const title = generateRoundTitle(now);
+  const title = generateRoundTitle(date);
 
   const newRound: Round = {
     id: roundId,
     title,
-    date: now,
+    date,
     players: initialData.players,
     scores: [],
     notes: initialData.notes,

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { IconButton, Text, Menu, Dialog, Portal, Button, TextInput, useTheme, Surface } from 'react-native-paper';
+import { IconButton, Text, Menu, Dialog, Portal, Button, useTheme, Surface } from 'react-native-paper';
 import { Player } from '../../types';
-import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, User } from '../../services/storage/userStorage';
+import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, getUsernameForPlayerName, User } from '../../services/storage/userStorage';
 import { getShadowStyle } from '../../utils';
+import NameUsernameDialog from './NameUsernameDialog';
 
 interface PlayerSelectorProps {
   players: Player[];
@@ -17,8 +18,7 @@ export default function PlayerSelector({
   const theme = useTheme();
   const [knownUsers, setKnownUsers] = useState<User[]>([]);
   const [addPlayerMenuVisible, setAddPlayerMenuVisible] = useState(false);
-  const [playerNameDialog, setPlayerNameDialog] = useState({ visible: false, playerId: '', isEditing: false });
-  const [newPlayerName, setNewPlayerName] = useState('');
+  const [playerDialog, setPlayerDialog] = useState({ visible: false, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined as string | undefined });
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
 
@@ -39,58 +39,72 @@ export default function PlayerSelector({
   const handleEditPlayer = useCallback(async (playerId: string) => {
     const player = players.find((p) => p.id === playerId);
     if (player) {
-      setNewPlayerName(player.name);
-      setPlayerNameDialog({ visible: true, playerId, isEditing: true });
+      // Find the user ID to exclude from username uniqueness check
+      let excludeUserId: string | undefined;
+      if (player.username) {
+        const allUsers = await getAllUsers();
+        const matchingUser = allUsers.find(u => u.username === player.username || u.name === player.name);
+        excludeUserId = matchingUser?.id;
+      }
+      
+      setPlayerDialog({ 
+        visible: true, 
+        playerId, 
+        isEditing: true,
+        initialName: player.name,
+        initialUsername: player.username || '',
+        excludeUserId,
+      });
     }
   }, [players]);
 
-  const handleConfirmAddPlayer = useCallback(async () => {
-    if (newPlayerName.trim()) {
-      if (playerNameDialog.isEditing && playerNameDialog.playerId) {
-        const updatedName = newPlayerName.trim();
-        const player = players.find((p) => p.id === playerNameDialog.playerId);
-        
-        // Check if this is the "You" player (first player, ID is 'player_1', or name matches current user)
-        const currentUserName = await getCurrentUserName();
-        const isCurrentUser = 
-          playerNameDialog.playerId === 'player_1' || 
-          player?.name === 'You' || 
-          (players.length > 0 && players[0].id === playerNameDialog.playerId) ||
-          (currentUserName && player?.name === currentUserName);
-        
-        if (isCurrentUser) {
-          // Save to current user storage
-          await saveCurrentUserName(updatedName);
-        }
-        
-        const updatedPlayers = players.map((p) =>
-          p.id === playerNameDialog.playerId
-            ? { ...p, name: updatedName }
-            : p
-        );
-        onPlayersChange(updatedPlayers);
-      } else {
-        const newPlayer: Player = {
-          id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          name: newPlayerName.trim(),
-        };
-        onPlayersChange([...players, newPlayer]);
-        
-        // Save to known users
-        const newUser: User = {
-          id: generateUserId(),
-          name: newPlayerName.trim(),
-        };
-        await saveUser(newUser);
-        
-        // Reload known users
-        const updatedUsers = await getAllUsers();
-        setKnownUsers(updatedUsers);
+  const handleSavePlayer = useCallback(async (name: string, username: string) => {
+    if (playerDialog.isEditing && playerDialog.playerId) {
+      const player = players.find((p) => p.id === playerDialog.playerId);
+      
+      // Check if this is the "You" player (first player, ID is 'player_1', or name matches current user)
+      const currentUserName = await getCurrentUserName();
+      const isCurrentUser = 
+        playerDialog.playerId === 'player_1' || 
+        player?.name === 'You' || 
+        (players.length > 0 && players[0].id === playerDialog.playerId) ||
+        (currentUserName && player?.name === currentUserName);
+      
+      if (isCurrentUser) {
+        // Save to current user storage
+        await saveCurrentUserName(name);
       }
-      setNewPlayerName('');
+      
+      // Update player with new name and username
+      const updatedPlayers = players.map((p) => {
+        if (p.id === playerDialog.playerId) {
+          return { ...p, name, username };
+        }
+        return p;
+      });
+      onPlayersChange(updatedPlayers);
+    } else {
+      // Save to known users first
+      const newUser: User = {
+        id: generateUserId(),
+        name,
+        username,
+      };
+      await saveUser(newUser);
+      
+      const newPlayer: Player = {
+        id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name,
+        username,
+      };
+      onPlayersChange([...players, newPlayer]);
+      
+      // Reload known users
+      const updatedUsers = await getAllUsers();
+      setKnownUsers(updatedUsers);
     }
-    setPlayerNameDialog({ visible: false, playerId: '', isEditing: false });
-  }, [newPlayerName, playerNameDialog.isEditing, playerNameDialog.playerId, players, onPlayersChange]);
+    setPlayerDialog({ visible: false, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined });
+  }, [playerDialog.isEditing, playerDialog.playerId, players, onPlayersChange]);
 
   const handleRemovePlayer = useCallback((playerId: string) => {
     if (players.length === 1) {
@@ -99,6 +113,21 @@ export default function PlayerSelector({
     }
     onPlayersChange(players.filter((p) => p.id !== playerId));
   }, [players, onPlayersChange]);
+
+  const handleAddPlayerPress = useCallback(() => {
+    // Filter out current user and players already in the current round
+    const unusedUsers = knownUsers.filter(
+      (user) => !user.isCurrentUser && !players.some((p) => p.name === user.name)
+    );
+
+    // If there are no unused known players, directly open the dialog
+    if (unusedUsers.length === 0) {
+      setPlayerDialog({ visible: true, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined });
+    } else {
+      // Otherwise, show the menu with known players
+      setAddPlayerMenuVisible(true);
+    }
+  }, [knownUsers, players]);
 
   return (
     <>
@@ -114,7 +143,7 @@ export default function PlayerSelector({
               <Button
                 mode="text"
                 icon="account-plus"
-                onPress={() => setAddPlayerMenuVisible(true)}
+                onPress={handleAddPlayerPress}
                 textColor={theme.colors.primary}
                 compact
               >
@@ -123,14 +152,16 @@ export default function PlayerSelector({
             }
           >
             {knownUsers
-              .filter((user) => !user.isCurrentUser) // Exclude current user from list
+              .filter((user) => !user.isCurrentUser && !players.some((p) => p.name === user.name)) // Exclude current user and players already in round
               .map((user) => (
                 <Menu.Item
                   key={user.id}
                   onPress={async () => {
+                    const username = user.username || await getUsernameForPlayerName(user.name);
                     const newPlayer: Player = {
                       id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                       name: user.name,
+                      username,
                     };
                     onPlayersChange([...players, newPlayer]);
                     setAddPlayerMenuVisible(false);
@@ -140,8 +171,7 @@ export default function PlayerSelector({
               ))}
             <Menu.Item
               onPress={() => {
-                setNewPlayerName('');
-                setPlayerNameDialog({ visible: true, playerId: '', isEditing: false });
+                setPlayerDialog({ visible: true, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined });
                 setAddPlayerMenuVisible(false);
               }}
               title="+ Add New Player"
@@ -190,37 +220,16 @@ export default function PlayerSelector({
       </View>
 
       {/* Add/Edit Player Dialog */}
-      <Portal>
-        <Dialog
-          visible={playerNameDialog.visible}
-          onDismiss={() => setPlayerNameDialog({ visible: false, playerId: '', isEditing: false })}
-        >
-          <Dialog.Title>{playerNameDialog.isEditing ? 'Edit Player' : 'Add Player'}</Dialog.Title>
-          <Dialog.Content>
-            <TextInput
-              label="Player Name"
-              value={newPlayerName}
-              onChangeText={setNewPlayerName}
-              mode="outlined"
-              style={styles.dialogInput}
-              placeholder="Enter player name"
-              autoFocus
-              onSubmitEditing={handleConfirmAddPlayer}
-              returnKeyType="done"
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button
-              onPress={() => setPlayerNameDialog({ visible: false, playerId: '', isEditing: false })}
-            >
-              Cancel
-            </Button>
-            <Button onPress={handleConfirmAddPlayer} mode="contained">
-              {playerNameDialog.isEditing ? 'Save' : 'Add'}
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+      <NameUsernameDialog
+        visible={playerDialog.visible}
+        title={playerDialog.isEditing ? 'Edit Player' : 'Add Player'}
+        nameLabel="Player Name"
+        initialName={playerDialog.initialName}
+        initialUsername={playerDialog.initialUsername}
+        excludeUserId={playerDialog.excludeUserId}
+        onDismiss={() => setPlayerDialog({ visible: false, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined })}
+        onSave={handleSavePlayer}
+      />
 
       {/* Error Dialog */}
       <Portal>
@@ -297,9 +306,6 @@ const styles = StyleSheet.create({
   },
   removePlayerButton: {
     margin: 0,
-  },
-  dialogInput: {
-    marginBottom: 16,
   },
 });
 
