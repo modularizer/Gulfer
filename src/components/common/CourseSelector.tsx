@@ -1,0 +1,265 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { IconButton, Text, Menu, Dialog, Portal, Button, TextInput, useTheme } from 'react-native-paper';
+import { Course, getAllCourses, saveCourse, generateCourseId, getLastUsedCourse, getLatestAddedCourse } from '../../services/storage/courseStorage';
+
+interface CourseSelectorProps {
+  selectedCourseId: string | null;
+  onCourseChange: (courseId: string | null) => void;
+  onHolesChange?: (holes: number) => void; // Optional callback when holes change
+  initialCourseName?: string; // Optional: course name to match on initial load
+}
+
+export default function CourseSelector({
+  selectedCourseId,
+  onCourseChange,
+  onHolesChange,
+  initialCourseName,
+}: CourseSelectorProps) {
+  const theme = useTheme();
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [courseMenuVisible, setCourseMenuVisible] = useState(false);
+  const [newCourseDialog, setNewCourseDialog] = useState({ visible: false, name: '', holes: '9' });
+  const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load courses and initialize selection
+  useEffect(() => {
+    const loadCourses = async () => {
+      try {
+        const loadedCourses = await getAllCourses();
+        setCourses(loadedCourses);
+        
+        // If we have an initial course name but no selected course ID, try to find it
+        if (initialCourseName && !selectedCourseId && !isInitialized) {
+          const matchingCourse = loadedCourses.find(c => c.name === initialCourseName);
+          if (matchingCourse) {
+            onCourseChange(matchingCourse.id);
+            if (onHolesChange) {
+              onHolesChange(matchingCourse.holes);
+            }
+          } else {
+            // No match found - default to last used or latest added
+            const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
+            if (defaultCourse) {
+              onCourseChange(defaultCourse.id);
+              if (onHolesChange) {
+                onHolesChange(defaultCourse.holes);
+              }
+            }
+          }
+          setIsInitialized(true);
+        } else if (!selectedCourseId && !isInitialized) {
+          // No initial course name - default to last used or latest added
+          const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
+          if (defaultCourse) {
+            onCourseChange(defaultCourse.id);
+            if (onHolesChange) {
+              onHolesChange(defaultCourse.holes);
+            }
+          }
+          setIsInitialized(true);
+        } else {
+          setIsInitialized(true);
+        }
+      } catch (error) {
+        console.error('Error loading courses:', error);
+        setIsInitialized(true);
+      }
+    };
+
+    loadCourses();
+  }, [initialCourseName, selectedCourseId, isInitialized, onCourseChange, onHolesChange]);
+
+  // Helper function to format course display name
+  const formatCourseDisplayName = useCallback((course: Course | undefined): string => {
+    if (!course) return 'Select Course';
+    return `${course.name} (${course.holes} holes)`;
+  }, []);
+
+  const handleSelectCourse = useCallback((courseId: string | null) => {
+    onCourseChange(courseId);
+    setCourseMenuVisible(false);
+    
+    // Notify about holes change if callback provided
+    if (courseId && onHolesChange) {
+      const selectedCourse = courses.find(c => c.id === courseId);
+      if (selectedCourse) {
+        onHolesChange(selectedCourse.holes);
+      }
+    }
+  }, [courses, onCourseChange, onHolesChange]);
+
+  const handleAddNewCourse = useCallback(() => {
+    setNewCourseDialog({ visible: true, name: '', holes: '9' });
+    setCourseMenuVisible(false);
+  }, []);
+
+  const handleSaveNewCourse = useCallback(async () => {
+    if (!newCourseDialog.name.trim()) {
+      setErrorDialog({ visible: true, title: 'Error', message: 'Course name is required' });
+      return;
+    }
+
+    const holesNum = parseInt(newCourseDialog.holes, 10);
+    if (isNaN(holesNum) || holesNum <= 0) {
+      setErrorDialog({ visible: true, title: 'Error', message: 'Number of holes must be a positive number' });
+      return;
+    }
+
+    try {
+      const newCourse: Course = {
+        id: generateCourseId(),
+        name: newCourseDialog.name.trim(),
+        holes: holesNum,
+      };
+
+      await saveCourse(newCourse);
+      // Add the new course to the courses array immediately
+      const updatedCourses = [...courses, newCourse];
+      setCourses(updatedCourses);
+      // Auto-select the new course
+      onCourseChange(newCourse.id);
+      if (onHolesChange) {
+        onHolesChange(newCourse.holes);
+      }
+      setNewCourseDialog({ visible: false, name: '', holes: '9' });
+    } catch (error) {
+      console.error('Error saving course:', error);
+      setErrorDialog({ visible: true, title: 'Error', message: 'Failed to save course' });
+    }
+  }, [newCourseDialog, courses, onCourseChange, onHolesChange]);
+
+  const selectedCourse = selectedCourseId 
+    ? courses.find(c => c.id === selectedCourseId)
+    : undefined;
+
+  return (
+    <>
+      <Menu
+        visible={courseMenuVisible}
+        onDismiss={() => setCourseMenuVisible(false)}
+        anchor={
+          <TouchableOpacity
+            onPress={() => setCourseMenuVisible(true)}
+            style={[styles.courseSelector, { borderBottomColor: theme.colors.outlineVariant }]}
+          >
+            <View style={styles.courseSelectorContent}>
+              <IconButton
+                icon="map-marker"
+                size={20}
+                iconColor={theme.colors.onSurface}
+                style={styles.courseIcon}
+              />
+              <Text style={[styles.courseSelectorText, { color: theme.colors.onSurface }]}>
+                {formatCourseDisplayName(selectedCourse)}
+              </Text>
+              <IconButton
+                icon="chevron-down"
+                size={20}
+                iconColor={theme.colors.onSurface}
+                style={styles.courseIcon}
+              />
+            </View>
+          </TouchableOpacity>
+        }
+      >
+        {courses.map((course) => (
+          <Menu.Item
+            key={course.id}
+            onPress={() => handleSelectCourse(course.id)}
+            title={formatCourseDisplayName(course)}
+            titleStyle={selectedCourseId === course.id ? { fontWeight: 'bold' } : {}}
+          />
+        ))}
+        <Menu.Item
+          onPress={handleAddNewCourse}
+          title="+ Add New Course"
+          titleStyle={{ color: theme.colors.primary }}
+        />
+      </Menu>
+
+      {/* Add New Course Dialog */}
+      <Portal>
+        <Dialog
+          visible={newCourseDialog.visible}
+          onDismiss={() => setNewCourseDialog({ visible: false, name: '', holes: '9' })}
+        >
+          <Dialog.Title>Add New Course</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Course Name"
+              value={newCourseDialog.name}
+              onChangeText={(name) => setNewCourseDialog(prev => ({ ...prev, name }))}
+              mode="outlined"
+              style={styles.dialogInput}
+              placeholder="Enter course name"
+              autoFocus
+            />
+            <TextInput
+              label="Number of Holes"
+              value={newCourseDialog.holes}
+              onChangeText={(holes) => setNewCourseDialog(prev => ({ ...prev, holes }))}
+              mode="outlined"
+              style={styles.dialogInput}
+              placeholder="9"
+              keyboardType="numeric"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setNewCourseDialog({ visible: false, name: '', holes: '9' })}
+            >
+              Cancel
+            </Button>
+            <Button onPress={handleSaveNewCourse} mode="contained">
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Error Dialog */}
+      <Portal>
+        <Dialog
+          visible={errorDialog.visible}
+          onDismiss={() => setErrorDialog({ visible: false, title: '', message: '' })}
+        >
+          <Dialog.Title>{errorDialog.title}</Dialog.Title>
+          <Dialog.Content>
+            <Text>{errorDialog.message}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setErrorDialog({ visible: false, title: '', message: '' })}>
+              OK
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  courseSelector: {
+    borderBottomWidth: 1,
+    minHeight: 56,
+    justifyContent: 'center',
+  },
+  courseSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  courseSelectorText: {
+    flex: 1,
+    fontSize: 16,
+  },
+  courseIcon: {
+    margin: 0,
+  },
+  dialogInput: {
+    marginBottom: 16,
+  },
+});
+

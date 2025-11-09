@@ -1,0 +1,221 @@
+import { MD3LightTheme, MD3DarkTheme, configureFonts } from 'react-native-paper';
+import type { MD3Theme } from 'react-native-paper';
+
+// Base brand color
+const BRAND_COLOR = '#004922';
+
+// Light theme colors
+const lightColors = {
+  primary: BRAND_COLOR,
+  onPrimary: '#ffffff',
+  primaryContainer: '#1a5c3a',
+  onPrimaryContainer: '#ffffff',
+  secondary: '#2d7a4f',
+  onSecondary: '#ffffff',
+  secondaryContainer: '#4a9d6f',
+  onSecondaryContainer: '#ffffff',
+  tertiary: '#5cb88a',
+  onTertiary: '#ffffff',
+  tertiaryContainer: '#d4f4e0',
+  onTertiaryContainer: '#00391a',
+  error: '#ba1a1a',
+  onError: '#ffffff',
+  errorContainer: '#ffdad6',
+  onErrorContainer: '#410002',
+  background: '#fafdf9',
+  onBackground: '#191c1a',
+  surface: '#ffffff',
+  onSurface: '#191c1a',
+  surfaceVariant: '#dbe5dd',
+  onSurfaceVariant: '#404943',
+  surfaceDisabled: '#191c1a1f',
+  onSurfaceDisabled: '#191c1a61',
+  outline: '#707973',
+  outlineVariant: '#bfc9c1',
+  shadow: '#000000',
+  scrim: '#000000',
+  inverseSurface: '#2e322f',
+  inverseOnSurface: '#eff1ed',
+  inversePrimary: '#4fc77f',
+  backdrop: '#00000080',
+  elevation: {
+    level0: 'transparent',
+    level1: '#f5f9f6',
+    level2: '#eef4f0',
+    level3: '#e7f0ea',
+    level4: '#e4ede7',
+    level5: '#dfeae4',
+  },
+};
+
+// Dark theme colors
+const darkColors = {
+  primary: '#4fc77f',
+  onPrimary: '#00391a',
+  primaryContainer: '#005228',
+  onPrimaryContainer: '#6dff9a',
+  secondary: '#7dd4a0',
+  onSecondary: '#00391a',
+  secondaryContainer: '#005228',
+  onSecondaryContainer: '#7dd4a0',
+  tertiary: '#5cb88a',
+  onTertiary: '#00391a',
+  tertiaryContainer: '#004d2a',
+  onTertiaryContainer: '#6dff9a',
+  error: '#ffb4ab',
+  onError: '#690005',
+  errorContainer: '#93000a',
+  onErrorContainer: '#ffdad6',
+  background: '#0f1512',
+  onBackground: '#e1e3df',
+  surface: '#191c1a',
+  onSurface: '#e1e3df',
+  surfaceVariant: '#404943',
+  onSurfaceVariant: '#bfc9c1',
+  surfaceDisabled: '#e1e3df1f',
+  onSurfaceDisabled: '#e1e3df61',
+  outline: '#89938b',
+  outlineVariant: '#404943',
+  shadow: '#000000',
+  scrim: '#000000',
+  inverseSurface: '#e1e3df',
+  inverseOnSurface: '#2e322f',
+  inversePrimary: '#006d35',
+  backdrop: '#00000080',
+  elevation: {
+    level0: 'transparent',
+    level1: '#1d211e',
+    level2: '#222623',
+    level3: '#272c28',
+    level4: '#292e2a',
+    level5: '#2c312d',
+  },
+};
+
+const fontConfig = {
+  displayLarge: {
+    fontFamily: 'System',
+    fontSize: 57,
+    fontWeight: '400' as const,
+    letterSpacing: 0,
+    lineHeight: 64,
+  },
+  displayMedium: {
+    fontFamily: 'System',
+    fontSize: 45,
+    fontWeight: '400' as const,
+    letterSpacing: 0,
+    lineHeight: 52,
+  },
+  displaySmall: {
+    fontFamily: 'System',
+    fontSize: 36,
+    fontWeight: '400' as const,
+    letterSpacing: 0,
+    lineHeight: 44,
+  },
+  headlineLarge: {
+    fontFamily: 'System',
+    fontSize: 32,
+    fontWeight: '400' as const,
+    letterSpacing: 0,
+    lineHeight: 40,
+  },
+  headlineMedium: {
+    fontFamily: 'System',
+    fontSize: 28,
+    fontWeight: '400' as const,
+    letterSpacing: 0,
+    lineHeight: 36,
+  },
+  headlineSmall: {
+    fontFamily: 'System',
+    fontSize: 24,
+    fontWeight: '400' as const,
+    letterSpacing: 0,
+    lineHeight: 32,
+  },
+  titleLarge: {
+    fontFamily: 'System',
+    fontSize: 22,
+    fontWeight: '400' as const,
+    letterSpacing: 0,
+    lineHeight: 28,
+  },
+  titleMedium: {
+    fontFamily: 'System',
+    fontSize: 16,
+    fontWeight: '500' as const,
+    letterSpacing: 0.15,
+    lineHeight: 24,
+  },
+  titleSmall: {
+    fontFamily: 'System',
+    fontSize: 14,
+    fontWeight: '500' as const,
+    letterSpacing: 0.1,
+    lineHeight: 20,
+  },
+  labelLarge: {
+    fontFamily: 'System',
+    fontSize: 14,
+    fontWeight: '500' as const,
+    letterSpacing: 0.1,
+    lineHeight: 20,
+  },
+  labelMedium: {
+    fontFamily: 'System',
+    fontSize: 12,
+    fontWeight: '500' as const,
+    letterSpacing: 0.5,
+    lineHeight: 16,
+  },
+  labelSmall: {
+    fontFamily: 'System',
+    fontSize: 11,
+    fontWeight: '500' as const,
+    letterSpacing: 0.5,
+    lineHeight: 16,
+  },
+  bodyLarge: {
+    fontFamily: 'System',
+    fontSize: 16,
+    fontWeight: '400' as const,
+    letterSpacing: 0.5,
+    lineHeight: 24,
+  },
+  bodyMedium: {
+    fontFamily: 'System',
+    fontSize: 14,
+    fontWeight: '400' as const,
+    letterSpacing: 0.25,
+    lineHeight: 20,
+  },
+  bodySmall: {
+    fontFamily: 'System',
+    fontSize: 12,
+    fontWeight: '400' as const,
+    letterSpacing: 0.4,
+    lineHeight: 16,
+  },
+  default: {
+    fontFamily: 'System',
+    fontWeight: '400' as const,
+    letterSpacing: 0,
+  },
+};
+
+export const lightTheme: MD3Theme = {
+  ...MD3LightTheme,
+  colors: lightColors,
+  fonts: configureFonts({ config: fontConfig }),
+};
+
+export const darkTheme: MD3Theme = {
+  ...MD3DarkTheme,
+  colors: darkColors,
+  fonts: configureFonts({ config: fontConfig }),
+};
+
+export type ThemeMode = 'light' | 'dark' | 'auto';
+

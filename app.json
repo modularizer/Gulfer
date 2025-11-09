@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "Gulfer",
+    "slug": "gulfer",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "scheme": "gulfer",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gulfer.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.gulfer.app",
+      "permissions": []
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Gulfer to access your photos to attach them to rounds."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Gulfer to access your camera to take photos for rounds."
+        }
+      ],
+      "expo-router"
+    ]
+  }
+}
