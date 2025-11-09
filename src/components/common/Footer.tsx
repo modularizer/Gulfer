@@ -57,7 +57,9 @@ export default function Footer({ customCenterHandler }: FooterProps) {
                  date: Date.now(),
                });
         
-        router.replace(`/${newRound.id}/overview`);
+        const { idToCodename } = await import('../../utils/idUtils');
+        const roundCodename = idToCodename(newRound.id);
+        router.replace(`/${roundCodename}/overview`);
       } catch (error) {
         console.error('Error creating round:', error);
         router.push('/');

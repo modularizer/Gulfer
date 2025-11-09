@@ -143,7 +143,7 @@ export default function ScorecardPlayScreen() {
   const handleConfirmSave = useCallback(async () => {
     try {
       const round: Round = {
-        id: generateRoundId(),
+        id: await generateRoundId(),
         title: roundTitle.trim(),
         date: currentDate.getTime(),
         players,

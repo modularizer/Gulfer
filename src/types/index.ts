@@ -34,7 +34,7 @@ export interface GPSPathPoint {
 }
 
 export interface Round {
-  id: string;
+  id: string | number; // Numeric IDs ending in 1 (1, 11, 21, 31, etc.)
   title: string;
   date: number; // Unix timestamp
   players: Player[];
@@ -54,7 +54,7 @@ export interface Round {
 }
 
 export interface Course {
-  id: string;
+  id: string | number; // Numeric IDs ending in 0 (0, 10, 20, 30, etc.)
   name: string;
   holes: Hole[];
   location?: {

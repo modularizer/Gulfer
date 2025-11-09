@@ -18,7 +18,7 @@ import { Platform, Share, Alert, Clipboard } from 'react-native';
 const { width, height } = Dimensions.get('window');
 
 export default function RoundOverviewScreen() {
-  const { round: roundId } = useLocalSearchParams<{ round: string }>();
+  const { round: codenameParam } = useLocalSearchParams<{ round: string }>();
   const { registerCenterButtonHandler } = useFooterCenterButton();
   const [round, setRound] = useState<Round | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,13 +61,22 @@ export default function RoundOverviewScreen() {
   // Load round data
   useEffect(() => {
     const loadRound = async () => {
-      if (!roundId) {
+      if (!codenameParam) {
         setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
         setTimeout(() => router.push('/'), 1000);
         return;
       }
 
       try {
+        // Convert codename from URL to numeric ID
+        const { codenameToId } = await import('../../src/utils/idUtils');
+        const roundId = codenameToId(codenameParam);
+        if (roundId === null) {
+          setErrorDialog({ visible: true, title: 'Error', message: 'Invalid round ID' });
+          setTimeout(() => router.push('/'), 1000);
+          return;
+        }
+
         const loadedRound = await getRoundById(roundId);
         if (!loadedRound) {
           setErrorDialog({ visible: true, title: 'Error', message: 'Round not found' });
@@ -89,7 +98,7 @@ export default function RoundOverviewScreen() {
         if (loadedRound.courseName) {
           const matchingCourse = loadedCourses.find(c => c.name.trim() === loadedRound.courseName!.trim());
           if (matchingCourse) {
-            setSelectedCourseId(matchingCourse.id);
+            setSelectedCourseId(matchingCourse.id.toString());
             const holeCount = Array.isArray(matchingCourse.holes) 
               ? matchingCourse.holes.length 
               : (matchingCourse.holes as unknown as number || 0);
@@ -113,10 +122,10 @@ export default function RoundOverviewScreen() {
       }
     };
 
-    if (roundId) {
+    if (codenameParam) {
       loadRound();
     }
-  }, [roundId]);
+  }, [codenameParam]);
 
   // Save round data
   const saveRoundData = useCallback(async () => {
@@ -127,7 +136,7 @@ export default function RoundOverviewScreen() {
     let courseName: string | undefined = round.courseName; // Preserve existing courseName
     if (selectedCourseId) {
       const courses = await getAllCourses();
-      const selectedCourse = courses.find((c: { id: string }) => c.id === selectedCourseId);
+      const selectedCourse = courses.find((c) => c.id.toString() === selectedCourseId);
       courseName = selectedCourse ? selectedCourse.name.trim() : round.courseName;
     }
 
@@ -220,10 +229,10 @@ export default function RoundOverviewScreen() {
   }, [players]);
 
   const handleExportRound = useCallback(async () => {
-    if (!roundId) return;
+    if (!round) return;
     
     try {
-      const exportedText = await exportRound(roundId);
+      const exportedText = await exportRound(round.id);
       
       // Copy to clipboard
       if (Platform.OS === 'web') {
@@ -252,12 +261,14 @@ export default function RoundOverviewScreen() {
       console.error('Error exporting round:', error);
       setErrorDialog({ visible: true, title: 'Export Error', message: error instanceof Error ? error.message : 'Failed to export round' });
     }
-  }, [roundId]);
+  }, [round]);
 
-  const handleStartRound = useCallback(() => {
-    if (!roundId) return;
-    router.push(`/${roundId}/play`);
-  }, [roundId]);
+  const handleStartRound = useCallback(async () => {
+    if (!round) return;
+    const { idToCodename } = await import('../../src/utils/idUtils');
+    const roundCodename = idToCodename(round.id);
+    router.push(`/${roundCodename}/play`);
+  }, [round]);
 
   // Register the start round handler with the footer
   useEffect(() => {
@@ -319,7 +330,7 @@ export default function RoundOverviewScreen() {
             images={photos}
             isEditable={true}
             onImagesChange={handlePhotosChange}
-            storageKey={roundId}
+            storageKey={round?.id?.toString() || codenameParam}
           />
         </View>
 
@@ -401,8 +412,11 @@ export default function RoundOverviewScreen() {
                           player={player}
                           score={total}
                           isWinner={isWinner}
-                          onPress={() => {
-                            router.push(`/${roundId}/play`);
+                          onPress={async () => {
+                            if (!round) return;
+                            const { idToCodename } = await import('../../src/utils/idUtils');
+                            const roundCodename = idToCodename(round.id);
+                            router.push(`/${roundCodename}/play`);
                           }}
                         />
                         {!hasScores && players.length > 1 && (

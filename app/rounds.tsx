@@ -70,20 +70,23 @@ export default function RoundHistoryScreen() {
 
 
   const handleRoundPress = useCallback(
-    (roundId: string) => {
+    async (roundId: string | number) => {
       // If in selection mode, toggle selection instead of navigating
       if (selectedRoundIds.size > 0) {
         setSelectedRoundIds((prev) => {
           const newSet = new Set(prev);
-          if (newSet.has(roundId)) {
-            newSet.delete(roundId);
+          const idStr = roundId.toString();
+          if (newSet.has(idStr)) {
+            newSet.delete(idStr);
           } else {
-            newSet.add(roundId);
+            newSet.add(idStr);
           }
           return newSet;
         });
       } else {
-        router.push(`/${roundId}/overview`);
+        const { idToCodename } = await import('../src/utils/idUtils');
+        const roundCodename = idToCodename(roundId);
+        router.push(`/${roundCodename}/overview`);
       }
     },
     [selectedRoundIds.size]
@@ -167,12 +170,12 @@ export default function RoundHistoryScreen() {
         return playerScores.length === expectedHoles && expectedHoles > 0;
       });
 
-      const isSelected = selectedRoundIds.has(item.id);
+      const isSelected = selectedRoundIds.has(item.id.toString());
 
       return (
         <TouchableOpacity
           onPress={() => handleRoundPress(item.id)}
-          onLongPress={() => handleRoundLongPress(item.id)}
+          onLongPress={() => handleRoundLongPress(item.id.toString())}
         >
           <Card
             style={[
@@ -274,7 +277,7 @@ export default function RoundHistoryScreen() {
         <FlatList
           data={filteredRounds}
           renderItem={renderRoundItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

@@ -4,6 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightTheme, darkTheme, ThemeMode } from './theme';
 import type { MD3Theme } from 'react-native-paper';
 
+// Set to false to disable dark mode. Change to true to re-enable dark mode support.
+const DARK_MODE_ENABLED = false;
+
 interface ThemeContextType {
   theme: MD3Theme;
   themeMode: ThemeMode;
@@ -18,11 +21,16 @@ const THEME_STORAGE_KEY = '@gulfer_theme_mode';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemColorScheme = useColorScheme();
-  const [themeMode, setThemeModeState] = useState<ThemeMode>('auto');
+  const [themeMode, setThemeModeState] = useState<ThemeMode>('light');
   const [isDark, setIsDark] = useState(false);
 
-  // Load saved theme preference
+  // Load saved theme preference (only if dark mode is enabled)
   useEffect(() => {
+    if (!DARK_MODE_ENABLED) {
+      setIsDark(false);
+      return;
+    }
+
     const loadTheme = async () => {
       try {
         const saved = await AsyncStorage.getItem(THEME_STORAGE_KEY);
@@ -38,6 +46,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Determine if dark mode should be active
   useEffect(() => {
+    if (!DARK_MODE_ENABLED) {
+      setIsDark(false);
+      return;
+    }
+
     if (themeMode === 'auto') {
       setIsDark(systemColorScheme === 'dark');
     } else {
@@ -46,6 +59,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [themeMode, systemColorScheme]);
 
   const setThemeMode = useCallback(async (mode: ThemeMode) => {
+    if (!DARK_MODE_ENABLED) {
+      return; // Ignore theme changes when dark mode is disabled
+    }
+
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
       setThemeModeState(mode);
@@ -55,6 +72,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toggleTheme = useCallback(() => {
+    if (!DARK_MODE_ENABLED) {
+      return; // No-op when dark mode is disabled
+    }
+
     if (themeMode === 'light') {
       setThemeMode('dark');
     } else if (themeMode === 'dark') {

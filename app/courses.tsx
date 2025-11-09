@@ -28,6 +28,9 @@ export default function CoursesScreen() {
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [bestScoresByCourse, setBestScoresByCourse] = useState<Map<string, Map<string, { player: Player; score: number }>>>(new Map());
   const [selectedCourseIds, setSelectedCourseIds] = useState<Set<string>>(new Set());
+  
+  // Helper to convert course ID to string for Set operations
+  const courseIdToString = (id: string | number): string => id.toString();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const loadCourses = useCallback(async () => {
@@ -83,7 +86,7 @@ export default function CoursesScreen() {
         console.log(`Course "${course.name}": Best scores count: ${courseBestScores.size}`);
         
         if (courseBestScores.size > 0) {
-          bestScoresMap.set(course.id, courseBestScores);
+          bestScoresMap.set(course.id.toString(), courseBestScores);
         }
       }));
       
@@ -104,22 +107,24 @@ export default function CoursesScreen() {
   }, [loadCourses]);
 
   const handleCoursePress = useCallback(
-    (courseId: string, courseName: string) => {
+    async (courseId: string | number, courseName: string) => {
       // If in selection mode, toggle selection instead of navigating
       if (selectedCourseIds.size > 0) {
         setSelectedCourseIds((prev) => {
           const newSet = new Set(prev);
-          if (newSet.has(courseId)) {
-            newSet.delete(courseId);
+          const idStr = courseId.toString();
+          if (newSet.has(idStr)) {
+            newSet.delete(idStr);
           } else {
-            newSet.add(courseId);
+            newSet.add(idStr);
           }
           return newSet;
         });
       } else {
-        // URL encode the course name to handle spaces and special characters
-        const encodedName = encodeURIComponent(courseName);
-        router.push(`/course/${encodedName}`);
+        // Convert course ID to codename for URL
+        const { idToCodename } = await import('../src/utils/idUtils');
+        const courseCodename = idToCodename(courseId);
+        router.push(`/course/${courseCodename}`);
       }
     },
     [selectedCourseIds.size]
@@ -170,7 +175,7 @@ export default function CoursesScreen() {
 
     try {
       const newCourse: Course = {
-        id: generateCourseId(),
+        id: await generateCourseId(),
         name: newCourseDialog.name.trim(),
         holes: Array.from({ length: holesNum }, (_, i) => ({
           number: i + 1,
@@ -199,9 +204,9 @@ export default function CoursesScreen() {
   const renderCourseItem = useCallback(
     ({ item }: { item: Course }) => {
       const holeCount = getHoleCount(item);
-      const courseBestScores = bestScoresByCourse.get(item.id);
+      const courseBestScores = bestScoresByCourse.get(item.id.toString());
       const bestScoresArray = courseBestScores ? Array.from(courseBestScores.values()) : [];
-      const isSelected = selectedCourseIds.has(item.id);
+      const isSelected = selectedCourseIds.has(item.id.toString());
       
       // Find the lowest score (winner)
       const winner = bestScoresArray.length > 0 
@@ -211,7 +216,7 @@ export default function CoursesScreen() {
       return (
         <TouchableOpacity 
           onPress={() => handleCoursePress(item.id, item.name)}
-          onLongPress={() => handleCourseLongPress(item.id)}
+          onLongPress={() => handleCourseLongPress(item.id.toString())}
         >
           <Card style={[
             styles.courseCard, 
@@ -282,7 +287,7 @@ export default function CoursesScreen() {
         <FlatList
           data={filteredCourses}
           renderItem={renderCourseItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

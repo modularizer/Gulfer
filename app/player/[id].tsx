@@ -3,7 +3,8 @@ import { View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } fro
 import { IconButton, useTheme, Text, Card, Chip } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
 import { getAllUsers, getUserByUsername, User } from '../../src/services/storage/userStorage';
-import { getAllRounds, Round } from '../../src/services/storage/roundStorage';
+import { getAllRounds } from '../../src/services/storage/roundStorage';
+import { Round, Player, Score } from '../../src/types';
 import { getAllCourses, Course } from '../../src/services/storage/courseStorage';
 import { getShadowStyle } from '../../src/utils';
 
@@ -11,7 +12,7 @@ interface CourseScore {
   course: Course;
   bestScore: number;
   roundCount: number;
-  bestRoundId: string;
+  bestRoundId: string | number;
 }
 
 export default function PlayerDetailScreen() {
@@ -54,7 +55,7 @@ export default function PlayerDetailScreen() {
         });
 
         // Group by course and calculate best score per course
-        const courseScoreMap = new Map<string, { course: Course; bestScore: number; roundCount: number; bestRoundId: string }>();
+        const courseScoreMap = new Map<string, { course: Course; bestScore: number; roundCount: number; bestRoundId: string | number }>();
         
         // First, count rounds per course (using trimmed names for consistency)
         const courseRoundCounts = new Map<string, number>();
@@ -189,9 +190,10 @@ export default function PlayerDetailScreen() {
                 return (
                   <TouchableOpacity
                     key={course.id}
-                    onPress={() => {
-                      const encodedCourseName = encodeURIComponent(course.name);
-                      router.push(`/course/${encodedCourseName}`);
+                    onPress={async () => {
+                      const { idToCodename } = await import('../../src/utils/idUtils');
+                      const courseCodename = idToCodename(course.id);
+                      router.push(`/course/${courseCodename}`);
                     }}
                   >
                     <Card style={[styles.courseCard, { backgroundColor: theme.colors.surface }, getShadowStyle(2)]}>
@@ -208,7 +210,11 @@ export default function PlayerDetailScreen() {
                           <TouchableOpacity
                             onPress={(e) => {
                               e.stopPropagation();
-                              router.push(`/${bestRoundId}/play`);
+                              (async () => {
+                                const { idToCodename } = await import('../../src/utils/idUtils');
+                                const roundCodename = idToCodename(bestRoundId);
+                                router.push(`/${roundCodename}/play`);
+                              })();
                             }}
                           >
                             <Chip 
@@ -260,25 +266,25 @@ export default function PlayerDetailScreen() {
                 });
 
                 // Find the player in this round (match by username only)
-                const playerInRound = round.players.find(p => p.username === player!.username);
+                const playerInRound = round.players.find((p: Player) => p.username === player!.username);
                 const playerScores = playerInRound 
-                  ? round.scores!.filter(s => s.playerId === playerInRound.id)
+                  ? round.scores!.filter((s: Score) => s.playerId === playerInRound.id)
                   : [];
-                const playerTotal = playerScores.reduce((sum, s) => sum + s.throws, 0);
+                const playerTotal = playerScores.reduce((sum: number, s: Score) => sum + s.throws, 0);
 
                 // Calculate all player scores for display
-                const allPlayerScores = round.players.map((p) => {
+                const allPlayerScores = round.players.map((p: Player) => {
                   const total = round.scores
                     ? round.scores
-                        .filter((s) => s.playerId === p.id)
-                        .reduce((sum, s) => sum + s.throws, 0)
+                        .filter((s: Score) => s.playerId === p.id)
+                        .reduce((sum: number, s: Score) => sum + s.throws, 0)
                     : 0;
                   return { player: p, total };
                 });
 
                 // Find winner
-                const winnerScore = Math.min(...allPlayerScores.map((ps) => ps.total));
-                const winner = allPlayerScores.find((ps) => ps.total === winnerScore);
+                const winnerScore = Math.min(...allPlayerScores.map((ps: { player: Player; total: number }) => ps.total));
+                const winner = allPlayerScores.find((ps: { player: Player; total: number }) => ps.total === winnerScore);
 
                 // Get hole count
                 let holesCount = 0;
@@ -294,7 +300,11 @@ export default function PlayerDetailScreen() {
                 return (
                   <TouchableOpacity
                     key={round.id}
-                    onPress={() => router.push(`/${round.id}/overview`)}
+                    onPress={async () => {
+                      const { idToCodename } = await import('../../src/utils/idUtils');
+                      const roundCodename = idToCodename(round.id);
+                      router.push(`/${roundCodename}/overview`);
+                    }}
                   >
                     <Card style={[styles.roundCard, { backgroundColor: theme.colors.surface }, getShadowStyle(2)]}>
                       <Card.Content>
@@ -327,7 +337,11 @@ export default function PlayerDetailScreen() {
                                     isCurrentPlayer && !isWinner && styles.currentPlayerChipText,
                                   ]}
                                   icon={isWinner ? 'crown' : undefined}
-                                  onPress={() => router.push(`/${round.id}/play`)}
+                                  onPress={async () => {
+                                    const { idToCodename } = await import('../../src/utils/idUtils');
+                                    const roundCodename = idToCodename(round.id);
+                                    router.push(`/${roundCodename}/play`);
+                                  }}
                                 >
                                   {p.name}: {total}
                                 </Chip>

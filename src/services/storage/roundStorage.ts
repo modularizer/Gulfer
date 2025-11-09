@@ -14,7 +14,12 @@ const ROUNDS_STORAGE_KEY = '@gulfer_rounds';
 export async function saveRound(round: Round): Promise<void> {
   try {
     const rounds = await getAllRounds();
-    const existingIndex = rounds.findIndex((r) => r.id === round.id);
+    // Handle both numeric and string IDs for comparison
+    const roundNumId = typeof round.id === 'string' ? parseInt(round.id, 10) : round.id;
+    const existingIndex = rounds.findIndex((r) => {
+      const rNumId = typeof r.id === 'string' ? parseInt(r.id, 10) : r.id;
+      return rNumId === roundNumId || r.id === round.id;
+    });
     
     if (existingIndex >= 0) {
       rounds[existingIndex] = round;
@@ -54,12 +59,17 @@ export async function getAllRounds(): Promise<Round[]> {
 }
 
 /**
- * Get a single round by ID
+ * Get a single round by ID (supports both numeric IDs and string IDs for backward compatibility)
  */
-export async function getRoundById(roundId: string): Promise<Round | null> {
+export async function getRoundById(roundId: string | number): Promise<Round | null> {
   try {
     const rounds = await getAllRounds();
-    return rounds.find((r) => r.id === roundId) || null;
+    // Convert to number for comparison if needed
+    const numId = typeof roundId === 'string' ? parseInt(roundId, 10) : roundId;
+    return rounds.find((r) => {
+      const rNumId = typeof r.id === 'string' ? parseInt(r.id, 10) : r.id;
+      return rNumId === numId || r.id === roundId;
+    }) || null;
   } catch (error) {
     console.error('Error loading round:', error);
     return null;
@@ -67,13 +77,17 @@ export async function getRoundById(roundId: string): Promise<Round | null> {
 }
 
 /**
- * Delete a round by ID
+ * Delete a round by ID (supports both numeric IDs and string IDs for backward compatibility)
  */
-export async function deleteRound(roundId: string): Promise<void> {
+export async function deleteRound(roundId: string | number): Promise<void> {
   try {
     const rounds = await getAllRounds();
     const initialLength = rounds.length;
-    const filtered = rounds.filter((r) => r.id !== roundId);
+    const numId = typeof roundId === 'string' ? parseInt(roundId, 10) : roundId;
+    const filtered = rounds.filter((r) => {
+      const rNumId = typeof r.id === 'string' ? parseInt(r.id, 10) : r.id;
+      return rNumId !== numId && r.id !== roundId;
+    });
     
     // Verify that a round was actually found and removed
     if (filtered.length === initialLength) {
@@ -85,7 +99,10 @@ export async function deleteRound(roundId: string): Promise<void> {
     
     // Verify the deletion was successful
     const verifyRounds = await getAllRounds();
-    if (verifyRounds.find((r) => r.id === roundId)) {
+    if (verifyRounds.find((r) => {
+      const rNumId = typeof r.id === 'string' ? parseInt(r.id, 10) : r.id;
+      return rNumId === numId || r.id === roundId;
+    })) {
       throw new Error('Round deletion verification failed - round still exists in storage');
     }
   } catch (error) {
@@ -96,12 +113,19 @@ export async function deleteRound(roundId: string): Promise<void> {
 
 /**
  * Delete multiple rounds by IDs (more efficient than calling deleteRound multiple times)
+ * Supports both numeric IDs and string IDs for backward compatibility
  */
-export async function deleteRounds(roundIds: string[]): Promise<void> {
+export async function deleteRounds(roundIds: (string | number)[]): Promise<void> {
   try {
     const rounds = await getAllRounds();
     const initialLength = rounds.length;
-    const filtered = rounds.filter((r) => !roundIds.includes(r.id));
+    const filtered = rounds.filter((r) => {
+      const rNumId = typeof r.id === 'string' ? parseInt(r.id, 10) : r.id;
+      return !roundIds.some(id => {
+        const idNumId = typeof id === 'string' ? parseInt(id, 10) : id;
+        return rNumId === idNumId || r.id === id;
+      });
+    });
     
     if (filtered.length === initialLength) {
       console.warn(`None of the provided round IDs were found for deletion`);
@@ -112,7 +136,13 @@ export async function deleteRounds(roundIds: string[]): Promise<void> {
     
     // Verify the deletions were successful
     const verifyRounds = await getAllRounds();
-    const stillExists = roundIds.filter(id => verifyRounds.find((r) => r.id === id));
+    const stillExists = roundIds.filter(id => {
+      const idNumId = typeof id === 'string' ? parseInt(id, 10) : id;
+      return verifyRounds.some(r => {
+        const rNumId = typeof r.id === 'string' ? parseInt(r.id, 10) : r.id;
+        return rNumId === idNumId || r.id === id;
+      });
+    });
     if (stillExists.length > 0) {
       throw new Error(`Round deletion verification failed - rounds still exist: ${stillExists.join(', ')}`);
     }
@@ -123,12 +153,11 @@ export async function deleteRounds(roundIds: string[]): Promise<void> {
 }
 
 /**
- * Generate a new unique round ID based on date/time
+ * Generate a new unique round ID (numeric, ending in 1)
  */
-export function generateRoundId(): string {
-  const now = new Date();
-  const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, -5); // Format: 2025-01-15T14-30-45
-  return dateStr;
+export async function generateRoundId(): Promise<number> {
+  const { getNextRoundId } = await import('../../utils/idUtils');
+  return getNextRoundId();
 }
 
 /**
@@ -163,7 +192,7 @@ export async function createNewRound(initialData: {
   date?: number; // Optional custom date (Unix timestamp)
 }): Promise<Round> {
   const date = initialData.date || Date.now();
-  const roundId = generateRoundId();
+  const roundId = await generateRoundId();
   const title = generateRoundTitle(date);
 
   const newRound: Round = {

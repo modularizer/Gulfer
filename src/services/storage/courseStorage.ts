@@ -33,7 +33,12 @@ export async function getAllCourses(): Promise<Course[]> {
 export async function saveCourse(course: Course): Promise<void> {
   try {
     const courses = await getAllCourses();
-    const existingIndex = courses.findIndex((c) => c.id === course.id);
+    // Handle both numeric and string IDs for comparison
+    const courseNumId = typeof course.id === 'string' ? parseInt(course.id, 10) : course.id;
+    const existingIndex = courses.findIndex((c) => {
+      const cNumId = typeof c.id === 'string' ? parseInt(c.id, 10) : c.id;
+      return cNumId === courseNumId || c.id === course.id;
+    });
     
     if (existingIndex >= 0) {
       courses[existingIndex] = course;
@@ -49,12 +54,17 @@ export async function saveCourse(course: Course): Promise<void> {
 }
 
 /**
- * Get a course by ID
+ * Get a course by ID (supports both numeric IDs and string IDs for backward compatibility)
  */
-export async function getCourseById(courseId: string): Promise<Course | null> {
+export async function getCourseById(courseId: string | number): Promise<Course | null> {
   try {
     const courses = await getAllCourses();
-    return courses.find((c) => c.id === courseId) || null;
+    // Convert to number for comparison if needed
+    const numId = typeof courseId === 'string' ? parseInt(courseId, 10) : courseId;
+    return courses.find((c) => {
+      const cNumId = typeof c.id === 'string' ? parseInt(c.id, 10) : c.id;
+      return cNumId === numId || c.id === courseId;
+    }) || null;
   } catch (error) {
     console.error('Error loading course:', error);
     return null;
@@ -75,12 +85,16 @@ export async function getCourseByName(courseName: string): Promise<Course | null
 }
 
 /**
- * Delete a course by ID
+ * Delete a course by ID (supports both numeric IDs and string IDs for backward compatibility)
  */
-export async function deleteCourse(courseId: string): Promise<void> {
+export async function deleteCourse(courseId: string | number): Promise<void> {
   try {
     const courses = await getAllCourses();
-    const filtered = courses.filter((c) => c.id !== courseId);
+    const numId = typeof courseId === 'string' ? parseInt(courseId, 10) : courseId;
+    const filtered = courses.filter((c) => {
+      const cNumId = typeof c.id === 'string' ? parseInt(c.id, 10) : c.id;
+      return cNumId !== numId && c.id !== courseId;
+    });
     await setItem(COURSES_STORAGE_KEY, JSON.stringify(filtered));
   } catch (error) {
     console.error('Error deleting course:', error);
@@ -89,10 +103,11 @@ export async function deleteCourse(courseId: string): Promise<void> {
 }
 
 /**
- * Generate a new unique course ID
+ * Generate a new unique course ID (numeric, ending in 0)
  */
-export function generateCourseId(): string {
-  return `course_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+export async function generateCourseId(): Promise<number> {
+  const { getNextCourseId } = await import('../../utils/idUtils');
+  return getNextCourseId();
 }
 
 /**
@@ -129,7 +144,7 @@ export async function getLastUsedCourse(): Promise<Course | null> {
 }
 
 /**
- * Get the latest added course (by creation timestamp in ID)
+ * Get the latest added course (by highest numeric ID)
  */
 export async function getLatestAddedCourse(): Promise<Course | null> {
   try {
@@ -138,16 +153,15 @@ export async function getLatestAddedCourse(): Promise<Course | null> {
       return null;
     }
     
-    // Extract timestamp from course ID and sort
-    const coursesWithTimestamp = courses.map(course => {
-      const match = course.id.match(/course_(\d+)_/);
-      const timestamp = match ? parseInt(match[1], 10) : 0;
-      return { course, timestamp };
+    // Extract numeric IDs and sort
+    const coursesWithId = courses.map(course => {
+      const numId = typeof course.id === 'string' ? parseInt(course.id, 10) : course.id;
+      return { course, id: isNaN(numId) ? -1 : numId };
     });
     
-    // Sort by timestamp descending and return the most recent
-    coursesWithTimestamp.sort((a, b) => b.timestamp - a.timestamp);
-    return coursesWithTimestamp[0]?.course || null;
+    // Sort by ID descending and return the most recent
+    coursesWithId.sort((a, b) => b.id - a.id);
+    return coursesWithId[0]?.course || null;
   } catch (error) {
     console.error('Error getting latest added course:', error);
     return null;

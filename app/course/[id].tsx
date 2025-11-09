@@ -6,7 +6,7 @@ import { TouchableOpacity } from 'react-native';
 import { Course, Hole, Round, Player, Score } from '../../src/types';
 import PhotoGallery from '../../src/components/common/PhotoGallery';
 import PlayerChip from '../../src/components/common/PlayerChip';
-import { getCourseByName, saveCourse } from '../../src/services/storage/courseStorage';
+import { getCourseById, saveCourse } from '../../src/services/storage/courseStorage';
 import { getAllRounds } from '../../src/services/storage/roundStorage';
 import { ensurePlayerHasUsername } from '../../src/services/storage/userStorage';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -15,7 +15,7 @@ import { useFooterCenterButton } from '../../src/components/common/Footer';
 const { width, height } = Dimensions.get('window');
 
 export default function CourseDetailScreen() {
-  const { id: courseNameParam } = useLocalSearchParams<{ id: string }>();
+  const { id: codenameParam } = useLocalSearchParams<{ id: string }>();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
@@ -26,16 +26,23 @@ export default function CourseDetailScreen() {
   // Load course data
   useEffect(() => {
     const loadCourse = async () => {
-      if (!courseNameParam) {
-        setErrorDialog({ visible: true, title: 'Error', message: 'Course name is missing' });
+      if (!codenameParam) {
+        setErrorDialog({ visible: true, title: 'Error', message: 'Course ID is missing' });
         setTimeout(() => router.push('/courses'), 1000);
         return;
       }
 
       try {
-        // Decode the course name from URL
-        const courseName = decodeURIComponent(courseNameParam);
-        const loadedCourse = await getCourseByName(courseName);
+        // Convert codename from URL to numeric ID
+        const { codenameToId } = await import('../../src/utils/idUtils');
+        const courseId = codenameToId(codenameParam);
+        if (courseId === null) {
+          setErrorDialog({ visible: true, title: 'Error', message: 'Invalid course ID' });
+          setTimeout(() => router.push('/courses'), 1000);
+          return;
+        }
+
+        const loadedCourse = await getCourseById(courseId);
         if (!loadedCourse) {
           setErrorDialog({ visible: true, title: 'Error', message: 'Course not found' });
           setTimeout(() => router.push('/courses'), 1000);
@@ -51,12 +58,11 @@ export default function CourseDetailScreen() {
         // Match course name (trim whitespace for robustness)
         const courseRounds = allRounds.filter(r => {
           const roundCourseName = r.courseName?.trim();
-          const trimmedCourseName = courseName.trim();
+          const trimmedCourseName = loadedCourse.name.trim();
           return roundCourseName === trimmedCourseName;
         });
         
-        console.log(`Course "${courseName}": Found ${courseRounds.length} rounds`);
-        console.log('All rounds:', allRounds.map(r => ({ id: r.id, courseName: r.courseName })));
+        console.log(`Course "${loadedCourse.name}": Found ${courseRounds.length} rounds`);
         
         setRounds(courseRounds);
         
@@ -93,10 +99,10 @@ export default function CourseDetailScreen() {
       }
     };
 
-    if (courseNameParam) {
+    if (codenameParam) {
       loadCourse();
     }
-  }, [courseNameParam]);
+  }, [codenameParam]);
 
   // Save course data
   const saveCourseData = useCallback(async () => {
@@ -118,15 +124,15 @@ export default function CourseDetailScreen() {
   // Set up footer center button to navigate to holes table
   const { registerCenterButtonHandler } = useFooterCenterButton();
   useEffect(() => {
-    if (courseNameParam) {
+    if (codenameParam) {
       registerCenterButtonHandler(() => {
-        router.push(`/course/${courseNameParam}/holes`);
+        router.push(`/course/${codenameParam}/holes`);
       });
     }
     return () => {
       registerCenterButtonHandler(null);
     };
-  }, [courseNameParam, registerCenterButtonHandler]);
+  }, [codenameParam, registerCenterButtonHandler]);
 
   const theme = useTheme();
 
@@ -178,7 +184,7 @@ export default function CourseDetailScreen() {
             images={photos}
             isEditable={true}
             onImagesChange={handlePhotosChange}
-            storageKey={course?.id || ''}
+            storageKey={course?.id?.toString() || ''}
           />
         </View>
 
@@ -269,7 +275,11 @@ export default function CourseDetailScreen() {
                   return (
                     <TouchableOpacity
                       key={round.id}
-                      onPress={() => router.push(`/${round.id}/overview`)}
+                      onPress={async () => {
+                        const { idToCodename } = await import('../../src/utils/idUtils');
+                        const roundCodename = idToCodename(round.id);
+                        router.push(`/${roundCodename}/overview`);
+                      }}
                     >
                       <Card style={[styles.roundCard, { backgroundColor: theme.colors.surface }]}>
                         <Card.Content>
@@ -294,7 +304,11 @@ export default function CourseDetailScreen() {
                                       isWinner && styles.winnerChipText,
                                     ]}
                                     icon={isWinner ? 'crown' : undefined}
-                                    onPress={() => router.push(`/${round.id}/play`)}
+                                    onPress={async () => {
+                                      const { idToCodename } = await import('../../src/utils/idUtils');
+                                      const roundCodename = idToCodename(round.id);
+                                      router.push(`/${roundCodename}/play`);
+                                    }}
                                   >
                                     {player.name}: {total}
                                   </Chip>

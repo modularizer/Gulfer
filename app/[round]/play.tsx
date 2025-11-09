@@ -8,7 +8,7 @@ import { getAllCourses } from '../../src/services/storage/courseStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 
 export default function ScorecardPlayScreen() {
-  const { round: roundId } = useLocalSearchParams<{ round: string }>();
+  const { round: codenameParam } = useLocalSearchParams<{ round: string }>();
   const [round, setRound] = useState<Round | null>(null);
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -21,13 +21,22 @@ export default function ScorecardPlayScreen() {
   // Load round data
   useEffect(() => {
     const loadRound = async () => {
-      if (!roundId) {
+      if (!codenameParam) {
         setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
         setTimeout(() => router.push('/'), 1000);
         return;
       }
 
       try {
+        // Convert codename from URL to numeric ID
+        const { codenameToId } = await import('../../src/utils/idUtils');
+        const roundId = codenameToId(codenameParam);
+        if (roundId === null) {
+          setErrorDialog({ visible: true, title: 'Error', message: 'Invalid round ID' });
+          setTimeout(() => router.push('/'), 1000);
+          return;
+        }
+
         const loadedRound = await getRoundById(roundId);
         if (!loadedRound) {
           setErrorDialog({ visible: true, title: 'Error', message: 'Round not found' });
@@ -155,7 +164,12 @@ export default function ScorecardPlayScreen() {
         onRemovePlayer={() => {}}
         allowAddPlayer={false}
         courseName={round.courseName}
-        onBack={() => router.push(`/${roundId}/overview`)}
+        onBack={async () => {
+          if (!round) return;
+          const { idToCodename } = await import('../../src/utils/idUtils');
+          const roundCodename = idToCodename(round.id);
+          router.push(`/${roundCodename}/overview`);
+        }}
       />
 
       {/* Error Dialog */}

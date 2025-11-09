@@ -118,7 +118,7 @@ export default function CourseSelector({
 
     try {
       const newCourse: Course = {
-        id: generateCourseId(),
+        id: await generateCourseId(),
         name: newCourseDialog.name.trim(),
         holes: Array.from({ length: holesNum }, (_, i) => ({
           number: i + 1,

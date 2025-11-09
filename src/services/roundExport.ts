@@ -155,7 +155,7 @@ function validateExportText(exportText: string): void {
 /**
  * Export a round to a human-readable format
  */
-export async function exportRound(roundId: string): Promise<string> {
+export async function exportRound(roundId: string | number): Promise<string> {
   const { getRoundById } = await import('./storage/roundStorage');
   const round = await getRoundById(roundId);
   

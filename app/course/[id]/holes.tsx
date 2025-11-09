@@ -86,8 +86,11 @@ export default function CourseHolesScreen() {
         holes={holes}
         onHoleUpdate={handleHoleUpdate}
         onBack={() => {
-          const courseName = decodeURIComponent(courseNameParam || '');
-          router.push(`/course/${encodeURIComponent(courseName)}`);
+          if (codenameParam) {
+            router.push(`/course/${codenameParam}`);
+          } else {
+            router.push('/courses');
+          }
         }}
         distanceUnit={distanceUnit}
         onDistanceUnitChange={setDistanceUnit}

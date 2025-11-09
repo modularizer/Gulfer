@@ -81,13 +81,14 @@ export default function NewRoundScreen() {
       
       const newRound = await createNewRound({
         players: [defaultPlayer],
-        gameType: 'disc-golf',
         courseName,
         date,
       });
       
-      // Redirect to the overview page
-      router.replace(`/${newRound.id}/overview`);
+      // Redirect to the overview page using codename
+      const { idToCodename } = await import('../src/utils/idUtils');
+      const roundCodename = idToCodename(newRound.id);
+      router.replace(`/${roundCodename}/overview`);
     } catch (error) {
       console.error('Error creating round:', error);
       router.push('/');
