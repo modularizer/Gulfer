@@ -10,8 +10,10 @@ import { Card, Title, Paragraph, useTheme, Chip, Button, Dialog, Portal, TextInp
 import { User } from '../src/services/storage/userStorage';
 import { getAllUsers, saveUser, generateUserId, deleteUser } from '../src/services/storage/userStorage';
 import { getAllRounds } from '../src/services/storage/roundStorage';
+import { importPlayer } from '../src/services/playerExport';
 import { getShadowStyle } from '../src/utils';
 import { router } from 'expo-router';
+import { Alert, Platform } from 'react-native';
 import {
   SegmentedButtonsHeader,
   SelectionActionBar,
@@ -21,12 +23,14 @@ import {
 
 export default function PlayersScreen() {
   const [players, setPlayers] = useState<User[]>([]);
-  const [playerRoundsCount, setPlayerRoundsCount] = useState<Map<string, number>>(new Map());
-  const [playerCoursesCount, setPlayerCoursesCount] = useState<Map<string, number>>(new Map());
+  const [playerRoundsCount, setPlayerRoundsCount] = useState<Map<number, number>>(new Map());
+  const [playerCoursesCount, setPlayerCoursesCount] = useState<Map<number, number>>(new Map());
   const [refreshing, setRefreshing] = useState(false);
   const [newPlayerDialogVisible, setNewPlayerDialogVisible] = useState(false);
+  const [importDialogVisible, setImportDialogVisible] = useState(false);
+  const [importText, setImportText] = useState('');
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(new Set());
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<number>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const loadPlayers = useCallback(async () => {
@@ -36,13 +40,12 @@ export default function PlayersScreen() {
       
       // Count rounds and courses for each player
       const allRounds = await getAllRounds();
-      const roundsCountMap = new Map<string, number>();
-      const coursesCountMap = new Map<string, number>();
+      const roundsCountMap = new Map<number, number>();
+      const coursesCountMap = new Map<number, number>();
       
       loadedPlayers.forEach(player => {
         const playerRounds = allRounds.filter(round => {
-          return round.players.some(p => p.username === player.username) && 
-                 round.scores && round.scores.length > 0;
+          return round.players.some(p => p.id === player.id) && round.scores && round.scores.length > 0;
         });
         
         roundsCountMap.set(player.id, playerRounds.length);
@@ -75,7 +78,7 @@ export default function PlayersScreen() {
   }, [loadPlayers]);
 
   const handlePlayerPress = useCallback(
-    (playerId: string) => {
+    async (playerId: number) => {
       // If in selection mode, toggle selection instead of navigating
       if (selectedPlayerIds.size > 0) {
         setSelectedPlayerIds((prev) => {
@@ -89,18 +92,20 @@ export default function PlayersScreen() {
         });
       } else {
         const player = players.find(p => p.id === playerId);
-        if (!player || !player.username) {
-          console.error('Player missing username:', player);
+        if (!player) {
+          console.error('Player not found:', playerId);
           return;
         }
-        router.push(`/player/${encodeURIComponent(player.username)}`);
+        const { idToCodename } = await import('../src/utils/idUtils');
+        const playerCodename = idToCodename(player.id);
+        router.push(`/player/${playerCodename}`);
       }
     },
     [selectedPlayerIds.size, players]
   );
 
   const handlePlayerLongPress = useCallback(
-    (playerId: string) => {
+    (playerId: number) => {
       setSelectedPlayerIds((prev) => {
         const newSet = new Set(prev);
         newSet.add(playerId);
@@ -133,9 +138,8 @@ export default function PlayersScreen() {
   const handleSaveNewPlayer = useCallback(async (name: string, username: string) => {
     try {
       const newUser: User = {
-        id: generateUserId(),
+        id: await generateUserId(),
         name,
-        username,
       };
 
       await saveUser(newUser);
@@ -218,6 +222,14 @@ export default function PlayersScreen() {
         >
           Add Player
         </Button>
+        <Button
+          mode="outlined"
+          icon="import"
+          onPress={() => setImportDialogVisible(true)}
+          style={styles.importButton}
+        >
+          Import Player
+        </Button>
       </View>
       {players.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -229,7 +241,7 @@ export default function PlayersScreen() {
         <FlatList
           data={players}
           renderItem={renderPlayerItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -259,6 +271,73 @@ export default function PlayersScreen() {
         onDismiss={() => setNewPlayerDialogVisible(false)}
         onSave={handleSaveNewPlayer}
       />
+
+      {/* Import Player Dialog */}
+      <Portal>
+        <Dialog
+          visible={importDialogVisible}
+          onDismiss={() => {
+            setImportDialogVisible(false);
+            setImportText('');
+          }}
+          style={styles.importDialog}
+        >
+          <Dialog.Title>Import Player</Dialog.Title>
+          <Dialog.Content>
+            <Text style={[styles.importHelpText, { color: theme.colors.onSurfaceVariant }]}>
+              Paste the player export text below.
+            </Text>
+            <TextInput
+              mode="outlined"
+              value={importText}
+              onChangeText={setImportText}
+              multiline
+              numberOfLines={20}
+              style={styles.importTextInput}
+              contentStyle={styles.importTextContent}
+              placeholder="Paste player export text here..."
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => {
+              setImportDialogVisible(false);
+              setImportText('');
+            }}>
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={async () => {
+                if (!importText.trim()) {
+                  Alert.alert('Error', 'Please paste the player export text');
+                  return;
+                }
+
+                try {
+                  const newPlayerId = await importPlayer(importText);
+                  setImportText('');
+                  setImportDialogVisible(false);
+                  // Refresh players list
+                  await loadPlayers();
+                  // Navigate to the imported player
+                  const { encodeNameForUrl } = await import('../src/utils/urlEncoding');
+                  const { getUserById } = await import('../src/services/storage/userStorage');
+                  const importedPlayer = await getUserById(newPlayerId);
+                  if (importedPlayer) {
+                    router.push(`/player/${encodeNameForUrl(importedPlayer.name)}`);
+                  }
+                } catch (error) {
+                  console.error('Error importing player:', error);
+                  Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to import player');
+                }
+              }}
+              disabled={!importText.trim()}
+            >
+              Import
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       {/* Error Dialog */}
       <Portal>
@@ -292,6 +371,24 @@ const styles = StyleSheet.create({
   },
   addButton: {
     alignSelf: 'flex-start',
+    marginRight: 8,
+  },
+  importButton: {
+    alignSelf: 'flex-start',
+  },
+  importDialog: {
+    maxHeight: '80%',
+  },
+  importHelpText: {
+    marginBottom: 12,
+    fontSize: 14,
+  },
+  importTextInput: {
+    maxHeight: 400,
+  },
+  importTextContent: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
   },
   listContent: {
     padding: 16,

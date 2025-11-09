@@ -3,9 +3,8 @@
  */
 
 export interface Player {
-  id: string;
-  name: string;
-  username?: string; // Optional for backward compatibility, but should be set
+  id: string; // UUID for global uniqueness
+  name: string; // Locally unique name
 }
 
 export interface Hole {
@@ -15,7 +14,7 @@ export interface Hole {
 }
 
 export interface Score {
-  playerId: string;
+  playerId: string; // UUID reference to Player
   holeNumber: number;
   throws: number;
 }
@@ -34,13 +33,13 @@ export interface GPSPathPoint {
 }
 
 export interface Round {
-  id: string | number; // Numeric IDs ending in 1 (1, 11, 21, 31, etc.)
+  id: string; // UUID for global uniqueness
   title: string;
   date: number; // Unix timestamp
   players: Player[];
   scores: Score[];
   photos?: string[]; // Image hashes (for deduplication)
-  courseName?: string;
+  courseName?: string; // Locally unique course name
   notes?: string;
   // Phase 2: GPS data
   gpsPath?: GPSPathPoint[];
@@ -54,8 +53,8 @@ export interface Round {
 }
 
 export interface Course {
-  id: string | number; // Numeric IDs ending in 0 (0, 10, 20, 30, etc.)
-  name: string;
+  id: string; // UUID for global uniqueness
+  name: string; // Locally unique name
   holes: Hole[];
   location?: {
     latitude: number;

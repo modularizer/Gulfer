@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import Footer, { FooterContext } from './Footer';
-import { getAllUsers, saveUser, saveCurrentUserName, User } from '../../services/storage/userStorage';
+import { getAllUsers, saveUser, saveCurrentUserName, generateUserId, User } from '../../services/storage/userStorage';
 import NameUsernameDialog from './NameUsernameDialog';
 
 interface AppLayoutProps {
@@ -35,11 +35,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
         const users = await getAllUsers();
         const currentUser = users.find(u => u.isCurrentUser);
         
-        if (!currentUser || !currentUser.username) {
-          // No username set, show modal
+        if (!currentUser || !currentUser.name) {
+          // No name set, show modal
           setShowNameModal(true);
         } else {
-          // Username is set, hide modal if it was showing
+          // Name is set, hide modal if it was showing
           setShowNameModal(false);
         }
       } catch (error) {
@@ -81,14 +81,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
       if (currentUser) {
         // Update existing user
         currentUser.name = name;
-        currentUser.username = username;
         await saveUser(currentUser);
       } else {
         // Create new user
+        const userId = await generateUserId();
         const newUser: User = {
-          id: 'current_user',
+          id: userId,
           name,
-          username,
           isCurrentUser: true,
         };
         await saveUser(newUser);

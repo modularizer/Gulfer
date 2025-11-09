@@ -11,7 +11,9 @@ import { createNewRound } from '../src/services/storage/roundStorage';
 import { getCurrentUserName, getUsernameForPlayerName } from '../src/services/storage/userStorage';
 import { getLastUsedCourse, getLatestAddedCourse } from '../src/services/storage/courseStorage';
 import { importRound } from '../src/services/roundExport';
+import { getImportMappingInfo, createManualMappings } from '../src/services/importMapping';
 import { Player } from '../src/types';
+import ImportMappingDialog from '../src/components/common/ImportMappingDialog';
 
 type RoundType = 'play-now' | 'past' | 'future' | null;
 
@@ -23,6 +25,14 @@ export default function NewRoundScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [importDialogVisible, setImportDialogVisible] = useState(false);
   const [importText, setImportText] = useState('');
+  const [mappingDialogVisible, setMappingDialogVisible] = useState(false);
+  const [importMappingInfo, setImportMappingInfo] = useState<{
+    foreignStorageId?: string;
+    foreignCourse: { foreignId: string; foreignName: string; localId: string | null; suggestedLocalId: string | null } | null;
+    foreignPlayers: Array<{ foreignId: string; foreignName: string; localId: string | null; suggestedLocalId: string | null }>;
+    localCourses: Array<{ id: string; name: string }>;
+    localPlayers: Array<{ id: string; name: string }>;
+  } | null>(null);
 
   useEffect(() => {
     // Initialize with current date/time
@@ -118,19 +128,64 @@ export default function NewRoundScreen() {
   };
 
   const handleImportRound = useCallback(async () => {
-    console.log('handleImportRound called, importText length:', importText.length);
     if (!importText.trim()) {
       Alert.alert('Error', 'Please paste the round export text');
       return;
     }
 
     try {
-      console.log('Calling importRound...');
-      const newRoundId = await importRound(importText);
-      console.log('Import successful, new round ID:', newRoundId);
+      // Parse the export to get mapping info
+      const mappingInfo = await getImportMappingInfo(importText);
+      
+      // If mapping is needed, show mapping dialog
+      if (mappingInfo.needsMapping) {
+        setImportMappingInfo({
+          foreignStorageId: mappingInfo.foreignStorageId,
+          foreignCourse: mappingInfo.courseMapping,
+          foreignPlayers: mappingInfo.playerMappings,
+          localCourses: mappingInfo.localCourses,
+          localPlayers: mappingInfo.localPlayers,
+        });
+        setImportDialogVisible(false);
+        setMappingDialogVisible(true);
+      } else {
+        // No mapping needed (all already mapped or no local entities exist), import directly
+        const newRoundId = await importRound(importText);
+        setImportText('');
+        setImportDialogVisible(false);
+        router.replace(`/${newRoundId}/overview`);
+      }
+    } catch (error) {
+      console.error('Error parsing import:', error);
+      Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to parse import');
+    }
+  }, [importText]);
+
+  const handleMappingConfirm = useCallback(async (mappings: {
+    courseMapping?: { foreignCourseId: string; localCourseId: string | null };
+    playerMappings: Array<{ foreignPlayerId: string; localPlayerId: string | null }>;
+  }) => {
+    try {
+      // Create manual mappings object - only include mappings where user selected an existing local entity
+      // If localCourseId/localPlayerId is null, it means "create new", so we don't include it in mappings
+      const manualMappings = createManualMappings({
+        courseMapping: mappings.courseMapping && mappings.courseMapping.localCourseId ? {
+          foreignCourseId: mappings.courseMapping.foreignCourseId,
+          localCourseId: mappings.courseMapping.localCourseId,
+        } : undefined,
+        playerMappings: mappings.playerMappings
+          .filter(m => m.localPlayerId !== null)
+          .map(m => ({
+            foreignPlayerId: m.foreignPlayerId,
+            localPlayerId: m.localPlayerId!,
+          })),
+      });
+
+      // Import with manual mappings (null means "create new", which importRound handles automatically)
+      const newRoundId = await importRound(importText, manualMappings);
       setImportText('');
-      setImportDialogVisible(false);
-      // Navigate immediately to the round overview
+      setMappingDialogVisible(false);
+      setImportMappingInfo(null);
       router.replace(`/${newRoundId}/overview`);
     } catch (error) {
       console.error('Error importing round:', error);
@@ -217,7 +272,7 @@ export default function NewRoundScreen() {
             <Dialog.Title>Import Round</Dialog.Title>
             <Dialog.Content>
               <Text style={[styles.importHelpText, { color: theme.colors.onSurfaceVariant }]}>
-                Paste the round export text below. The round, course, and players will be added to your app.
+                Paste the round export text below. You'll be able to map imported entities to your local entities.
               </Text>
               <TextInput
                 mode="outlined"
@@ -242,11 +297,28 @@ export default function NewRoundScreen() {
                 onPress={handleImportRound}
                 disabled={!importText.trim()}
               >
-                Import
+                Next
               </Button>
             </Dialog.Actions>
           </Dialog>
         </Portal>
+
+        {/* Mapping Dialog */}
+        {importMappingInfo && (
+          <ImportMappingDialog
+            visible={mappingDialogVisible}
+            foreignCourse={importMappingInfo.foreignCourse}
+            foreignPlayers={importMappingInfo.foreignPlayers}
+            localCourses={importMappingInfo.localCourses}
+            localPlayers={importMappingInfo.localPlayers}
+            onDismiss={() => {
+              setMappingDialogVisible(false);
+              setImportMappingInfo(null);
+              setImportText('');
+            }}
+            onConfirm={handleMappingConfirm}
+          />
+        )}
       </View>
     );
   }

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { IconButton, Text, Menu, Dialog, Portal, Button, useTheme, Surface } from 'react-native-paper';
 import { Player } from '../../types';
-import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, getUsernameForPlayerName, User } from '../../services/storage/userStorage';
+import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, getUserIdForPlayerName, User } from '../../services/storage/userStorage';
 import { getShadowStyle } from '../../utils';
 import NameUsernameDialog from './NameUsernameDialog';
 
@@ -38,38 +38,29 @@ export default function PlayerSelector({
     loadUsers();
   }, []);
 
-  const handleEditPlayer = useCallback(async (playerId: string) => {
+  const handleEditPlayer = useCallback(async (playerId: number) => {
     const player = players.find((p) => p.id === playerId);
     if (player) {
-      // Find the user ID to exclude from username uniqueness check
-      let excludeUserId: string | undefined;
-      if (player.username) {
-        const allUsers = await getAllUsers();
-        const matchingUser = allUsers.find(u => u.username === player.username || u.name === player.name);
-        excludeUserId = matchingUser?.id;
-      }
-      
       setPlayerDialog({ 
         visible: true, 
-        playerId, 
+        playerId: playerId.toString(), 
         isEditing: true,
         initialName: player.name,
-        initialUsername: player.username || '',
-        excludeUserId,
+        initialUsername: '', // Deprecated, no longer used
+        excludeUserId: undefined,
       });
     }
   }, [players]);
 
   const handleSavePlayer = useCallback(async (name: string, username: string) => {
+    // username parameter is ignored, but kept for backward compatibility
     if (playerDialog.isEditing && playerDialog.playerId) {
-      const player = players.find((p) => p.id === playerDialog.playerId);
+      const player = players.find((p) => p.id === parseInt(playerDialog.playerId, 10));
       
-      // Check if this is the "You" player (first player, ID is 'player_1', or name matches current user)
+      // Check if this is the "You" player (name matches current user)
       const currentUserName = await getCurrentUserName();
       const isCurrentUser = 
-        playerDialog.playerId === 'player_1' || 
         player?.name === 'You' || 
-        (players.length > 0 && players[0].id === playerDialog.playerId) ||
         (currentUserName && player?.name === currentUserName);
       
       if (isCurrentUser) {
@@ -77,27 +68,26 @@ export default function PlayerSelector({
         await saveCurrentUserName(name);
       }
       
-      // Update player with new name and username
+      // Update player with new name
       const updatedPlayers = players.map((p) => {
-        if (p.id === playerDialog.playerId) {
-          return { ...p, name, username };
+        if (p.id === parseInt(playerDialog.playerId, 10)) {
+          return { ...p, name };
         }
         return p;
       });
       onPlayersChange(updatedPlayers);
     } else {
       // Save to known users first
+      const playerId = await getUserIdForPlayerName(name);
       const newUser: User = {
-        id: generateUserId(),
+        id: playerId,
         name,
-        username,
       };
       await saveUser(newUser);
       
       const newPlayer: Player = {
-        id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: playerId,
         name,
-        username,
       };
       onPlayersChange([...players, newPlayer]);
       
@@ -108,7 +98,7 @@ export default function PlayerSelector({
     setPlayerDialog({ visible: false, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined });
   }, [playerDialog.isEditing, playerDialog.playerId, players, onPlayersChange]);
 
-  const handleRemovePlayer = useCallback((playerId: string) => {
+  const handleRemovePlayer = useCallback((playerId: number) => {
     if (players.length === 1) {
       setWarningDialog({ visible: true, message: 'You must have at least one player' });
       return;
@@ -153,11 +143,9 @@ export default function PlayerSelector({
           <Menu.Item
             key={user.id}
             onPress={async () => {
-              const username = user.username || await getUsernameForPlayerName(user.name);
               const newPlayer: Player = {
-                id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                id: user.id,
                 name: user.name,
-                username,
               };
               onPlayersChange([...players, newPlayer]);
               setAddPlayerMenuVisible(false);

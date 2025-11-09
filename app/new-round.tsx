@@ -8,7 +8,7 @@ if (Platform.OS !== 'web') {
   DateTimePicker = require('@react-native-community/datetimepicker').default;
 }
 import { createNewRound } from '../src/services/storage/roundStorage';
-import { getCurrentUserName, getUsernameForPlayerName } from '../src/services/storage/userStorage';
+import { getCurrentUserName, getUserIdForPlayerName } from '../src/services/storage/userStorage';
 import { getLastUsedCourse, getLatestAddedCourse } from '../src/services/storage/courseStorage';
 import { Player } from '../src/types';
 
@@ -68,11 +68,10 @@ export default function NewRoundScreen() {
       // Try to get the current user's name, default to "You" if not set
       const currentUserName = await getCurrentUserName();
       const playerName = currentUserName || 'You';
-      const username = await getUsernameForPlayerName(playerName);
+      const playerId = await getUserIdForPlayerName(playerName);
       const defaultPlayer: Player = { 
-        id: 'player_1', 
+        id: playerId, 
         name: playerName,
-        username,
       };
       
       // Get default course (last used or latest added)

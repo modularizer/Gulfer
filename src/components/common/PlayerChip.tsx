@@ -19,15 +19,13 @@ export default function PlayerChip({
   isCurrentPlayer = false,
   onPress,
 }: PlayerChipProps) {
-  const handlePress = () => {
+  const handlePress = async () => {
     if (onPress) {
       onPress();
     } else {
-      if (!player.username) {
-        console.error('Player missing username:', player);
-        return;
-      }
-      router.push(`/player/${encodeURIComponent(player.username)}`);
+      const { idToCodename } = await import('../../utils/idUtils');
+      const playerCodename = idToCodename(player.id);
+      router.push(`/player/${playerCodename}`);
     }
   };
 

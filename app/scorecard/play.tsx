@@ -5,7 +5,7 @@ import { Scorecard } from '../../src/components/Scorecard';
 import { Player, Score, Round } from '../../src/types';
 import { saveRound, generateRoundId } from '../../src/services/storage/roundStorage';
 import { getAllCourses } from '../../src/services/storage/courseStorage';
-import { getUsernameForPlayerName } from '../../src/services/storage/userStorage';
+import { getUserIdForPlayerName } from '../../src/services/storage/userStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 
 export default function ScorecardPlayScreen() {
@@ -25,16 +25,16 @@ export default function ScorecardPlayScreen() {
         ? JSON.parse(decodeURIComponent(params.players))
         : [{ id: 'player_1', name: 'You' }];
       
-      // Ensure all players have usernames
-      const playersWithUsernames = await Promise.all(parsedPlayers.map(async (p) => {
-        if (!p.username) {
-          const username = await getUsernameForPlayerName(p.name);
-          return { ...p, username };
+      // Ensure all players have IDs
+      const playersWithIds = await Promise.all(parsedPlayers.map(async (p) => {
+        if (!p.id || p.id === 0) {
+          const playerId = await getUserIdForPlayerName(p.name);
+          return { ...p, id: playerId };
         }
         return p;
       }));
       
-      setPlayers(playersWithUsernames);
+      setPlayers(playersWithIds);
     };
     
     loadInitialPlayers();
@@ -77,7 +77,7 @@ export default function ScorecardPlayScreen() {
     loadCourseInfo();
   }, [courseName]);
 
-  const handleScoreChange = useCallback((playerId: string, holeNumber: number, throws: number) => {
+  const handleScoreChange = useCallback((playerId: number, holeNumber: number, throws: number) => {
     setScores((prev) => {
       const existing = prev.findIndex(
         (s) => s.playerId === playerId && s.holeNumber === holeNumber
@@ -97,11 +97,10 @@ export default function ScorecardPlayScreen() {
 
   const handleConfirmAddPlayer = useCallback(async () => {
     if (newPlayerName.trim()) {
-      const username = await getUsernameForPlayerName(newPlayerName.trim());
+      const playerId = await getUserIdForPlayerName(newPlayerName.trim());
       const newPlayer: Player = {
-        id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: playerId,
         name: newPlayerName.trim(),
-        username,
       };
       setPlayers((prev) => [...prev, newPlayer]);
       setNewPlayerName('');
@@ -109,7 +108,7 @@ export default function ScorecardPlayScreen() {
     setPlayerNameDialog({ visible: false, playerId: '' });
   }, [newPlayerName]);
 
-  const handleRemovePlayer = useCallback((playerId: string) => {
+  const handleRemovePlayer = useCallback((playerId: number) => {
     if (players.length === 1) {
       Alert.alert('Cannot Remove', 'You must have at least one player');
       return;

@@ -12,8 +12,8 @@ const getHoleCount = (course: Course): number => {
 };
 
 interface CourseSelectorProps {
-  selectedCourseId: string | null;
-  onCourseChange: (courseId: string | null) => void;
+  selectedCourseId: number | null;
+  onCourseChange: (courseId: number | null) => void;
   onHolesChange?: (holes: number) => void; // Optional callback when holes change
   initialCourseName?: string; // Optional: course name to match on initial load
 }
@@ -86,12 +86,12 @@ export default function CourseSelector({
     return `${course.name} (${getHoleCount(course)} holes)`;
   }, []);
 
-  const handleSelectCourse = useCallback((courseId: string | null) => {
+  const handleSelectCourse = useCallback((courseId: number | null) => {
     onCourseChange(courseId);
     setCourseMenuVisible(false);
     
     // Notify about holes change if callback provided
-    if (courseId && onHolesChange) {
+    if (courseId !== null && onHolesChange) {
       const selectedCourse = courses.find(c => c.id === courseId);
       if (selectedCourse) {
         onHolesChange(getHoleCount(selectedCourse));

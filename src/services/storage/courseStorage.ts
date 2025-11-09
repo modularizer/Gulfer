@@ -29,16 +29,23 @@ export async function getAllCourses(): Promise<Course[]> {
 
 /**
  * Save a course to local storage
+ * Enforces local uniqueness of course names
  */
 export async function saveCourse(course: Course): Promise<void> {
   try {
     const courses = await getAllCourses();
-    // Handle both numeric and string IDs for comparison
-    const courseNumId = typeof course.id === 'string' ? parseInt(course.id, 10) : course.id;
-    const existingIndex = courses.findIndex((c) => {
-      const cNumId = typeof c.id === 'string' ? parseInt(c.id, 10) : c.id;
-      return cNumId === courseNumId || c.id === course.id;
-    });
+    const existingIndex = courses.findIndex((c) => c.id === course.id);
+    
+    // Check for name uniqueness (case-insensitive, excluding current course)
+    const trimmedName = course.name.trim();
+    const nameConflict = courses.find(c => 
+      c.id !== course.id && 
+      c.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    
+    if (nameConflict) {
+      throw new Error(`A course with the name "${trimmedName}" already exists`);
+    }
     
     if (existingIndex >= 0) {
       courses[existingIndex] = course;
@@ -54,17 +61,12 @@ export async function saveCourse(course: Course): Promise<void> {
 }
 
 /**
- * Get a course by ID (supports both numeric IDs and string IDs for backward compatibility)
+ * Get a course by ID
  */
-export async function getCourseById(courseId: string | number): Promise<Course | null> {
+export async function getCourseById(courseId: string): Promise<Course | null> {
   try {
     const courses = await getAllCourses();
-    // Convert to number for comparison if needed
-    const numId = typeof courseId === 'string' ? parseInt(courseId, 10) : courseId;
-    return courses.find((c) => {
-      const cNumId = typeof c.id === 'string' ? parseInt(c.id, 10) : c.id;
-      return cNumId === numId || c.id === courseId;
-    }) || null;
+    return courses.find((c) => c.id === courseId) || null;
   } catch (error) {
     console.error('Error loading course:', error);
     return null;
@@ -85,16 +87,12 @@ export async function getCourseByName(courseName: string): Promise<Course | null
 }
 
 /**
- * Delete a course by ID (supports both numeric IDs and string IDs for backward compatibility)
+ * Delete a course by ID
  */
-export async function deleteCourse(courseId: string | number): Promise<void> {
+export async function deleteCourse(courseId: string): Promise<void> {
   try {
     const courses = await getAllCourses();
-    const numId = typeof courseId === 'string' ? parseInt(courseId, 10) : courseId;
-    const filtered = courses.filter((c) => {
-      const cNumId = typeof c.id === 'string' ? parseInt(c.id, 10) : c.id;
-      return cNumId !== numId && c.id !== courseId;
-    });
+    const filtered = courses.filter((c) => c.id !== courseId);
     await setItem(COURSES_STORAGE_KEY, JSON.stringify(filtered));
   } catch (error) {
     console.error('Error deleting course:', error);
@@ -103,11 +101,31 @@ export async function deleteCourse(courseId: string | number): Promise<void> {
 }
 
 /**
- * Generate a new unique course ID (numeric, ending in 0)
+ * Generate a new unique course ID (6 hex characters)
+ * Ensures local uniqueness by checking existing courses
  */
-export async function generateCourseId(): Promise<number> {
-  const { getNextCourseId } = await import('../../utils/idUtils');
-  return getNextCourseId();
+export async function generateCourseId(): Promise<string> {
+  const { generateUniqueUUID } = await import('../../utils/uuid');
+  const courses = await getAllCourses();
+  const existingIds = new Set(courses.map(c => c.id));
+  return generateUniqueUUID(existingIds);
+}
+
+/**
+ * Check if a course name is already taken
+ */
+export async function isCourseNameAvailable(name: string, excludeCourseId?: string): Promise<boolean> {
+  try {
+    const courses = await getAllCourses();
+    const trimmedName = name.trim();
+    return !courses.some(c => 
+      c.name.trim().toLowerCase() === trimmedName.toLowerCase() && 
+      c.id !== excludeCourseId
+    );
+  } catch (error) {
+    console.error('Error checking course name availability:', error);
+    return false;
+  }
 }
 
 /**
@@ -144,7 +162,7 @@ export async function getLastUsedCourse(): Promise<Course | null> {
 }
 
 /**
- * Get the latest added course (by highest numeric ID)
+ * Get the latest added course (by most recent date if available, otherwise first in list)
  */
 export async function getLatestAddedCourse(): Promise<Course | null> {
   try {
@@ -153,15 +171,8 @@ export async function getLatestAddedCourse(): Promise<Course | null> {
       return null;
     }
     
-    // Extract numeric IDs and sort
-    const coursesWithId = courses.map(course => {
-      const numId = typeof course.id === 'string' ? parseInt(course.id, 10) : course.id;
-      return { course, id: isNaN(numId) ? -1 : numId };
-    });
-    
-    // Sort by ID descending and return the most recent
-    coursesWithId.sort((a, b) => b.id - a.id);
-    return coursesWithId[0]?.course || null;
+    // Return the last course in the array (most recently added)
+    return courses[courses.length - 1] || null;
   } catch (error) {
     console.error('Error getting latest added course:', error);
     return null;

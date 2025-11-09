@@ -93,14 +93,7 @@ const COLORS = [
   'bronze', 'copper', 'platinum', 'rose', 'sapphire', 'ruby', 'jade', 'amber', 'cobalt', 'burgundy',
 ];
 
-// Maximum unique combinations with 2-part names (adjective-noun)
-const MAX_TWO_PART_COMBINATIONS = ADJECTIVES.length * NOUNS.length;
 
-// Maximum unique combinations with 3-part names (adjective-color-noun)
-const MAX_THREE_PART_COMBINATIONS = ADJECTIVES.length * COLORS.length * NOUNS.length;
-
-// Total combinations before we need to add numeric suffixes
-const MAX_NAMED_COMBINATIONS = MAX_TWO_PART_COMBINATIONS + MAX_THREE_PART_COMBINATIONS;
 
 const NOUNS = [
   // Big cats
@@ -133,7 +126,7 @@ const NOUNS = [
   // Lagomorphs
   'rabbit', 'hare', 'pika', 'cottontail', 'jackrabbit',
   // Marsupials
-  'kangaroo', 'wallaby', 'koala', 'wombat',  'bandicoot', 'possum', 'opossum', 'sugar-glider',
+  'kangaroo', 'wallaby', 'koala', 'wombat',  'bandicoot', 'possum', 'opossum',
   // Reptiles
   'snake', 'python', 'boa', 'cobra', 'viper', 'rattlesnake', 'mamba', 'anaconda',
   'lizard', 'gecko', 'iguana', 'chameleon', 'monitor', 'skink','tuatara',
@@ -152,6 +145,16 @@ const NOUNS = [
   'bat',
   'sloth', 'armadillo', 'anteater', 'pangolin', 'aardvark', 'echidna', 'platypus', 'numbat', 'tamandua',
 ];
+
+
+// Maximum unique combinations with 2-part names (adjective-noun)
+const MAX_TWO_PART_COMBINATIONS = ADJECTIVES.length * NOUNS.length;
+
+// Maximum unique combinations with 3-part names (adjective-color-noun)
+const MAX_THREE_PART_COMBINATIONS = ADJECTIVES.length * COLORS.length * NOUNS.length;
+
+// Total combinations before we need to add numeric suffixes
+const MAX_NAMED_COMBINATIONS = MAX_TWO_PART_COMBINATIONS + MAX_THREE_PART_COMBINATIONS;
 
 /**
  * Generate a seeded adjective+noun name from a number
@@ -389,3 +392,6 @@ export function numberToNameOptimized(number: number, maxNumber: number = 100000
   return mapper.numberToName(number) ?? numberToName(number);
 }
 
+console.log(MAX_NAMED_COMBINATIONS)
+console.log(MAX_TWO_PART_COMBINATIONS)
+console.log(MAX_THREE_PART_COMBINATIONS)

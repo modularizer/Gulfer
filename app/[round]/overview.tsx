@@ -8,7 +8,7 @@ import CourseSelector from '../../src/components/common/CourseSelector';
 import PlayerChip from '../../src/components/common/PlayerChip';
 import NameUsernameDialog from '../../src/components/common/NameUsernameDialog';
 import { getRoundById, saveRound } from '../../src/services/storage/roundStorage';
-import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUsernameForPlayerName, User } from '../../src/services/storage/userStorage';
+import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '../../src/services/storage/userStorage';
 import { getAllCourses } from '../../src/services/storage/courseStorage';
 import { exportRound } from '../../src/services/roundExport';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -18,20 +18,20 @@ import { Platform, Share, Alert, Clipboard } from 'react-native';
 const { width, height } = Dimensions.get('window');
 
 export default function RoundOverviewScreen() {
-  const { round: codenameParam } = useLocalSearchParams<{ round: string }>();
+  const { round: roundIdParam } = useLocalSearchParams<{ round: string }>();
   const { registerCenterButtonHandler } = useFooterCenterButton();
   const [round, setRound] = useState<Round | null>(null);
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [numberOfHoles, setNumberOfHoles] = useState('9');
   const [courses, setCourses] = useState<any[]>([]);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
   const [addPlayerDialogVisible, setAddPlayerDialogVisible] = useState(false);
-  const [editPlayerDialog, setEditPlayerDialog] = useState({ visible: false, playerId: '', initialName: '', initialUsername: '' });
+  const [editPlayerDialog, setEditPlayerDialog] = useState<{ visible: boolean; playerId: number | null; initialName: string }>({ visible: false, playerId: null, initialName: '' });
   const [copySuccess, setCopySuccess] = useState(false);
 
 
@@ -44,7 +44,7 @@ export default function RoundOverviewScreen() {
           // Update the "You" player if it exists
           setPlayers((prev) =>
             prev.map((p) =>
-              p.id === 'player_1' || p.name === 'You'
+              p.name === 'You'
                 ? { ...p, name: currentUserName }
                 : p
             )
@@ -61,23 +61,15 @@ export default function RoundOverviewScreen() {
   // Load round data
   useEffect(() => {
     const loadRound = async () => {
-      if (!codenameParam) {
+      if (!roundIdParam) {
         setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
         setTimeout(() => router.push('/'), 1000);
         return;
       }
 
       try {
-        // Convert codename from URL to numeric ID
-        const { codenameToId } = await import('../../src/utils/idUtils');
-        const roundId = codenameToId(codenameParam);
-        if (roundId === null) {
-          setErrorDialog({ visible: true, title: 'Error', message: 'Invalid round ID' });
-          setTimeout(() => router.push('/'), 1000);
-          return;
-        }
-
-        const loadedRound = await getRoundById(roundId);
+        // Use UUID directly from URL
+        const loadedRound = await getRoundById(roundIdParam);
         if (!loadedRound) {
           setErrorDialog({ visible: true, title: 'Error', message: 'Round not found' });
           setTimeout(() => router.push('/'), 1000);
@@ -98,7 +90,7 @@ export default function RoundOverviewScreen() {
         if (loadedRound.courseName) {
           const matchingCourse = loadedCourses.find(c => c.name.trim() === loadedRound.courseName!.trim());
           if (matchingCourse) {
-            setSelectedCourseId(matchingCourse.id.toString());
+            setSelectedCourseId(matchingCourse.id);
             const holeCount = Array.isArray(matchingCourse.holes) 
               ? matchingCourse.holes.length 
               : (matchingCourse.holes as unknown as number || 0);
@@ -122,10 +114,10 @@ export default function RoundOverviewScreen() {
       }
     };
 
-    if (codenameParam) {
+    if (roundIdParam) {
       loadRound();
     }
-  }, [codenameParam]);
+  }, [roundIdParam]);
 
   // Save round data
   const saveRoundData = useCallback(async () => {
@@ -136,7 +128,7 @@ export default function RoundOverviewScreen() {
     let courseName: string | undefined = round.courseName; // Preserve existing courseName
     if (selectedCourseId) {
       const courses = await getAllCourses();
-      const selectedCourse = courses.find((c) => c.id.toString() === selectedCourseId);
+      const selectedCourse = courses.find((c) => c.id === selectedCourseId);
       courseName = selectedCourse ? selectedCourse.name.trim() : round.courseName;
     }
 
@@ -172,17 +164,16 @@ export default function RoundOverviewScreen() {
   const handleSaveNewPlayer = useCallback(async (name: string, username: string) => {
     try {
       // Save to known users first
+      const playerId = await getUserIdForPlayerName(name);
       const newUser: User = {
-        id: generateUserId(),
+        id: playerId,
         name,
-        username,
       };
       await saveUser(newUser);
       
       const newPlayer: Player = {
-        id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: playerId,
         name,
-        username,
       };
       setPlayers([...players, newPlayer]);
       setAddPlayerDialogVisible(false);
@@ -194,33 +185,33 @@ export default function RoundOverviewScreen() {
 
   const handleSaveEditPlayer = useCallback(async (name: string, username: string) => {
     try {
+      if (editPlayerDialog.playerId === null) return;
       const updatedPlayers = players.map((p) => {
         if (p.id === editPlayerDialog.playerId) {
-          return { ...p, name, username };
+          return { ...p, name };
         }
         return p;
       });
       setPlayers(updatedPlayers);
-      setEditPlayerDialog({ visible: false, playerId: '', initialName: '', initialUsername: '' });
+      setEditPlayerDialog({ visible: false, playerId: null, initialName: '' });
     } catch (error) {
       console.error('Error updating player:', error);
       setErrorDialog({ visible: true, title: 'Error', message: 'Failed to update player' });
     }
   }, [players, editPlayerDialog.playerId]);
 
-  const handleEditPlayer = useCallback((playerId: string) => {
+  const handleEditPlayer = useCallback((playerId: number) => {
     const player = players.find((p) => p.id === playerId);
     if (player) {
       setEditPlayerDialog({
         visible: true,
-        playerId,
+        playerId: playerId,
         initialName: player.name,
-        initialUsername: player.username || '',
       });
     }
   }, [players]);
 
-  const handleRemovePlayer = useCallback((playerId: string) => {
+  const handleRemovePlayer = useCallback((playerId: number) => {
     if (players.length === 1) {
       setWarningDialog({ visible: true, message: 'You must have at least one player' });
       return;
@@ -263,11 +254,9 @@ export default function RoundOverviewScreen() {
     }
   }, [round]);
 
-  const handleStartRound = useCallback(async () => {
+  const handleStartRound = useCallback(() => {
     if (!round) return;
-    const { idToCodename } = await import('../../src/utils/idUtils');
-    const roundCodename = idToCodename(round.id);
-    router.push(`/${roundCodename}/play`);
+    router.push(`/${round.id}/play`);
   }, [round]);
 
   // Register the start round handler with the footer
@@ -330,7 +319,7 @@ export default function RoundOverviewScreen() {
             images={photos}
             isEditable={true}
             onImagesChange={handlePhotosChange}
-            storageKey={round?.id?.toString() || codenameParam}
+            storageKey={round?.id || roundIdParam || ''}
           />
         </View>
 
@@ -412,11 +401,9 @@ export default function RoundOverviewScreen() {
                           player={player}
                           score={total}
                           isWinner={isWinner}
-                          onPress={async () => {
+                          onPress={() => {
                             if (!round) return;
-                            const { idToCodename } = await import('../../src/utils/idUtils');
-                            const roundCodename = idToCodename(round.id);
-                            router.push(`/${roundCodename}/play`);
+                            router.push(`/${round.id}/play`);
                           }}
                         />
                         {!hasScores && players.length > 1 && (
@@ -466,9 +453,9 @@ export default function RoundOverviewScreen() {
           title="Edit Player"
           nameLabel="Player Name"
           initialName={editPlayerDialog.initialName}
-          initialUsername={editPlayerDialog.initialUsername}
-          excludeUserId={undefined} // Could look up user ID if needed
-          onDismiss={() => setEditPlayerDialog({ visible: false, playerId: '', initialName: '', initialUsername: '' })}
+          initialUsername={''} // Deprecated, no longer used
+          excludeUserId={undefined} // Deprecated, no longer used
+          onDismiss={() => setEditPlayerDialog({ visible: false, playerId: null, initialName: '' })}
           onSave={handleSaveEditPlayer}
         />
 

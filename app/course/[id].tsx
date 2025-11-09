@@ -1,48 +1,46 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { Button, Dialog, Portal, IconButton, useTheme, Text, Card, Chip } from 'react-native-paper';
-import { TouchableOpacity } from 'react-native';
+import { Button, Dialog, Portal, IconButton, useTheme, Text, Card, Chip, Menu } from 'react-native-paper';
+import { TouchableOpacity, Platform, Share, Alert, Clipboard } from 'react-native';
 import { Course, Hole, Round, Player, Score } from '../../src/types';
 import PhotoGallery from '../../src/components/common/PhotoGallery';
 import PlayerChip from '../../src/components/common/PlayerChip';
 import { getCourseById, saveCourse } from '../../src/services/storage/courseStorage';
 import { getAllRounds } from '../../src/services/storage/roundStorage';
-import { ensurePlayerHasUsername } from '../../src/services/storage/userStorage';
+import { exportCourse } from '../../src/services/courseExport';
+// Username functionality removed - using IDs instead
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFooterCenterButton } from '../../src/components/common/Footer';
 
 const { width, height } = Dimensions.get('window');
 
 export default function CourseDetailScreen() {
-  const { id: codenameParam } = useLocalSearchParams<{ id: string }>();
+  const { id: encodedNameParam } = useLocalSearchParams<{ id: string }>();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [bestScores, setBestScores] = useState<Map<string, { player: Player; score: number }>>(new Map());
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
+  const [menuVisible, setMenuVisible] = useState(false);
 
   // Load course data
   useEffect(() => {
     const loadCourse = async () => {
-      if (!codenameParam) {
-        setErrorDialog({ visible: true, title: 'Error', message: 'Course ID is missing' });
+      if (!encodedNameParam) {
+        setErrorDialog({ visible: true, title: 'Error', message: 'Course name is missing' });
         setTimeout(() => router.push('/courses'), 1000);
         return;
       }
 
       try {
-        // Convert codename from URL to numeric ID
-        const { codenameToId } = await import('../../src/utils/idUtils');
-        const courseId = codenameToId(codenameParam);
-        if (courseId === null) {
-          setErrorDialog({ visible: true, title: 'Error', message: 'Invalid course ID' });
-          setTimeout(() => router.push('/courses'), 1000);
-          return;
-        }
-
-        const loadedCourse = await getCourseById(courseId);
+        // Decode course name from URL
+        const { decodeNameFromUrl } = await import('../../src/utils/urlEncoding');
+        const { getCourseByName } = await import('../../src/services/storage/courseStorage');
+        const courseName = decodeNameFromUrl(encodedNameParam);
+        
+        const loadedCourse = await getCourseByName(courseName);
         if (!loadedCourse) {
           setErrorDialog({ visible: true, title: 'Error', message: 'Course not found' });
           setTimeout(() => router.push('/courses'), 1000);
@@ -74,17 +72,11 @@ export default function CourseDetailScreen() {
               const playerScores = round.scores!.filter(s => s.playerId === player.id);
               const total = playerScores.reduce((sum, s) => sum + s.throws, 0);
               
-              // Ensure player has username
-              const playerWithUsername = await ensurePlayerHasUsername(player);
-              if (!playerWithUsername.username) {
-                console.error('Player missing username:', player);
-                return;
-              }
-              
-              const key = playerWithUsername.username;
+              // Use player ID as key
+              const key = player.id;
               const existing = bestScoresMap.get(key);
               if (!existing || total < existing.score) {
-                bestScoresMap.set(key, { player: { ...player, username: playerWithUsername.username }, score: total });
+                bestScoresMap.set(key, { player, score: total });
               }
             }));
           }
@@ -99,10 +91,10 @@ export default function CourseDetailScreen() {
       }
     };
 
-    if (codenameParam) {
+    if (encodedNameParam) {
       loadCourse();
     }
-  }, [codenameParam]);
+  }, [encodedNameParam]);
 
   // Save course data
   const saveCourseData = useCallback(async () => {
@@ -124,15 +116,17 @@ export default function CourseDetailScreen() {
   // Set up footer center button to navigate to holes table
   const { registerCenterButtonHandler } = useFooterCenterButton();
   useEffect(() => {
-    if (codenameParam) {
+    if (encodedNameParam && course) {
+      const { encodeNameForUrl } = require('../../src/utils/urlEncoding');
       registerCenterButtonHandler(() => {
-        router.push(`/course/${codenameParam}/holes`);
+        const encodedName = encodeNameForUrl(course.name);
+        router.push(`/course/${encodedName}/holes`);
       });
     }
     return () => {
       registerCenterButtonHandler(null);
     };
-  }, [codenameParam, registerCenterButtonHandler]);
+  }, [encodedNameParam, course, registerCenterButtonHandler]);
 
   const theme = useTheme();
 
@@ -153,7 +147,7 @@ export default function CourseDetailScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Back Button */}
+      {/* Header with Back and Menu */}
       <View style={styles.header}>
         <IconButton
           icon="arrow-left"
@@ -162,6 +156,47 @@ export default function CourseDetailScreen() {
           onPress={() => router.push('/courses')}
           style={styles.backButton}
         />
+        <View style={styles.headerSpacer} />
+        <Menu
+          visible={menuVisible}
+          onDismiss={() => setMenuVisible(false)}
+          anchor={
+            <IconButton
+              icon="dots-vertical"
+              size={24}
+              iconColor={theme.colors.onSurface}
+              onPress={() => setMenuVisible(true)}
+            />
+          }
+        >
+          <Menu.Item
+            onPress={async () => {
+              setMenuVisible(false);
+              if (!course) return;
+              
+              try {
+                const exportText = await exportCourse(course.id);
+                
+                if (Platform.OS === 'web') {
+                  // Web: copy to clipboard
+                  await navigator.clipboard.writeText(exportText);
+                  Alert.alert('Success', 'Course exported to clipboard');
+                } else {
+                  // Mobile: use Share API
+                  await Share.share({
+                    message: exportText,
+                    title: `Export: ${course.name}`,
+                  });
+                }
+              } catch (error) {
+                console.error('Error exporting course:', error);
+                Alert.alert('Error', 'Failed to export course');
+              }
+            }}
+            title="Export Course"
+            leadingIcon="export"
+          />
+        </Menu>
       </View>
       
       <ScrollView 
@@ -205,11 +240,6 @@ export default function CourseDetailScreen() {
               {Array.from(bestScores.values())
                 .sort((a, b) => a.score - b.score)
                 .map(({ player, score }) => {
-                  if (!player.username) {
-                    console.error('Player missing username:', player);
-                    return null;
-                  }
-                  const playerUsername = player.username; // TypeScript guard
                   // Find winner (lowest score)
                   const allScores = Array.from(bestScores.values());
                   const winnerScore = Math.min(...allScores.map(ps => ps.score));
@@ -217,11 +247,10 @@ export default function CourseDetailScreen() {
                   
                   return (
                     <PlayerChip
-                      key={playerUsername}
+                      key={player.id}
                       player={player}
                       score={score}
                       isWinner={isWinner}
-                      onPress={() => router.push(`/player/${encodeURIComponent(playerUsername)}`)}
                     />
                   );
                 })
@@ -275,10 +304,8 @@ export default function CourseDetailScreen() {
                   return (
                     <TouchableOpacity
                       key={round.id}
-                      onPress={async () => {
-                        const { idToCodename } = await import('../../src/utils/idUtils');
-                        const roundCodename = idToCodename(round.id);
-                        router.push(`/${roundCodename}/overview`);
+                      onPress={() => {
+                        router.push(`/${round.id}/overview`);
                       }}
                     >
                       <Card style={[styles.roundCard, { backgroundColor: theme.colors.surface }]}>
@@ -304,10 +331,8 @@ export default function CourseDetailScreen() {
                                       isWinner && styles.winnerChipText,
                                     ]}
                                     icon={isWinner ? 'crown' : undefined}
-                                    onPress={async () => {
-                                      const { idToCodename } = await import('../../src/utils/idUtils');
-                                      const roundCodename = idToCodename(round.id);
-                                      router.push(`/${roundCodename}/play`);
+                                    onPress={() => {
+                                      router.push(`/${round.id}/play`);
                                     }}
                                   >
                                     {player.name}: {total}
@@ -358,9 +383,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingTop: 8,
     paddingLeft: 8,
     zIndex: 10,
+  },
+  headerSpacer: {
+    flex: 1,
   },
   backButton: {
     margin: 0,

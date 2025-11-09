@@ -1,17 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Dialog, Portal, TextInput, Button, Text, useTheme } from 'react-native-paper';
-import { isUsernameAvailable } from '../../services/storage/userStorage';
-
 interface NameUsernameDialogProps {
   visible: boolean;
   title: string;
   nameLabel?: string;
   initialName?: string;
-  initialUsername?: string;
-  excludeUserId?: string;
+  initialUsername?: string; // Deprecated, kept for backward compatibility
+  excludeUserId?: string; // Deprecated, kept for backward compatibility
   onDismiss: (() => void) | null;
-  onSave: (name: string, username: string) => Promise<void>;
+  onSave: (name: string, username: string) => Promise<void>; // username parameter is ignored
 }
 
 export default function NameUsernameDialog({
@@ -26,82 +24,26 @@ export default function NameUsernameDialog({
 }: NameUsernameDialogProps) {
   const theme = useTheme();
   const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
-  const [usernameError, setUsernameError] = useState('');
-  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setName(initialName);
-      const defaultUsername = initialUsername || initialName.trim().toLowerCase().replace(/\s+/g, '_');
-      setUsername(defaultUsername);
-      setUsernameError('');
     }
-  }, [visible, initialName, initialUsername]);
+  }, [visible, initialName]);
 
-  // Generate default username when name changes
   const handleNameChange = (text: string) => {
     setName(text);
-    // Only auto-update username if user hasn't manually edited it
-    if (!username || username === name.trim().toLowerCase().replace(/\s+/g, '_')) {
-      const defaultUsername = text.trim().toLowerCase().replace(/\s+/g, '_');
-      setUsername(defaultUsername);
-      setUsernameError('');
-    }
   };
-
-  // Check username availability
-  const handleUsernameChange = useCallback(async (text: string) => {
-    const normalized = text.trim().toLowerCase().replace(/\s+/g, '_');
-    setUsername(normalized);
-    setUsernameError('');
-
-    if (!normalized) {
-      return;
-    }
-
-    setIsCheckingUsername(true);
-    try {
-      const available = await isUsernameAvailable(normalized, excludeUserId);
-      
-      if (!available) {
-        setUsernameError('This username is already taken');
-      }
-    } catch (error) {
-      console.error('Error checking username:', error);
-    } finally {
-      setIsCheckingUsername(false);
-    }
-  }, [excludeUserId]);
 
   const handleSave = async () => {
     if (!name.trim()) {
       return;
     }
 
-    if (!username.trim()) {
-      setUsernameError('Username is required');
-      return;
-    }
-
-    if (usernameError) {
-      return;
-    }
-
     try {
-      const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '_');
-
-      // Final check for availability
-      const available = await isUsernameAvailable(normalizedUsername, excludeUserId);
-      if (!available) {
-        setUsernameError('This username is already taken');
-        return;
-      }
-
-      await onSave(name.trim(), normalizedUsername);
+      // username parameter is ignored, but we pass empty string for backward compatibility
+      await onSave(name.trim(), '');
       setName('');
-      setUsername('');
-      setUsernameError('');
     } catch (error) {
       console.error('Error saving:', error);
     }
@@ -126,32 +68,6 @@ export default function NameUsernameDialog({
             style={styles.nameInput}
             autoFocus
           />
-          <View style={styles.usernameContainer}>
-            <Text style={[styles.usernameLabel, { color: theme.colors.onSurface }]}>
-              Username
-            </Text>
-            <TextInput
-              mode="outlined"
-              value={username}
-              onChangeText={handleUsernameChange}
-              placeholder="username"
-              style={styles.usernameInput}
-              contentStyle={[styles.usernameInputText, { color: theme.colors.onSurfaceVariant }]}
-              left={
-                <TextInput.Icon
-                  icon={() => <Text style={[styles.atSymbol, { color: theme.colors.onSurfaceVariant }]}>@</Text>}
-                  style={styles.atSymbolContainer}
-                />
-              }
-              error={!!usernameError}
-              disabled={isCheckingUsername}
-            />
-            {usernameError ? (
-              <Text style={[styles.errorText, { color: theme.colors.error }]}>
-                {usernameError}
-              </Text>
-            ) : null}
-          </View>
         </Dialog.Content>
         <Dialog.Actions>
           {onDismiss && (
@@ -162,7 +78,7 @@ export default function NameUsernameDialog({
           <Button
             mode="contained"
             onPress={handleSave}
-            disabled={!name.trim() || !username.trim() || !!usernameError || isCheckingUsername}
+            disabled={!name.trim()}
           >
             {onDismiss ? 'Save' : 'Continue'}
           </Button>

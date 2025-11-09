@@ -28,7 +28,7 @@ export default function RoundHistoryScreen() {
   const [filteredRounds, setFilteredRounds] = useState<Round[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedRoundIds, setSelectedRoundIds] = useState<Set<string>>(new Set());
+  const [selectedRoundIds, setSelectedRoundIds] = useState<Set<number>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const loadRounds = useCallback(async () => {
@@ -70,16 +70,15 @@ export default function RoundHistoryScreen() {
 
 
   const handleRoundPress = useCallback(
-    async (roundId: string | number) => {
+    async (roundId: number) => {
       // If in selection mode, toggle selection instead of navigating
       if (selectedRoundIds.size > 0) {
         setSelectedRoundIds((prev) => {
           const newSet = new Set(prev);
-          const idStr = roundId.toString();
-          if (newSet.has(idStr)) {
-            newSet.delete(idStr);
+          if (newSet.has(roundId)) {
+            newSet.delete(roundId);
           } else {
-            newSet.add(idStr);
+            newSet.add(roundId);
           }
           return newSet;
         });
@@ -93,7 +92,7 @@ export default function RoundHistoryScreen() {
   );
 
   const handleRoundLongPress = useCallback(
-    (roundId: string) => {
+    (roundId: number) => {
       setSelectedRoundIds((prev) => {
         const newSet = new Set(prev);
         newSet.add(roundId);
@@ -170,12 +169,12 @@ export default function RoundHistoryScreen() {
         return playerScores.length === expectedHoles && expectedHoles > 0;
       });
 
-      const isSelected = selectedRoundIds.has(item.id.toString());
+      const isSelected = selectedRoundIds.has(item.id);
 
       return (
         <TouchableOpacity
           onPress={() => handleRoundPress(item.id)}
-          onLongPress={() => handleRoundLongPress(item.id.toString())}
+          onLongPress={() => handleRoundLongPress(item.id)}
         >
           <Card
             style={[

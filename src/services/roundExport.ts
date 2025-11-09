@@ -2,49 +2,63 @@
  * Service for exporting and importing rounds
  */
 
-import { Round, Course, Player, Hole } from '../types';
-import { getAllCourses, saveCourse, getCourseByName } from './storage/courseStorage';
-import { getAllUsers, saveUser, generateUserId, getUsernameForPlayerName, isUsernameAvailable } from './storage/userStorage';
-import { saveRound } from './storage/roundStorage';
+import { Round, Course, Player, Hole, Score } from '../types';
+import { getAllCourses, saveCourse, getCourseByName, getCourseById } from './storage/courseStorage';
+import { getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, getUserById } from './storage/userStorage';
+import { saveRound, generateRoundId } from './storage/roundStorage';
+import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
+import { getStorageId } from './storage/storageId';
 
 /**
  * Parse exported text into structured data
  * Shared by both validation and import functions
  */
 interface ParsedExportData {
+  storageId?: string; // Storage UUID from export
+  roundId?: string; // Round UUID from export
   title: string;
   dateTimestamp: number;
   courseName?: string;
+  courseId?: string; // Course UUID from export
   courseHoles?: number;
   courseHolesData: Hole[];
-  players: Array<{ name: string; username: string; total: number }>;
+  players: Array<{ name: string; id?: string; total: number }>; // Include UUID if present
   scores: Array<{ playerName: string; holeNumber: number; throws: number }>;
   notes?: string;
 }
 
-function parseExportText(exportText: string): ParsedExportData {
+export function parseExportText(exportText: string): ParsedExportData {
   const lines = exportText.split('\n');
   
   // Extract basic info
   let title = '';
   let dateTimestamp: number | null = null;
   let courseName: string | undefined;
+  let courseId: string | undefined;
   let courseHoles: number | undefined;
   let courseHolesData: Hole[] = [];
-  const players: Array<{ name: string; username: string; total: number }> = [];
+  const players: Array<{ name: string; id?: string; total: number }> = [];
   const scores: Array<{ playerName: string; holeNumber: number; throws: number }> = [];
   let notes: string | undefined;
 
+  let storageId: string | undefined;
+  let roundId: string | undefined;
   let i = 0;
   while (i < lines.length) {
     const line = lines[i].trim();
     
-    if (line.startsWith('Round:')) {
+    if (line.startsWith('Storage ID:')) {
+      storageId = line.substring(11).trim();
+    } else if (line.startsWith('Round ID:')) {
+      roundId = line.substring(9).trim();
+    } else if (line.startsWith('Round:')) {
       title = line.substring(6).trim();
     } else if (line.startsWith('Timestamp:')) {
       dateTimestamp = parseInt(line.substring(10).trim(), 10);
     } else if (line.startsWith('Course:')) {
       courseName = line.substring(7).trim();
+    } else if (line.startsWith('Course ID:')) {
+      courseId = line.substring(10).trim();
     } else if (line.startsWith('Course Holes:')) {
       const holesStr = line.substring(13).trim();
       courseHoles = holesStr !== '?' ? parseInt(holesStr, 10) : undefined;
@@ -67,13 +81,13 @@ function parseExportText(exportText: string): ParsedExportData {
       while (i < lines.length && lines[i].trim().startsWith('- Name:')) {
         const playerLine = lines[i].trim();
         const nameMatch = playerLine.match(/- Name: ([^|]+)/);
-        const usernameMatch = playerLine.match(/Username: ([^|]+)/);
+        const idMatch = playerLine.match(/\| ID: ([^|]+)/);
         const totalMatch = playerLine.match(/Total: (\d+)/);
         
         if (nameMatch) {
           players.push({
             name: nameMatch[1].trim(),
-            username: usernameMatch ? usernameMatch[1].trim() : nameMatch[1].trim().toLowerCase().replace(/\s+/g, '_'),
+            id: idMatch ? idMatch[1].trim() : undefined,
             total: totalMatch ? parseInt(totalMatch[1], 10) : 0,
           });
         }
@@ -116,9 +130,12 @@ function parseExportText(exportText: string): ParsedExportData {
   }
 
   return {
+    storageId,
+    roundId,
     title,
     dateTimestamp,
     courseName,
+    courseId,
     courseHoles,
     courseHolesData,
     players,
@@ -155,7 +172,7 @@ function validateExportText(exportText: string): void {
 /**
  * Export a round to a human-readable format
  */
-export async function exportRound(roundId: string | number): Promise<string> {
+export async function exportRound(roundId: string): Promise<string> {
   const { getRoundById } = await import('./storage/roundStorage');
   const round = await getRoundById(roundId);
   
@@ -187,13 +204,11 @@ export async function exportRound(roundId: string | number): Promise<string> {
     }
   }
 
-  // Get player data (usernames)
+  // Get player data
   const allUsers = await getAllUsers();
   const playersData = round.players.map(player => {
-    const user = allUsers.find(u => u.name === player.name || u.username === player.username);
     return {
       name: player.name,
-      username: player.username || user?.username || player.name.toLowerCase().replace(/\s+/g, '_'),
     };
   });
 
@@ -228,16 +243,33 @@ export async function exportRound(roundId: string | number): Promise<string> {
     ? playerScores.find(ps => ps.total === winnerScore)
     : null;
 
+  // Get storage ID for this export
+  const storageId = await getStorageId();
+  
   // Build human-readable text
   let text = '=== GULFER ROUND EXPORT ===\n';
-  text += `Version: 1.0\n\n`;
+  text += `Version: 2.0\n`;
+  text += `Storage ID: ${storageId}\n`;
+  text += `Round ID: ${round.id}\n\n`;
   text += `Round: ${round.title}\n`;
   text += `Date: ${dateStr} at ${timeStr}\n`;
   text += `Timestamp: ${round.date}\n`;
   
   // Always include course information if available
   if (courseName || course) {
-    text += `Course: ${courseName || 'Unknown'}\n`;
+    const finalCourseName = courseName || course?.name || 'Unknown';
+    text += `Course: ${finalCourseName}\n`;
+    
+    // Always try to include Course ID
+    if (course) {
+      text += `Course ID: ${course.id}\n`;
+    } else if (courseName) {
+      // Try to look up course by name to get its ID
+      const courseByName = await getCourseByName(courseName);
+      if (courseByName) {
+        text += `Course ID: ${courseByName.id}\n`;
+      }
+    }
     
     // Include course hole count if available
     if (course) {
@@ -253,10 +285,8 @@ export async function exportRound(roundId: string | number): Promise<string> {
   text += '\nPlayers:\n';
   playerScores.forEach(({ player, total }) => {
     const isWinner = winner && player.id === winner.player.id;
-    const username = playersData.find(p => p.name === player.name)?.username || '';
-    text += `  - Name: ${player.name}`;
-    if (username) text += ` | Username: ${username}`;
-    text += ` | Total: ${total}${isWinner ? ' (Winner)' : ''}\n`;
+    // Always include both name and ID for each player
+    text += `  - Name: ${player.name} | ID: ${player.id} | Total: ${total}${isWinner ? ' (Winner)' : ''}\n`;
   });
 
   // Add hole-by-hole scores if available
@@ -305,8 +335,17 @@ export async function exportRound(roundId: string | number): Promise<string> {
 
 /**
  * Import a round from exported human-readable text
+ * 
+ * @param exportText - The exported round text
+ * @param manualMappings - Optional manual mappings: { courses?: Map<foreignCourseId, localCourseId>, players?: Map<foreignPlayerId, localPlayerId> }
  */
-export async function importRound(exportText: string): Promise<string> {
+export async function importRound(
+  exportText: string,
+  manualMappings?: {
+    courses?: Map<string, string>; // Map<foreignCourseId, localCourseId>
+    players?: Map<string, string>; // Map<foreignPlayerId, localPlayerId>
+  }
+): Promise<string> {
   try {
     console.log('Starting import round...');
     console.log('Export text length:', exportText.length);
@@ -321,9 +360,12 @@ export async function importRound(exportText: string): Promise<string> {
     });
     
     const {
+      storageId: foreignStorageId,
+      roundId: importedRoundId,
       title,
       dateTimestamp,
       courseName,
+      courseId: foreignCourseId,
       courseHoles,
       courseHolesData,
       players,
@@ -331,60 +373,140 @@ export async function importRound(exportText: string): Promise<string> {
       notes,
     } = parsed;
 
-    // Import course if provided
-    if (courseName) {
-      const existingCourse = await getCourseByName(courseName);
-      if (!existingCourse && courseHoles !== undefined) {
-        // Create course
-        const holes: Hole[] = courseHolesData.length > 0 
-          ? courseHolesData 
-          : Array.from({ length: courseHoles }, (_, i) => ({ number: i + 1 }));
-        
-        const newCourse: Course = {
-          id: `course_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          name: courseName,
-          holes,
-        };
-        await saveCourse(newCourse);
-      }
+    // Get local storage ID
+    const localStorageId = await getStorageId();
+    
+    // Skip if importing from same storage (shouldn't happen, but safety check)
+    if (foreignStorageId && foreignStorageId === localStorageId) {
+      throw new Error('Cannot import from the same storage instance');
     }
 
-    // Import players (create users if they don't exist)
+    // Import course if provided
+    let localCourseId: string | undefined;
+    if (courseName && foreignCourseId && foreignStorageId) {
+      // First check for manual mapping
+      if (manualMappings?.courses?.has(foreignCourseId)) {
+        localCourseId = manualMappings.courses.get(foreignCourseId);
+        if (localCourseId && foreignStorageId) {
+          // Create the mapping in the merge table
+          await mapForeignToLocal(foreignStorageId, foreignCourseId, localCourseId, 'course');
+        }
+      } else {
+        // Check if this foreign course is already mapped
+        const mappedCourseId = await getLocalUuidForForeign(foreignStorageId, foreignCourseId, 'course');
+        
+        if (mappedCourseId) {
+          // Use existing mapping
+          localCourseId = mappedCourseId;
+        } else {
+          // Check if a course with this name exists locally
+          const existingCourse = await getCourseByName(courseName);
+          
+          if (existingCourse && foreignStorageId) {
+            // Map foreign course to existing local course
+            localCourseId = existingCourse.id;
+            await mapForeignToLocal(foreignStorageId, foreignCourseId, existingCourse.id, 'course');
+          } else if (courseHoles !== undefined) {
+            // Create new course and optionally map it
+            const holes: Hole[] = courseHolesData.length > 0 
+              ? courseHolesData 
+              : Array.from({ length: courseHoles }, (_, i) => ({ number: i + 1 }));
+            
+            const { generateCourseId } = await import('./storage/courseStorage');
+            localCourseId = await generateCourseId();
+            const newCourse: Course = {
+              id: localCourseId,
+              name: courseName,
+              holes,
+            };
+            await saveCourse(newCourse);
+            
+            // Map foreign course to new local course
+            if (foreignStorageId) {
+              await mapForeignToLocal(foreignStorageId, foreignCourseId, localCourseId, 'course');
+            }
+          }
+        }
+      }
+    } else if (courseName && !foreignCourseId) {
+      // Legacy import without course UUID - just find by name
+      const existingCourse = await getCourseByName(courseName);
+      localCourseId = existingCourse?.id;
+    }
+
+    // Import players (create users if they don't exist, use merge table)
     const allUsers = await getAllUsers();
     const importedPlayers: Player[] = [];
     
     for (const playerData of players) {
-      // Check if user exists by username
-      let user = allUsers.find(u => u.username === playerData.username);
+      let localPlayerId: string;
       
-      if (!user) {
-        // Check if username is available
-        const usernameAvailable = await isUsernameAvailable(playerData.username);
-        const finalUsername = usernameAvailable 
-          ? playerData.username 
-          : `${playerData.username}_${Date.now()}`;
-        
-        // Create new user
-        const newUser = {
-          id: generateUserId(),
-          name: playerData.name,
-          username: finalUsername,
-        };
-        await saveUser(newUser);
-        user = newUser;
-        allUsers.push(newUser);
+      if (playerData.id && foreignStorageId) {
+        // First check for manual mapping
+        if (manualMappings?.players?.has(playerData.id)) {
+          localPlayerId = manualMappings.players.get(playerData.id)!;
+          if (foreignStorageId) {
+            // Create the mapping in the merge table
+            await mapForeignToLocal(foreignStorageId, playerData.id, localPlayerId, 'player');
+          }
+        } else {
+          // Check if this foreign player is already mapped
+          const mappedPlayerId = await getLocalUuidForForeign(foreignStorageId, playerData.id, 'player');
+          
+          if (mappedPlayerId) {
+            // Use existing mapping
+            localPlayerId = mappedPlayerId;
+          } else {
+            // Check if a player with this name exists locally
+            const existingUser = allUsers.find(u => u.name.trim().toLowerCase() === playerData.name.trim().toLowerCase());
+            
+            if (existingUser && foreignStorageId) {
+              // Map foreign player to existing local player
+              localPlayerId = existingUser.id;
+              await mapForeignToLocal(foreignStorageId, playerData.id, existingUser.id, 'player');
+            } else {
+              // Create new user and map it
+              localPlayerId = await getUserIdForPlayerName(playerData.name);
+              const newUser = {
+                id: localPlayerId,
+                name: playerData.name.trim(),
+              };
+              await saveUser(newUser);
+              allUsers.push(newUser);
+              
+              // Map foreign player to new local player
+              if (foreignStorageId) {
+                await mapForeignToLocal(foreignStorageId, playerData.id, localPlayerId, 'player');
+              }
+            }
+          }
+        }
+      } else {
+        // Legacy import without player UUID - find or create by name
+        const existingUser = allUsers.find(u => u.name.trim().toLowerCase() === playerData.name.trim().toLowerCase());
+        if (existingUser) {
+          localPlayerId = existingUser.id;
+        } else {
+          localPlayerId = await getUserIdForPlayerName(playerData.name);
+          const newUser = {
+            id: localPlayerId,
+            name: playerData.name.trim(),
+          };
+          await saveUser(newUser);
+          allUsers.push(newUser);
+        }
       }
 
       // Create player for the round
+      const user = allUsers.find(u => u.id === localPlayerId) || { id: localPlayerId, name: playerData.name };
       importedPlayers.push({
-        id: `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: user.id,
         name: user.name,
-        username: user.username,
       });
     }
 
     // Map scores to player IDs
-    const roundScores = scores.map(score => {
+    const roundScores: Score[] = scores.map(score => {
       const player = importedPlayers.find(p => p.name === score.playerName);
       if (!player) {
         throw new Error(`Player not found: ${score.playerName}`);
@@ -396,18 +518,23 @@ export async function importRound(exportText: string): Promise<string> {
       };
     });
 
-    // Create new round
+    // Create new round with UUID (always generate new local UUID for rounds)
+    // Rounds are not merged - each import creates a new round
+    const roundId = await generateRoundId();
     const newRound: Round = {
-      id: `round_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: roundId,
       title,
       date: dateTimestamp,
       players: importedPlayers,
       scores: roundScores,
-      courseName,
+      courseName: localCourseId ? (await getCourseById(localCourseId))?.name : courseName,
       notes,
     };
 
     await saveRound(newRound);
+    
+    // If we had a foreign round ID, we could optionally track it, but rounds aren't merged
+    // so we just create new ones
 
     return newRound.id;
   } catch (error) {

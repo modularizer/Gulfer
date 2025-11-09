@@ -9,9 +9,9 @@ interface ScorecardProps {
   players: Player[];
   holes: number[];
   scores: Score[];
-  onScoreChange: (playerId: string, holeNumber: number, throws: number) => void;
+  onScoreChange: (playerId: number, holeNumber: number, throws: number) => void;
   onAddPlayer: () => void;
-  onRemovePlayer: (playerId: string) => void;
+  onRemovePlayer: (playerId: number) => void;
   onAddHole: () => void;
   onRemoveHole: (holeNumber: number) => void;
   readOnly?: boolean;
@@ -37,7 +37,7 @@ export default function Scorecard({
   const theme = useTheme();
   const [editModal, setEditModal] = useState<{
     visible: boolean;
-    playerId: string | null;
+    playerId: number | null;
     holeNumber: number | null;
     currentValue: number;
   }>({ visible: false, playerId: null, holeNumber: null, currentValue: 0 });
@@ -71,18 +71,18 @@ export default function Scorecard({
     loadCourseData();
   }, [courseName]);
 
-  const getScore = (playerId: string, holeNumber: number): number => {
+  const getScore = (playerId: number, holeNumber: number): number => {
     const score = scores.find(
       (s) => s.playerId === playerId && s.holeNumber === holeNumber
     );
     return score?.throws || 0;
   };
 
-  const getTotal = (playerId: string): number => {
+  const getTotal = (playerId: number): number => {
     return holes.reduce((sum, hole) => sum + getScore(playerId, hole), 0);
   };
 
-  const openEditModal = (playerId: string, holeNumber: number) => {
+  const openEditModal = (playerId: number, holeNumber: number) => {
     if (readOnly) return;
     const currentScore = getScore(playerId, holeNumber);
     setEditModal({ visible: true, playerId, holeNumber, currentValue: currentScore });

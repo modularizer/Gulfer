@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { router, usePathname } from 'expo-router';
 import { useTheme } from '../../theme/ThemeContext';
-import { getAllUsers, getCurrentUserName, getUsernameForPlayerName } from '../../services/storage/userStorage';
+import { getAllUsers, getCurrentUserName, getUserIdForPlayerName } from '../../services/storage/userStorage';
 import { createNewRound } from '../../services/storage/roundStorage';
 import { getLastUsedCourse, getLatestAddedCourse } from '../../services/storage/courseStorage';
 import { Player } from '../../types';
@@ -41,11 +41,10 @@ export default function Footer({ customCenterHandler }: FooterProps) {
       try {
         const currentUserName = await getCurrentUserName();
         const playerName = currentUserName || 'You';
-        const username = await getUsernameForPlayerName(playerName);
+        const playerId = await getUserIdForPlayerName(playerName);
         const defaultPlayer: Player = { 
-          id: 'player_1', 
+          id: playerId, 
           name: playerName,
-          username,
         };
         
         const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
@@ -71,11 +70,13 @@ export default function Footer({ customCenterHandler }: FooterProps) {
     try {
       const users = await getAllUsers();
       const currentUser = users.find(u => u.isCurrentUser);
-      if (currentUser && currentUser.username) {
-        // User has username, navigate to their player page
-        router.push(`/player/${encodeURIComponent(currentUser.username)}`);
+      if (currentUser) {
+        // Navigate to player page using codename
+        const { idToCodename } = await import('../../utils/idUtils');
+        const playerCodename = idToCodename(currentUser.id);
+        router.push(`/player/${playerCodename}`);
       } else {
-        // No username set, navigate to /you page to set it
+        // No user set, navigate to /you page to set it
         router.push('/you');
       }
     } catch (error) {

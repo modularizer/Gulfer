@@ -6,9 +6,8 @@
 import { getItem, setItem } from './storageAdapter';
 
 export interface User {
-  id: string;
-  name: string;
-  username: string; // Unique identifier, defaults to name
+  id: string; // UUID for global uniqueness
+  name: string; // Locally unique name
   isCurrentUser?: boolean; // Flag to identify the current user
 }
 
@@ -58,16 +57,12 @@ export async function saveCurrentUserName(name: string): Promise<void> {
     
     if (existingUser) {
       existingUser.name = name;
-      // Update username if not set
-      if (!existingUser.username) {
-        existingUser.username = generateUniqueUsername(name, users.filter(u => u.id !== existingUser.id));
-      }
       await setItem(USERS_STORAGE_KEY, JSON.stringify(users));
     } else {
+      const newUserId = await generateUserId();
       const newUser: User = {
-        id: 'current_user',
+        id: newUserId,
         name,
-        username: generateUniqueUsername(name, users),
         isCurrentUser: true,
       };
       users.push(newUser);
@@ -80,43 +75,24 @@ export async function saveCurrentUserName(name: string): Promise<void> {
 }
 
 /**
- * Generate a unique username from a name
- * If the name is already taken, appends a number
- */
-function generateUniqueUsername(name: string, existingUsers: User[]): string {
-  const baseUsername = name.trim().toLowerCase().replace(/\s+/g, '_');
-  let username = baseUsername;
-  let counter = 1;
-  
-  while (existingUsers.some(u => u.username === username)) {
-    username = `${baseUsername}_${counter}`;
-    counter++;
-  }
-  
-  return username;
-}
-
-/**
  * Save a user to local storage
- * Ensures username is unique
+ * Enforces local uniqueness of user names
  */
 export async function saveUser(user: User): Promise<void> {
   try {
     const users = await getAllUsers();
-    
-    // Ensure username is set (default to name if not provided)
-    if (!user.username) {
-      user.username = generateUniqueUsername(user.name, users.filter(u => u.id !== user.id));
-    }
-    
-    // Check for username conflicts (excluding current user)
-    const conflictingUser = users.find(u => u.id !== user.id && u.username === user.username);
-    if (conflictingUser) {
-      // Generate a unique username
-      user.username = generateUniqueUsername(user.name, users.filter(u => u.id !== user.id));
-    }
-    
     const existingIndex = users.findIndex((u) => u.id === user.id);
+    
+    // Check for name uniqueness (case-insensitive, excluding current user)
+    const trimmedName = user.name.trim();
+    const nameConflict = users.find(u => 
+      u.id !== user.id && 
+      u.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+    
+    if (nameConflict) {
+      throw new Error(`A user with the name "${trimmedName}" already exists`);
+    }
     
     if (existingIndex >= 0) {
       users[existingIndex] = user;
@@ -132,28 +108,15 @@ export async function saveUser(user: User): Promise<void> {
 }
 
 /**
- * Get a user by username
+ * Get a user by ID
  */
-export async function getUserByUsername(username: string): Promise<User | null> {
+export async function getUserById(userId: string): Promise<User | null> {
   try {
     const users = await getAllUsers();
-    return users.find(u => u.username === username) || null;
+    return users.find((u) => u.id === userId) || null;
   } catch (error) {
-    console.error('Error loading user by username:', error);
+    console.error('Error loading user by ID:', error);
     return null;
-  }
-}
-
-/**
- * Check if a username is available
- */
-export async function isUsernameAvailable(username: string, excludeUserId?: string): Promise<boolean> {
-  try {
-    const users = await getAllUsers();
-    return !users.some(u => u.username === username && u.id !== excludeUserId);
-  } catch (error) {
-    console.error('Error checking username availability:', error);
-    return false;
   }
 }
 
@@ -172,43 +135,55 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 /**
- * Generate a new unique user ID
+ * Generate a new unique user ID (6 hex characters)
+ * Ensures local uniqueness by checking existing users
  */
-export function generateUserId(): string {
-  return `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+export async function generateUserId(): Promise<string> {
+  const { generateUniqueUUID } = await import('../../utils/uuid');
+  const users = await getAllUsers();
+  const existingIds = new Set(users.map(u => u.id));
+  return generateUniqueUUID(existingIds);
 }
 
 /**
- * Get username for a player name
- * Looks up User by name and returns username, or generates one if not found
+ * Get a user by name (case-insensitive)
  */
-export async function getUsernameForPlayerName(playerName: string): Promise<string> {
+export async function getUserByName(name: string): Promise<User | null> {
   try {
     const users = await getAllUsers();
-    const user = users.find(u => u.name === playerName);
-    if (user && user.username) {
-      return user.username;
-    }
-    // If no user found, generate a unique username based on the name
-    return generateUniqueUsername(playerName, users);
+    const trimmedName = name.trim();
+    return users.find((u) => u.name.trim().toLowerCase() === trimmedName.toLowerCase()) || null;
   } catch (error) {
-    console.error('Error getting username for player name:', error);
-    // Fallback: generate username from name
-    const users = await getAllUsers();
-    return generateUniqueUsername(playerName, users);
+    console.error('Error loading user by name:', error);
+    return null;
   }
 }
 
 /**
- * Ensure a player has a username, setting it if missing
+ * Get user ID for a player name
+ * Looks up User by name and returns ID, or creates a new user if not found
  */
-export async function ensurePlayerHasUsername(player: { name: string; username?: string }): Promise<{ name: string; username: string }> {
-  if (player.username) {
-    return { name: player.name, username: player.username };
+export async function getUserIdForPlayerName(playerName: string): Promise<string> {
+  try {
+    const users = await getAllUsers();
+    const trimmedName = playerName.trim();
+    const user = users.find(u => u.name.trim().toLowerCase() === trimmedName.toLowerCase());
+    if (user) {
+      return user.id;
+    }
+    // If no user found, create a new one
+    const newUserId = await generateUserId();
+    const newUser: User = {
+      id: newUserId,
+      name: trimmedName,
+    };
+    await saveUser(newUser);
+    return newUserId;
+  } catch (error) {
+    console.error('Error getting user ID for player name:', error);
+    // Fallback: generate new ID
+    return await generateUserId();
   }
-  
-  const username = await getUsernameForPlayerName(player.name);
-  return { name: player.name, username };
 }
 
 /**

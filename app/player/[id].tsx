@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { IconButton, useTheme, Text, Card, Chip } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Platform, Share, Alert } from 'react-native';
+import { IconButton, useTheme, Text, Card, Chip, Menu } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
-import { getAllUsers, getUserByUsername, User } from '../../src/services/storage/userStorage';
+import { getAllUsers, getUserById, User } from '../../src/services/storage/userStorage';
 import { getAllRounds } from '../../src/services/storage/roundStorage';
 import { Round, Player, Score } from '../../src/types';
 import { getAllCourses, Course } from '../../src/services/storage/courseStorage';
 import { getShadowStyle } from '../../src/utils';
+import { exportPlayer } from '../../src/services/playerExport';
 
 interface CourseScore {
   course: Course;
   bestScore: number;
   roundCount: number;
-  bestRoundId: string | number;
+  bestRoundId: number;
 }
 
 export default function PlayerDetailScreen() {
@@ -22,6 +23,7 @@ export default function PlayerDetailScreen() {
   const [courseScores, setCourseScores] = useState<CourseScore[]>([]);
   const [playerRounds, setPlayerRounds] = useState<Round[]>([]);
   const [allCourses, setAllCourses] = useState<Course[]>([]);
+  const [menuVisible, setMenuVisible] = useState(false);
 
   // Load player data and calculate course scores
   useEffect(() => {
@@ -32,10 +34,15 @@ export default function PlayerDetailScreen() {
       }
 
       try {
-        // Decode the username from URL (username is used as the route parameter)
-        const username = decodeURIComponent(playerNameParam);
-        // Load player by username
-        const foundPlayer = await getUserByUsername(username);
+        // Convert codename from URL to numeric ID
+        const { codenameToId } = await import('../../src/utils/idUtils');
+        const userId = codenameToId(playerNameParam);
+        if (userId === null) {
+          setTimeout(() => router.push('/players'), 1000);
+          return;
+        }
+        // Load player by ID
+        const foundPlayer = await getUserById(userId);
         if (!foundPlayer) {
           setTimeout(() => router.push('/players'), 1000);
           return;
@@ -48,21 +55,24 @@ export default function PlayerDetailScreen() {
         setAllCourses(loadedCourses);
 
         // Find all rounds where this player participated
-        // Match by username only
+        // Match by ID
+        const foundPlayerId = foundPlayer.id;
         const playerRounds = allRounds.filter(round => {
-          const playerInRound = round.players.find(p => p.username === foundPlayer.username);
+          const playerInRound = round.players.find(p => p.id === foundPlayerId);
           return playerInRound && round.scores && round.scores.length > 0;
         });
 
         // Group by course and calculate best score per course
-        const courseScoreMap = new Map<string, { course: Course; bestScore: number; roundCount: number; bestRoundId: string | number }>();
+        const courseScoreMap = new Map<number, { course: Course; bestScore: number; roundCount: number; bestRoundId: number }>();
         
-        // First, count rounds per course (using trimmed names for consistency)
-        const courseRoundCounts = new Map<string, number>();
+        // First, count rounds per course (keyed by course ID)
+        const courseRoundCounts = new Map<number, number>();
         playerRounds.forEach(round => {
           if (round.courseName) {
-            const trimmedName = round.courseName.trim();
-            courseRoundCounts.set(trimmedName, (courseRoundCounts.get(trimmedName) || 0) + 1);
+            const course = loadedCourses.find(c => c.name.trim() === round.courseName!.trim());
+            if (course) {
+              courseRoundCounts.set(course.id, (courseRoundCounts.get(course.id) || 0) + 1);
+            }
           }
         });
         
@@ -78,10 +88,10 @@ export default function PlayerDetailScreen() {
             return;
           }
 
-          // Find the player in this round (match by username only)
-          const playerInRound = round.players.find(p => p.username === foundPlayer.username);
+          // Find the player in this round (match by ID)
+          const playerInRound = round.players.find(p => p.id === foundPlayerId);
           if (!playerInRound) {
-            console.log(`Player "${foundPlayer.username}" not found in round "${round.id}"`);
+            console.log(`Player "${foundPlayer.id}" not found in round "${round.id}"`);
             return;
           }
 
@@ -89,12 +99,12 @@ export default function PlayerDetailScreen() {
           const playerScores = round.scores!.filter(s => s.playerId === playerInRound.id);
           const total = playerScores.reduce((sum, s) => sum + s.throws, 0);
 
-          // Update best score for this course (use trimmed name as key)
-          const existing = courseScoreMap.get(roundCourseName);
-          const roundCount = courseRoundCounts.get(roundCourseName) || 0;
+          // Update best score for this course (use course ID as key)
+          const existing = courseScoreMap.get(course.id);
+          const roundCount = courseRoundCounts.get(course.id) || 0;
           
           if (!existing || total < existing.bestScore) {
-            courseScoreMap.set(roundCourseName, {
+            courseScoreMap.set(course.id, {
               course,
               bestScore: total,
               roundCount,
@@ -167,6 +177,47 @@ export default function PlayerDetailScreen() {
             </Chip>
           )}
         </View>
+        <View style={styles.headerSpacer} />
+        <Menu
+          visible={menuVisible}
+          onDismiss={() => setMenuVisible(false)}
+          anchor={
+            <IconButton
+              icon="dots-vertical"
+              size={24}
+              iconColor={theme.colors.onSurface}
+              onPress={() => setMenuVisible(true)}
+            />
+          }
+        >
+          <Menu.Item
+            onPress={async () => {
+              setMenuVisible(false);
+              if (!player) return;
+              
+              try {
+                const exportText = await exportPlayer(player.id);
+                
+                if (Platform.OS === 'web') {
+                  // Web: copy to clipboard
+                  await navigator.clipboard.writeText(exportText);
+                  Alert.alert('Success', 'Player exported to clipboard');
+                } else {
+                  // Mobile: use Share API
+                  await Share.share({
+                    message: exportText,
+                    title: `Export: ${player.name}`,
+                  });
+                }
+              } catch (error) {
+                console.error('Error exporting player:', error);
+                Alert.alert('Error', 'Failed to export player');
+              }
+            }}
+            title="Export Player"
+            leadingIcon="export"
+          />
+        </Menu>
       </View>
       
       <ScrollView 
@@ -265,8 +316,9 @@ export default function PlayerDetailScreen() {
                   hour12: true,
                 });
 
-                // Find the player in this round (match by username only)
-                const playerInRound = round.players.find((p: Player) => p.username === player!.username);
+                // Find the player in this round (match by ID)
+                const playerId = player!.id;
+                const playerInRound = round.players.find((p: Player) => p.id === playerId);
                 const playerScores = playerInRound 
                   ? round.scores!.filter((s: Score) => s.playerId === playerInRound.id)
                   : [];
@@ -383,6 +435,9 @@ const styles = StyleSheet.create({
   },
   backButton: {
     margin: 0,
+  },
+  headerSpacer: {
+    flex: 1,
   },
   headerContent: {
     flexDirection: 'row',

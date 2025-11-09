@@ -10,9 +10,11 @@ import { Card, Title, Paragraph, useTheme, Chip, Button, Dialog, Portal, TextInp
 import { Course, Round, Player, Score } from '../src/types';
 import { getAllCourses, saveCourse, generateCourseId, deleteCourse } from '../src/services/storage/courseStorage';
 import { getAllRounds } from '../src/services/storage/roundStorage';
-import { ensurePlayerHasUsername } from '../src/services/storage/userStorage';
+import { importCourse } from '../src/services/courseExport';
+// Username functionality removed - using IDs instead
 import { getShadowStyle } from '../src/utils';
 import { router } from 'expo-router';
+import { Alert, Platform } from 'react-native';
 import {
   SegmentedButtonsHeader,
   PlayerChip,
@@ -25,12 +27,11 @@ export default function CoursesScreen() {
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [newCourseDialog, setNewCourseDialog] = useState({ visible: false, name: '', holes: '9' });
+  const [importDialogVisible, setImportDialogVisible] = useState(false);
+  const [importText, setImportText] = useState('');
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [bestScoresByCourse, setBestScoresByCourse] = useState<Map<string, Map<string, { player: Player; score: number }>>>(new Map());
   const [selectedCourseIds, setSelectedCourseIds] = useState<Set<string>>(new Set());
-  
-  // Helper to convert course ID to string for Set operations
-  const courseIdToString = (id: string | number): string => id.toString();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const loadCourses = useCallback(async () => {
@@ -41,7 +42,7 @@ export default function CoursesScreen() {
       
       // Load rounds and calculate best scores per course
       const allRounds = await getAllRounds();
-      const bestScoresMap = new Map<string, Map<string, { player: Player; score: number }>>();
+        const bestScoresMap = new Map<string, Map<string, { player: Player; score: number }>>();
       
       // Debug: log all rounds and their course names
       console.log('All rounds:', allRounds.map(r => ({ id: r.id, courseName: r.courseName, scoresCount: r.scores?.length || 0 })));
@@ -67,17 +68,11 @@ export default function CoursesScreen() {
               
               const total = playerScores.reduce((sum, s) => sum + s.throws, 0);
               
-              // Ensure player has username
-              const playerWithUsername = await ensurePlayerHasUsername(player);
-              if (!playerWithUsername.username) {
-                console.error('Player missing username:', player);
-                return;
-              }
-              
-              const key = playerWithUsername.username;
+              // Use player ID as key
+              const key = player.id;
               const existing = courseBestScores.get(key);
               if (!existing || total < existing.score) {
-                courseBestScores.set(key, { player: { ...player, username: playerWithUsername.username }, score: total });
+                courseBestScores.set(key, { player, score: total });
               }
             }));
           }
@@ -86,7 +81,7 @@ export default function CoursesScreen() {
         console.log(`Course "${course.name}": Best scores count: ${courseBestScores.size}`);
         
         if (courseBestScores.size > 0) {
-          bestScoresMap.set(course.id.toString(), courseBestScores);
+          bestScoresMap.set(course.id, courseBestScores);
         }
       }));
       
@@ -107,24 +102,22 @@ export default function CoursesScreen() {
   }, [loadCourses]);
 
   const handleCoursePress = useCallback(
-    async (courseId: string | number, courseName: string) => {
+    async (courseId: string, courseName: string) => {
       // If in selection mode, toggle selection instead of navigating
       if (selectedCourseIds.size > 0) {
         setSelectedCourseIds((prev) => {
           const newSet = new Set(prev);
-          const idStr = courseId.toString();
-          if (newSet.has(idStr)) {
-            newSet.delete(idStr);
+          if (newSet.has(courseId)) {
+            newSet.delete(courseId);
           } else {
-            newSet.add(idStr);
+            newSet.add(courseId);
           }
           return newSet;
         });
       } else {
-        // Convert course ID to codename for URL
-        const { idToCodename } = await import('../src/utils/idUtils');
-        const courseCodename = idToCodename(courseId);
-        router.push(`/course/${courseCodename}`);
+        // Use course name for URL
+        const { encodeNameForUrl } = await import('../src/utils/urlEncoding');
+        router.push(`/course/${encodeNameForUrl(courseName)}`);
       }
     },
     [selectedCourseIds.size]
@@ -204,9 +197,9 @@ export default function CoursesScreen() {
   const renderCourseItem = useCallback(
     ({ item }: { item: Course }) => {
       const holeCount = getHoleCount(item);
-      const courseBestScores = bestScoresByCourse.get(item.id.toString());
+      const courseBestScores = bestScoresByCourse.get(item.id);
       const bestScoresArray = courseBestScores ? Array.from(courseBestScores.values()) : [];
-      const isSelected = selectedCourseIds.has(item.id.toString());
+      const isSelected = selectedCourseIds.has(item.id);
       
       // Find the lowest score (winner)
       const winner = bestScoresArray.length > 0 
@@ -216,7 +209,7 @@ export default function CoursesScreen() {
       return (
         <TouchableOpacity 
           onPress={() => handleCoursePress(item.id, item.name)}
-          onLongPress={() => handleCourseLongPress(item.id.toString())}
+          onLongPress={() => handleCourseLongPress(item.id)}
         >
           <Card style={[
             styles.courseCard, 
@@ -234,19 +227,13 @@ export default function CoursesScreen() {
                   {bestScoresArray
                     .sort((a, b) => a.score - b.score)
                     .map(({ player, score }) => {
-                      if (!player.username) {
-                        console.error('Player missing username:', player);
-                        return null;
-                      }
-                      const playerUsername = player.username; // TypeScript guard
-                      const isWinner = winner ? playerUsername === winner.player.username : false;
+                      const isWinner = winner ? player.id === winner.player.id : false;
                       return (
                         <PlayerChip
-                          key={playerUsername}
+                          key={player.id}
                           player={player}
                           score={score}
                           isWinner={isWinner}
-                          onPress={() => router.push(`/player/${encodeURIComponent(playerUsername)}`)}
                         />
                       );
                     })
@@ -274,6 +261,14 @@ export default function CoursesScreen() {
           style={styles.addButton}
         >
           Add Course
+        </Button>
+        <Button
+          mode="outlined"
+          icon="import"
+          onPress={() => setImportDialogVisible(true)}
+          style={styles.importButton}
+        >
+          Import Course
         </Button>
       </View>
 
@@ -349,6 +344,73 @@ export default function CoursesScreen() {
         </Dialog>
       </Portal>
 
+      {/* Import Course Dialog */}
+      <Portal>
+        <Dialog
+          visible={importDialogVisible}
+          onDismiss={() => {
+            setImportDialogVisible(false);
+            setImportText('');
+          }}
+          style={styles.importDialog}
+        >
+          <Dialog.Title>Import Course</Dialog.Title>
+          <Dialog.Content>
+            <Text style={[styles.importHelpText, { color: theme.colors.onSurfaceVariant }]}>
+              Paste the course export text below.
+            </Text>
+            <TextInput
+              mode="outlined"
+              value={importText}
+              onChangeText={setImportText}
+              multiline
+              numberOfLines={20}
+              style={styles.importTextInput}
+              contentStyle={styles.importTextContent}
+              placeholder="Paste course export text here..."
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => {
+              setImportDialogVisible(false);
+              setImportText('');
+            }}>
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={async () => {
+                if (!importText.trim()) {
+                  Alert.alert('Error', 'Please paste the course export text');
+                  return;
+                }
+
+                try {
+                  const newCourseId = await importCourse(importText);
+                  setImportText('');
+                  setImportDialogVisible(false);
+                  // Refresh courses list
+                  await loadCourses();
+                  // Navigate to the imported course
+                  const { encodeNameForUrl } = await import('../src/utils/urlEncoding');
+                  const { getCourseById } = await import('../src/services/storage/courseStorage');
+                  const importedCourse = await getCourseById(newCourseId);
+                  if (importedCourse) {
+                    router.push(`/course/${encodeNameForUrl(importedCourse.name)}`);
+                  }
+                } catch (error) {
+                  console.error('Error importing course:', error);
+                  Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to import course');
+                }
+              }}
+              disabled={!importText.trim()}
+            >
+              Import
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
       {/* Error Dialog */}
       <Portal>
         <Dialog
@@ -381,6 +443,24 @@ const styles = StyleSheet.create({
   },
   addButton: {
     alignSelf: 'flex-start',
+    marginRight: 8,
+  },
+  importButton: {
+    alignSelf: 'flex-start',
+  },
+  importDialog: {
+    maxHeight: '80%',
+  },
+  importHelpText: {
+    marginBottom: 12,
+    fontSize: 14,
+  },
+  importTextInput: {
+    maxHeight: 400,
+  },
+  importTextContent: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
   },
   listContent: {
     padding: 16,
