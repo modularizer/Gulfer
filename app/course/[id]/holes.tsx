@@ -17,7 +17,7 @@ export default function CourseHolesScreen() {
   useEffect(() => {
     const loadCourse = async () => {
       if (!courseNameParam) {
-        setTimeout(() => router.push('/courses'), 1000);
+        setTimeout(() => router.push('/course/list'), 1000);
         return;
       }
 
@@ -26,14 +26,14 @@ export default function CourseHolesScreen() {
         const courseName = decodeURIComponent(courseNameParam);
         const loadedCourse = await getCourseByName(courseName);
         if (!loadedCourse) {
-          setTimeout(() => router.push('/courses'), 1000);
+          setTimeout(() => router.push('/course/list'), 1000);
           return;
         }
 
         setCourse(loadedCourse);
       } catch (error) {
         console.error('Error loading course:', error);
-        setTimeout(() => router.push('/courses'), 1000);
+        setTimeout(() => router.push('/course/list'), 1000);
       } finally {
         setLoading(false);
       }
@@ -87,9 +87,9 @@ export default function CourseHolesScreen() {
         onHoleUpdate={handleHoleUpdate}
         onBack={() => {
           if (codenameParam) {
-            router.push(`/course/${codenameParam}`);
+            router.push(`/course/${codenameParam}/overview`);
           } else {
-            router.push('/courses');
+            router.push('/course/list');
           }
         }}
         distanceUnit={distanceUnit}

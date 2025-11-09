@@ -1,14 +1,14 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Button, Dialog, Portal, Text, useTheme } from 'react-native-paper';
-import { Scorecard } from '../../src/components/Scorecard';
-import { Player, Score, Round } from '../../src/types';
-import { saveRound, getRoundById } from '../../src/services/storage/roundStorage';
-import { getAllCourses } from '../../src/services/storage/courseStorage';
+import { Scorecard } from '../../../src/components/Scorecard';
+import { Player, Score, Round } from '../../../src/types';
+import { saveRound, getRoundById } from '../../../src/services/storage/roundStorage';
+import { getAllCourses } from '../../../src/services/storage/courseStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 
 export default function ScorecardPlayScreen() {
-  const { round: codenameParam } = useLocalSearchParams<{ round: string }>();
+  const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
   const [round, setRound] = useState<Round | null>(null);
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -21,23 +21,14 @@ export default function ScorecardPlayScreen() {
   // Load round data
   useEffect(() => {
     const loadRound = async () => {
-      if (!codenameParam) {
+      if (!roundIdParam) {
         setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
         setTimeout(() => router.push('/'), 1000);
         return;
       }
 
       try {
-        // Convert codename from URL to numeric ID
-        const { codenameToId } = await import('../../src/utils/idUtils');
-        const roundId = codenameToId(codenameParam);
-        if (roundId === null) {
-          setErrorDialog({ visible: true, title: 'Error', message: 'Invalid round ID' });
-          setTimeout(() => router.push('/'), 1000);
-          return;
-        }
-
-        const loadedRound = await getRoundById(roundId);
+        const loadedRound = await getRoundById(roundIdParam);
         if (!loadedRound) {
           setErrorDialog({ visible: true, title: 'Error', message: 'Round not found' });
           setTimeout(() => router.push('/'), 1000);
@@ -54,10 +45,8 @@ export default function ScorecardPlayScreen() {
             const courses = await getAllCourses();
             const course = courses.find(c => c.name === loadedRound.courseName);
             if (course) {
-              // Handle both old format (holes: number) and new format (holes: Hole[])
               const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
               setCourseHoles(holeCount);
-              // Initialize holes array based on course
               const holeNumbers = Array.from({ length: holeCount }, (_, i) => i + 1);
               setHoles(holeNumbers);
             }
@@ -65,7 +54,6 @@ export default function ScorecardPlayScreen() {
             console.error('Error loading course info:', error);
           }
         } else {
-          // If no course, determine holes from scores or default to 9
           if (loadedRound.scores && loadedRound.scores.length > 0) {
             const holeNumbers = [...new Set(loadedRound.scores.map(s => s.holeNumber))].sort((a, b) => a - b);
             if (holeNumbers.length > 0) {
@@ -82,8 +70,10 @@ export default function ScorecardPlayScreen() {
       }
     };
 
-    loadRound();
-  }, [roundId]);
+    if (roundIdParam) {
+      loadRound();
+    }
+  }, [roundIdParam]);
 
   // Auto-save scores
   const saveRoundData = useCallback(async () => {
@@ -103,7 +93,7 @@ export default function ScorecardPlayScreen() {
     if (round && !loading) {
       const timeoutId = setTimeout(() => {
         saveRoundData();
-      }, 500); // Debounce saves
+      }, 500);
 
       return () => clearTimeout(timeoutId);
     }
@@ -164,11 +154,9 @@ export default function ScorecardPlayScreen() {
         onRemovePlayer={() => {}}
         allowAddPlayer={false}
         courseName={round.courseName}
-        onBack={async () => {
+        onBack={() => {
           if (!round) return;
-          const { idToCodename } = await import('../../src/utils/idUtils');
-          const roundCodename = idToCodename(round.id);
-          router.push(`/${roundCodename}/overview`);
+          router.push(`/round/${round.id}/overview`);
         }}
       />
 
@@ -218,9 +206,6 @@ const styles = StyleSheet.create({
   loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  scrollView: {
-    flex: 1,
   },
 });
 

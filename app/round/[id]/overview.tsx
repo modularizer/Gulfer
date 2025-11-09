@@ -2,36 +2,36 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text } from 'react-native-paper';
-import { Player, Round } from '../../src/types';
-import PhotoGallery from '../../src/components/common/PhotoGallery';
-import CourseSelector from '../../src/components/common/CourseSelector';
-import PlayerChip from '../../src/components/common/PlayerChip';
-import NameUsernameDialog from '../../src/components/common/NameUsernameDialog';
-import { getRoundById, saveRound } from '../../src/services/storage/roundStorage';
-import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '../../src/services/storage/userStorage';
-import { getAllCourses } from '../../src/services/storage/courseStorage';
-import { exportRound } from '../../src/services/roundExport';
+import { Player, Round } from '../../../src/types';
+import PhotoGallery from '../../../src/components/common/PhotoGallery';
+import CourseSelector from '../../../src/components/common/CourseSelector';
+import PlayerChip from '../../../src/components/common/PlayerChip';
+import NameUsernameDialog from '../../../src/components/common/NameUsernameDialog';
+import { getRoundById, saveRound } from '../../../src/services/storage/roundStorage';
+import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '../../../src/services/storage/userStorage';
+import { getAllCourses } from '../../../src/services/storage/courseStorage';
+import { exportRound } from '../../../src/services/roundExport';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useFooterCenterButton } from '../../src/components/common/Footer';
+import { useFooterCenterButton } from '../../../src/components/common/Footer';
 import { Platform, Share, Alert, Clipboard } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 export default function RoundOverviewScreen() {
-  const { round: roundIdParam } = useLocalSearchParams<{ round: string }>();
+  const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
   const { registerCenterButtonHandler } = useFooterCenterButton();
   const [round, setRound] = useState<Round | null>(null);
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
-  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [numberOfHoles, setNumberOfHoles] = useState('9');
   const [courses, setCourses] = useState<any[]>([]);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
   const [addPlayerDialogVisible, setAddPlayerDialogVisible] = useState(false);
-  const [editPlayerDialog, setEditPlayerDialog] = useState<{ visible: boolean; playerId: number | null; initialName: string }>({ visible: false, playerId: null, initialName: '' });
+  const [editPlayerDialog, setEditPlayerDialog] = useState<{ visible: boolean; playerId: string | null; initialName: string }>({ visible: false, playerId: null, initialName: '' });
   const [copySuccess, setCopySuccess] = useState(false);
 
 
@@ -41,7 +41,6 @@ export default function RoundOverviewScreen() {
       try {
         const currentUserName = await getCurrentUserName();
         if (currentUserName) {
-          // Update the "You" player if it exists
           setPlayers((prev) =>
             prev.map((p) =>
               p.name === 'You'
@@ -68,7 +67,6 @@ export default function RoundOverviewScreen() {
       }
 
       try {
-        // Use UUID directly from URL
         const loadedRound = await getRoundById(roundIdParam);
         if (!loadedRound) {
           setErrorDialog({ visible: true, title: 'Error', message: 'Round not found' });
@@ -82,11 +80,9 @@ export default function RoundOverviewScreen() {
         const loadedPhotos = loadedRound.photos || [];
         setPhotos(loadedPhotos);
         
-        // Load courses to get hole count
         const loadedCourses = await getAllCourses();
         setCourses(loadedCourses);
         
-        // If round has a courseName, find and set the selectedCourseId immediately
         if (loadedRound.courseName) {
           const matchingCourse = loadedCourses.find(c => c.name.trim() === loadedRound.courseName!.trim());
           if (matchingCourse) {
@@ -96,12 +92,10 @@ export default function RoundOverviewScreen() {
               : (matchingCourse.holes as unknown as number || 0);
             setNumberOfHoles(holeCount.toString());
           } else {
-            // Course not found, let CourseSelector handle default selection
             setSelectedCourseId(null);
             setNumberOfHoles('9');
           }
         } else {
-          // No courseName, let CourseSelector handle default selection
           setSelectedCourseId(null);
           setNumberOfHoles('9');
         }
@@ -123,9 +117,8 @@ export default function RoundOverviewScreen() {
   const saveRoundData = useCallback(async () => {
     if (!round) return;
 
-    // Get course name from selected course ID
-    const { getAllCourses } = await import('../../src/services/storage/courseStorage');
-    let courseName: string | undefined = round.courseName; // Preserve existing courseName
+    const { getAllCourses } = await import('../../../src/services/storage/courseStorage');
+    let courseName: string | undefined = round.courseName;
     if (selectedCourseId) {
       const courses = await getAllCourses();
       const selectedCourse = courses.find((c) => c.id === selectedCourseId);
@@ -149,13 +142,12 @@ export default function RoundOverviewScreen() {
     if (round && !loading) {
       const timeoutId = setTimeout(() => {
         saveRoundData();
-      }, 500); // Debounce saves
+      }, 500);
 
       return () => clearTimeout(timeoutId);
     }
   }, [players, notes, photos, selectedCourseId, round, loading, saveRoundData]);
   
-
 
   const handlePlayersChange = useCallback((newPlayers: Player[]) => {
     setPlayers(newPlayers);
@@ -163,7 +155,6 @@ export default function RoundOverviewScreen() {
 
   const handleSaveNewPlayer = useCallback(async (name: string, username: string) => {
     try {
-      // Save to known users first
       const playerId = await getUserIdForPlayerName(name);
       const newUser: User = {
         id: playerId,
@@ -200,7 +191,7 @@ export default function RoundOverviewScreen() {
     }
   }, [players, editPlayerDialog.playerId]);
 
-  const handleEditPlayer = useCallback((playerId: number) => {
+  const handleEditPlayer = useCallback((playerId: string) => {
     const player = players.find((p) => p.id === playerId);
     if (player) {
       setEditPlayerDialog({
@@ -211,7 +202,7 @@ export default function RoundOverviewScreen() {
     }
   }, [players]);
 
-  const handleRemovePlayer = useCallback((playerId: number) => {
+  const handleRemovePlayer = useCallback((playerId: string) => {
     if (players.length === 1) {
       setWarningDialog({ visible: true, message: 'You must have at least one player' });
       return;
@@ -225,12 +216,10 @@ export default function RoundOverviewScreen() {
     try {
       const exportedText = await exportRound(round.id);
       
-      // Copy to clipboard
       if (Platform.OS === 'web') {
         if (navigator.clipboard) {
           await navigator.clipboard.writeText(exportedText);
         } else {
-          // Fallback for older browsers
           const textArea = document.createElement('textarea');
           textArea.value = exportedText;
           document.body.appendChild(textArea);
@@ -239,11 +228,9 @@ export default function RoundOverviewScreen() {
           document.body.removeChild(textArea);
         }
       } else {
-        // React Native
         Clipboard.setString(exportedText);
       }
       
-      // Show success feedback
       setCopySuccess(true);
       setTimeout(() => {
         setCopySuccess(false);
@@ -256,7 +243,7 @@ export default function RoundOverviewScreen() {
 
   const handleStartRound = useCallback(() => {
     if (!round) return;
-    router.push(`/${round.id}/play`);
+    router.push(`/round/${round.id}/holes`);
   }, [round]);
 
   // Register the start round handler with the footer
@@ -294,7 +281,7 @@ export default function RoundOverviewScreen() {
           icon="arrow-left"
           size={24}
           iconColor={theme.colors.onSurface}
-          onPress={() => router.push('/rounds')}
+          onPress={() => router.push('/round/list')}
           style={styles.backButton}
         />
       </View>
@@ -346,8 +333,9 @@ export default function RoundOverviewScreen() {
                   size={20}
                   iconColor={theme.colors.primary}
                   onPress={() => {
-                    const encodedCourseName = encodeURIComponent(round.courseName!);
-                    router.push(`/course/${encodedCourseName}`);
+                    const { encodeNameForUrl } = require('../../../src/utils/urlEncoding');
+                    const encodedCourseName = encodeNameForUrl(round.courseName!);
+                    router.push(`/course/${encodedCourseName}/overview`);
                   }}
                   style={styles.courseLinkIcon}
                 />
@@ -371,7 +359,6 @@ export default function RoundOverviewScreen() {
             />
           </View>
           {(() => {
-            // Calculate total score for each player (0 if no scores)
             const playerScores = players.map((player) => {
               const total = round.scores && round.scores.length > 0
                 ? round.scores
@@ -381,7 +368,6 @@ export default function RoundOverviewScreen() {
               return { player, total };
             });
 
-            // Find winner (lowest score wins in golf/disc golf) - only if scores exist
             let winner: typeof playerScores[0] | undefined;
             if (round.scores && round.scores.length > 0 && playerScores.length > 0) {
               const winnerScore = Math.min(...playerScores.map((ps) => ps.total));
@@ -403,7 +389,7 @@ export default function RoundOverviewScreen() {
                           isWinner={isWinner}
                           onPress={() => {
                             if (!round) return;
-                            router.push(`/${round.id}/play`);
+                            router.push(`/round/${round.id}/holes`);
                           }}
                         />
                         {!hasScores && players.length > 1 && (
@@ -419,7 +405,6 @@ export default function RoundOverviewScreen() {
                     );
                   })}
                 </View>
-                {/* Add button - only show if no scores */}
                 {!hasScores && (
                   <View style={styles.addButtonRow}>
                     <Button
@@ -453,8 +438,8 @@ export default function RoundOverviewScreen() {
           title="Edit Player"
           nameLabel="Player Name"
           initialName={editPlayerDialog.initialName}
-          initialUsername={''} // Deprecated, no longer used
-          excludeUserId={undefined} // Deprecated, no longer used
+          initialUsername={''}
+          excludeUserId={undefined}
           onDismiss={() => setEditPlayerDialog({ visible: false, playerId: null, initialName: '' })}
           onSave={handleSaveEditPlayer}
         />

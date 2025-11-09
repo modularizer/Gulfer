@@ -26,11 +26,11 @@ export default function SegmentedButtonsHeader({
         value={currentValue}
         onValueChange={(value) => {
           if (value === 'rounds') {
-            router.push('/rounds');
+            router.push('/round/list');
           } else if (value === 'courses') {
-            router.push('/courses');
+            router.push('/course/list');
           } else if (value === 'players') {
-            router.push('/players');
+            router.push('/player/list');
           }
         }}
         buttons={[

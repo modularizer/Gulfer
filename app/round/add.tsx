@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Platform, TouchableOpacity } from 'react-native';
-import { useTheme, Button, Text, IconButton } from 'react-native-paper';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Platform, TouchableOpacity, Alert } from 'react-native';
+import { useTheme, Button, Text, IconButton, Dialog, Portal, TextInput } from 'react-native-paper';
 import { router } from 'expo-router';
 
 let DateTimePicker: any;
@@ -8,9 +8,12 @@ if (Platform.OS !== 'web') {
   DateTimePicker = require('@react-native-community/datetimepicker').default;
 }
 import { createNewRound } from '../src/services/storage/roundStorage';
-import { getCurrentUserName, getUserIdForPlayerName } from '../src/services/storage/userStorage';
+import { getCurrentUserName, getUsernameForPlayerName } from '../src/services/storage/userStorage';
 import { getLastUsedCourse, getLatestAddedCourse } from '../src/services/storage/courseStorage';
+import { importRound } from '../src/services/roundExport';
+import { getImportMappingInfo, createManualMappings } from '../src/services/importMapping';
 import { Player } from '../src/types';
+import ImportMappingDialog from '../src/components/common/ImportMappingDialog';
 
 type RoundType = 'play-now' | 'past' | 'future' | null;
 
@@ -20,6 +23,16 @@ export default function NewRoundScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [importDialogVisible, setImportDialogVisible] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [mappingDialogVisible, setMappingDialogVisible] = useState(false);
+  const [importMappingInfo, setImportMappingInfo] = useState<{
+    foreignStorageId?: string;
+    foreignCourse: { foreignId: string; foreignName: string; localId: string | null; suggestedLocalId: string | null } | null;
+    foreignPlayers: Array<{ foreignId: string; foreignName: string; localId: string | null; suggestedLocalId: string | null }>;
+    localCourses: Array<{ id: string; name: string }>;
+    localPlayers: Array<{ id: string; name: string }>;
+  } | null>(null);
 
   useEffect(() => {
     // Initialize with current date/time
@@ -68,10 +81,11 @@ export default function NewRoundScreen() {
       // Try to get the current user's name, default to "You" if not set
       const currentUserName = await getCurrentUserName();
       const playerName = currentUserName || 'You';
-      const playerId = await getUserIdForPlayerName(playerName);
+      const username = await getUsernameForPlayerName(playerName);
       const defaultPlayer: Player = { 
-        id: playerId, 
+        id: 'player_1', 
         name: playerName,
+        username,
       };
       
       // Get default course (last used or latest added)
@@ -84,10 +98,8 @@ export default function NewRoundScreen() {
         date,
       });
       
-      // Redirect to the overview page using codename
-      const { idToCodename } = await import('../src/utils/idUtils');
-      const roundCodename = idToCodename(newRound.id);
-      router.replace(`/${roundCodename}/overview`);
+      // Redirect to the overview page
+      router.replace(`/round/${newRound.id}/overview`);
     } catch (error) {
       console.error('Error creating round:', error);
       router.push('/');
@@ -114,6 +126,72 @@ export default function NewRoundScreen() {
   const handleCancel = () => {
     setRoundType(null);
   };
+
+  const handleImportRound = useCallback(async () => {
+    if (!importText.trim()) {
+      Alert.alert('Error', 'Please paste the round export text');
+      return;
+    }
+
+    try {
+      // Parse the export to get mapping info
+      const mappingInfo = await getImportMappingInfo(importText);
+      
+      // If mapping is needed, show mapping dialog
+      if (mappingInfo.needsMapping) {
+        setImportMappingInfo({
+          foreignStorageId: mappingInfo.foreignStorageId,
+          foreignCourse: mappingInfo.courseMapping,
+          foreignPlayers: mappingInfo.playerMappings,
+          localCourses: mappingInfo.localCourses,
+          localPlayers: mappingInfo.localPlayers,
+        });
+        setImportDialogVisible(false);
+        setMappingDialogVisible(true);
+      } else {
+        // No mapping needed (all already mapped or no local entities exist), import directly
+        const newRoundId = await importRound(importText);
+        setImportText('');
+        setImportDialogVisible(false);
+        router.replace(`/round/${newRoundId}/overview`);
+      }
+    } catch (error) {
+      console.error('Error parsing import:', error);
+      Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to parse import');
+    }
+  }, [importText]);
+
+  const handleMappingConfirm = useCallback(async (mappings: {
+    courseMapping?: { foreignCourseId: string; localCourseId: string | null };
+    playerMappings: Array<{ foreignPlayerId: string; localPlayerId: string | null }>;
+  }) => {
+    try {
+      // Create manual mappings object - only include mappings where user selected an existing local entity
+      // If localCourseId/localPlayerId is null, it means "create new", so we don't include it in mappings
+      const manualMappings = createManualMappings({
+        courseMapping: mappings.courseMapping && mappings.courseMapping.localCourseId ? {
+          foreignCourseId: mappings.courseMapping.foreignCourseId,
+          localCourseId: mappings.courseMapping.localCourseId,
+        } : undefined,
+        playerMappings: mappings.playerMappings
+          .filter(m => m.localPlayerId !== null)
+          .map(m => ({
+            foreignPlayerId: m.foreignPlayerId,
+            localPlayerId: m.localPlayerId!,
+          })),
+      });
+
+      // Import with manual mappings (null means "create new", which importRound handles automatically)
+      const newRoundId = await importRound(importText, manualMappings);
+      setImportText('');
+      setMappingDialogVisible(false);
+      setImportMappingInfo(null);
+      router.replace(`/${newRoundId}/overview`);
+    } catch (error) {
+      console.error('Error importing round:', error);
+      Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to import round');
+    }
+  }, [importText]);
 
   if (roundType === null) {
     // Show three options
@@ -169,7 +247,78 @@ export default function NewRoundScreen() {
           >
             Schedule Game
           </Button>
+
+          <Button
+            mode="outlined"
+            icon="import"
+            onPress={() => setImportDialogVisible(true)}
+            style={styles.optionButton}
+            contentStyle={styles.buttonContent}
+          >
+            Import Round
+          </Button>
         </ScrollView>
+
+        {/* Import Dialog */}
+        <Portal>
+          <Dialog
+            visible={importDialogVisible}
+            onDismiss={() => {
+              setImportDialogVisible(false);
+              setImportText('');
+            }}
+            style={styles.importDialog}
+          >
+            <Dialog.Title>Import Round</Dialog.Title>
+            <Dialog.Content>
+              <Text style={[styles.importHelpText, { color: theme.colors.onSurfaceVariant }]}>
+                Paste the round export text below. You'll be able to map imported entities to your local entities.
+              </Text>
+              <TextInput
+                mode="outlined"
+                value={importText}
+                onChangeText={setImportText}
+                multiline
+                numberOfLines={20}
+                style={styles.importTextInput}
+                contentStyle={styles.importTextContent}
+                placeholder="Paste round export text here..."
+              />
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => {
+                setImportDialogVisible(false);
+                setImportText('');
+              }}>
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleImportRound}
+                disabled={!importText.trim()}
+              >
+                Next
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
+
+        {/* Mapping Dialog */}
+        {importMappingInfo && (
+          <ImportMappingDialog
+            visible={mappingDialogVisible}
+            foreignCourse={importMappingInfo.foreignCourse}
+            foreignPlayers={importMappingInfo.foreignPlayers}
+            localCourses={importMappingInfo.localCourses}
+            localPlayers={importMappingInfo.localPlayers}
+            onDismiss={() => {
+              setMappingDialogVisible(false);
+              setImportMappingInfo(null);
+              setImportText('');
+            }}
+            onConfirm={handleMappingConfirm}
+          />
+        )}
       </View>
     );
   }
@@ -394,6 +543,20 @@ const styles = StyleSheet.create({
   },
   confirmButton: {
     marginTop: 8,
+  },
+  importDialog: {
+    maxHeight: '80%',
+  },
+  importHelpText: {
+    marginBottom: 12,
+    fontSize: 14,
+  },
+  importTextInput: {
+    maxHeight: 400,
+  },
+  importTextContent: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 12,
   },
 });
 

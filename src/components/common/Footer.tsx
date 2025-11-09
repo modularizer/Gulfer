@@ -30,8 +30,8 @@ interface FooterProps {
 export default function Footer({ customCenterHandler }: FooterProps) {
   const pathname = usePathname();
   
-  // Check if we're on a play page (but not on /players page)
-  const isPlayPage = (pathname?.includes('/play') && !pathname?.includes('/players')) || false;
+  // Check if we're on a holes page (but not on /players page)
+  const isHolesPage = (pathname?.includes('/holes') && !pathname?.includes('/players')) || false;
 
   const handleCenterPress = useCallback(async () => {
     if (customCenterHandler) {
@@ -56,9 +56,7 @@ export default function Footer({ customCenterHandler }: FooterProps) {
                  date: Date.now(),
                });
         
-        const { idToCodename } = await import('../../utils/idUtils');
-        const roundCodename = idToCodename(newRound.id);
-        router.replace(`/${roundCodename}/overview`);
+        router.replace(`/round/${newRound.id}/overview`);
       } catch (error) {
         console.error('Error creating round:', error);
         router.push('/');
@@ -71,13 +69,12 @@ export default function Footer({ customCenterHandler }: FooterProps) {
       const users = await getAllUsers();
       const currentUser = users.find(u => u.isCurrentUser);
       if (currentUser) {
-        // Navigate to player page using codename
-        const { idToCodename } = await import('../../utils/idUtils');
-        const playerCodename = idToCodename(currentUser.id);
-        router.push(`/player/${playerCodename}`);
+        // Navigate to player page using encoded name
+        const { encodeNameForUrl } = await import('../../utils/urlEncoding');
+        router.push(`/player/${encodeNameForUrl(currentUser.name)}/overview`);
       } else {
         // No user set, navigate to /you page to set it
-        router.push('/you');
+        router.push('/player/me');
       }
     } catch (error) {
       console.error('Error navigating to profile:', error);
@@ -87,10 +84,10 @@ export default function Footer({ customCenterHandler }: FooterProps) {
 
   return (
     <HillFooter
-      onHistoryPress={() => router.push('/rounds')}
+      onHistoryPress={() => router.push('/round/list')}
       onNewRoundPress={handleCenterPress}
       onProfilePress={handleProfilePress}
-      showCenterButton={!isPlayPage}
+      showCenterButton={!isHolesPage}
     />
   );
 }

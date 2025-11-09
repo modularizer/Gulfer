@@ -62,13 +62,12 @@ export default function YouScreen() {
       }
 
       setError('');
-      // Navigate to the player page after saving using codename
-      const { idToCodename } = await import('../src/utils/idUtils');
+      // Navigate to the player page after saving
       const usersAfterSave = await getAllUsers();
       const savedUser = usersAfterSave.find(u => u.isCurrentUser);
       if (savedUser) {
-        const playerCodename = idToCodename(savedUser.id);
-        router.replace(`/player/${playerCodename}`);
+        const { encodeNameForUrl } = await import('../src/utils/urlEncoding');
+        router.replace(`/player/${encodeNameForUrl(savedUser.name)}/overview`);
       }
     } catch (error) {
       console.error('Error saving name:', error);
