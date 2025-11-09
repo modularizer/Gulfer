@@ -5,8 +5,10 @@ import { Button, Dialog, Portal, IconButton, useTheme, Text, Card, Chip } from '
 import { TouchableOpacity } from 'react-native';
 import { Course, Hole, Round, Player, Score } from '../../src/types';
 import PhotoGallery from '../../src/components/common/PhotoGallery';
+import PlayerChip from '../../src/components/common/PlayerChip';
 import { getCourseByName, saveCourse } from '../../src/services/storage/courseStorage';
 import { getAllRounds } from '../../src/services/storage/roundStorage';
+import { ensurePlayerHasUsername } from '../../src/services/storage/userStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFooterCenterButton } from '../../src/components/common/Footer';
 
@@ -46,24 +48,41 @@ export default function CourseDetailScreen() {
         
         // Load rounds for this course
         const allRounds = await getAllRounds();
-        const courseRounds = allRounds.filter(r => r.courseName === courseName);
+        // Match course name (trim whitespace for robustness)
+        const courseRounds = allRounds.filter(r => {
+          const roundCourseName = r.courseName?.trim();
+          const trimmedCourseName = courseName.trim();
+          return roundCourseName === trimmedCourseName;
+        });
+        
+        console.log(`Course "${courseName}": Found ${courseRounds.length} rounds`);
+        console.log('All rounds:', allRounds.map(r => ({ id: r.id, courseName: r.courseName })));
+        
         setRounds(courseRounds);
         
         // Calculate best scores per player
         const bestScoresMap = new Map<string, { player: Player; score: number }>();
-        courseRounds.forEach(round => {
+        await Promise.all(courseRounds.map(async (round) => {
           if (round.scores && round.scores.length > 0 && round.players) {
-            round.players.forEach(player => {
+            await Promise.all(round.players.map(async (player) => {
               const playerScores = round.scores!.filter(s => s.playerId === player.id);
               const total = playerScores.reduce((sum, s) => sum + s.throws, 0);
               
-              const existing = bestScoresMap.get(player.id);
-              if (!existing || total < existing.score) {
-                bestScoresMap.set(player.id, { player, score: total });
+              // Ensure player has username
+              const playerWithUsername = await ensurePlayerHasUsername(player);
+              if (!playerWithUsername.username) {
+                console.error('Player missing username:', player);
+                return;
               }
-            });
+              
+              const key = playerWithUsername.username;
+              const existing = bestScoresMap.get(key);
+              if (!existing || total < existing.score) {
+                bestScoresMap.set(key, { player: { ...player, username: playerWithUsername.username }, score: total });
+              }
+            }));
           }
-        });
+        }));
         setBestScores(bestScoresMap);
       } catch (error) {
         console.error('Error loading course:', error);
@@ -171,27 +190,43 @@ export default function CourseDetailScreen() {
         </View>
 
         {/* Best Scores Section */}
-        {bestScores.size > 0 && (
-          <View style={styles.bestScoresSection}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-              Best Scores
-            </Text>
+        <View style={styles.bestScoresSection}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+            Best Scores
+          </Text>
+          {bestScores.size > 0 ? (
             <View style={styles.bestScoresContainer}>
               {Array.from(bestScores.values())
                 .sort((a, b) => a.score - b.score)
-                .map(({ player, score }) => (
-                  <Chip
-                    key={player.id}
-                    style={styles.bestScoreChip}
-                    textStyle={styles.bestScoreChipText}
-                    onPress={() => router.push(`/player/${encodeURIComponent(player.username || player.name)}`)}
-                  >
-                    {player.name}: {score}
-                  </Chip>
-                ))}
+                .map(({ player, score }) => {
+                  if (!player.username) {
+                    console.error('Player missing username:', player);
+                    return null;
+                  }
+                  const playerUsername = player.username; // TypeScript guard
+                  // Find winner (lowest score)
+                  const allScores = Array.from(bestScores.values());
+                  const winnerScore = Math.min(...allScores.map(ps => ps.score));
+                  const isWinner = score === winnerScore;
+                  
+                  return (
+                    <PlayerChip
+                      key={playerUsername}
+                      player={player}
+                      score={score}
+                      isWinner={isWinner}
+                      onPress={() => router.push(`/player/${encodeURIComponent(playerUsername)}`)}
+                    />
+                  );
+                })
+                .filter(Boolean)}
             </View>
-          </View>
-        )}
+          ) : (
+            <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
+              No scores recorded yet
+            </Text>
+          )}
+        </View>
 
         {/* Rounds Section */}
         {rounds.length > 0 && (
@@ -259,7 +294,7 @@ export default function CourseDetailScreen() {
                                       isWinner && styles.winnerChipText,
                                     ]}
                                     icon={isWinner ? 'crown' : undefined}
-                                    onPress={() => router.push(`/player/${encodeURIComponent(player.username || player.name)}`)}
+                                    onPress={() => router.push(`/${round.id}/play`)}
                                   >
                                     {player.name}: {total}
                                   </Chip>
@@ -365,11 +400,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
-  bestScoreChip: {
-    height: 32,
-  },
-  bestScoreChipText: {
+  emptyText: {
     fontSize: 14,
+    fontStyle: 'italic',
   },
   roundsSection: {
     paddingHorizontal: 24,

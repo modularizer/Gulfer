@@ -11,6 +11,7 @@ interface CourseScore {
   course: Course;
   bestScore: number;
   roundCount: number;
+  bestRoundId: string;
 }
 
 export default function PlayerDetailScreen() {
@@ -46,53 +47,57 @@ export default function PlayerDetailScreen() {
         setAllCourses(loadedCourses);
 
         // Find all rounds where this player participated
-        // Match by username (preferred) or name (fallback for old data)
+        // Match by username only
         const playerRounds = allRounds.filter(round => {
-          const playerInRound = round.players.find(p => 
-            p.username === foundPlayer.username || 
-            (!p.username && p.name === foundPlayer.name)
-          );
+          const playerInRound = round.players.find(p => p.username === foundPlayer.username);
           return playerInRound && round.scores && round.scores.length > 0;
         });
 
         // Group by course and calculate best score per course
-        const courseScoreMap = new Map<string, { course: Course; bestScore: number; roundCount: number }>();
+        const courseScoreMap = new Map<string, { course: Course; bestScore: number; roundCount: number; bestRoundId: string }>();
         
-        // First, count rounds per course
+        // First, count rounds per course (using trimmed names for consistency)
         const courseRoundCounts = new Map<string, number>();
         playerRounds.forEach(round => {
           if (round.courseName) {
-            courseRoundCounts.set(round.courseName, (courseRoundCounts.get(round.courseName) || 0) + 1);
+            const trimmedName = round.courseName.trim();
+            courseRoundCounts.set(trimmedName, (courseRoundCounts.get(trimmedName) || 0) + 1);
           }
         });
         
         playerRounds.forEach(round => {
           if (!round.courseName) return;
           
-          // Find the course
-          const course = loadedCourses.find(c => c.name === round.courseName);
-          if (!course) return;
+          // Find the course (trim whitespace for robustness)
+          const roundCourseName = round.courseName.trim();
+          const course = loadedCourses.find(c => c.name.trim() === roundCourseName);
+          if (!course) {
+            console.log(`Course not found for round "${round.id}": "${roundCourseName}"`);
+            console.log('Available courses:', loadedCourses.map(c => c.name));
+            return;
+          }
 
-          // Find the player in this round (match by username or name)
-          const playerInRound = round.players.find(p => 
-            p.username === foundPlayer.username || 
-            (!p.username && p.name === foundPlayer.name)
-          );
-          if (!playerInRound) return;
+          // Find the player in this round (match by username only)
+          const playerInRound = round.players.find(p => p.username === foundPlayer.username);
+          if (!playerInRound) {
+            console.log(`Player "${foundPlayer.username}" not found in round "${round.id}"`);
+            return;
+          }
 
           // Calculate player's score for this round (match by player ID from the round)
           const playerScores = round.scores!.filter(s => s.playerId === playerInRound.id);
           const total = playerScores.reduce((sum, s) => sum + s.throws, 0);
 
-          // Update best score for this course
-          const existing = courseScoreMap.get(round.courseName);
-          const roundCount = courseRoundCounts.get(round.courseName) || 0;
+          // Update best score for this course (use trimmed name as key)
+          const existing = courseScoreMap.get(roundCourseName);
+          const roundCount = courseRoundCounts.get(roundCourseName) || 0;
           
           if (!existing || total < existing.bestScore) {
-            courseScoreMap.set(round.courseName, {
+            courseScoreMap.set(roundCourseName, {
               course,
               bestScore: total,
               roundCount,
+              bestRoundId: round.id,
             });
           } else if (existing.roundCount !== roundCount) {
             // Update round count if it changed
@@ -169,7 +174,7 @@ export default function PlayerDetailScreen() {
               Courses ({courseScores.length})
             </Text>
             <View style={styles.coursesList}>
-              {courseScores.map(({ course, bestScore, roundCount }) => {
+              {courseScores.map(({ course, bestScore, roundCount, bestRoundId }) => {
                 const holeCount = Array.isArray(course.holes) 
                   ? course.holes.length 
                   : (course.holes as unknown as number || 0);
@@ -193,9 +198,19 @@ export default function PlayerDetailScreen() {
                           </Chip>
                         </View>
                         <View style={styles.courseStats}>
-                          <Chip style={styles.scoreChip} icon="trophy">
-                            Best: {bestScore}
-                          </Chip>
+                          <TouchableOpacity
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              router.push(`/${bestRoundId}/play`);
+                            }}
+                          >
+                            <Chip 
+                              style={styles.scoreChip} 
+                              icon="trophy"
+                            >
+                              Best: {bestScore}
+                            </Chip>
+                          </TouchableOpacity>
                           <Chip style={styles.roundChip}>
                             {roundCount} {roundCount === 1 ? 'round' : 'rounds'}
                           </Chip>
@@ -237,11 +252,8 @@ export default function PlayerDetailScreen() {
                   hour12: true,
                 });
 
-                // Find the player in this round (match by username or name)
-                const playerInRound = round.players.find(p => 
-                  p.username === player!.username || 
-                  (!p.username && p.name === player!.name)
-                );
+                // Find the player in this round (match by username only)
+                const playerInRound = round.players.find(p => p.username === player!.username);
                 const playerScores = playerInRound 
                   ? round.scores!.filter(s => s.playerId === playerInRound.id)
                   : [];
@@ -308,7 +320,7 @@ export default function PlayerDetailScreen() {
                                     isCurrentPlayer && !isWinner && styles.currentPlayerChipText,
                                   ]}
                                   icon={isWinner ? 'crown' : undefined}
-                                  onPress={() => router.push(`/player/${encodeURIComponent(p.username || p.name)}`)}
+                                  onPress={() => router.push(`/${round.id}/play`)}
                                 >
                                   {p.name}: {total}
                                 </Chip>

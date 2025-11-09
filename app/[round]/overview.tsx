@@ -85,10 +85,25 @@ export default function RoundOverviewScreen() {
         const loadedCourses = await getAllCourses();
         setCourses(loadedCourses);
         
-        // Course selection will be handled by CourseSelector component
-        // Just store the course name for initial matching
-        setSelectedCourseId(null);
-        setNumberOfHoles('9');
+        // If round has a courseName, find and set the selectedCourseId immediately
+        if (loadedRound.courseName) {
+          const matchingCourse = loadedCourses.find(c => c.name.trim() === loadedRound.courseName!.trim());
+          if (matchingCourse) {
+            setSelectedCourseId(matchingCourse.id);
+            const holeCount = Array.isArray(matchingCourse.holes) 
+              ? matchingCourse.holes.length 
+              : (matchingCourse.holes as unknown as number || 0);
+            setNumberOfHoles(holeCount.toString());
+          } else {
+            // Course not found, let CourseSelector handle default selection
+            setSelectedCourseId(null);
+            setNumberOfHoles('9');
+          }
+        } else {
+          // No courseName, let CourseSelector handle default selection
+          setSelectedCourseId(null);
+          setNumberOfHoles('9');
+        }
       } catch (error) {
         console.error('Error loading round:', error);
         setErrorDialog({ visible: true, title: 'Error', message: 'Failed to load round' });
@@ -109,11 +124,11 @@ export default function RoundOverviewScreen() {
 
     // Get course name from selected course ID
     const { getAllCourses } = await import('../../src/services/storage/courseStorage');
-    let courseName: string | undefined;
+    let courseName: string | undefined = round.courseName; // Preserve existing courseName
     if (selectedCourseId) {
       const courses = await getAllCourses();
       const selectedCourse = courses.find((c: { id: string }) => c.id === selectedCourseId);
-      courseName = selectedCourse ? selectedCourse.name : undefined;
+      courseName = selectedCourse ? selectedCourse.name.trim() : round.courseName;
     }
 
     const updatedRound: Round = {
@@ -121,7 +136,7 @@ export default function RoundOverviewScreen() {
       players,
       notes: notes.trim() || undefined,
       photos: photos.length > 0 ? photos : undefined,
-      courseName,
+      courseName: courseName?.trim() || undefined,
     };
 
     await saveRound(updatedRound);
@@ -386,7 +401,9 @@ export default function RoundOverviewScreen() {
                           player={player}
                           score={total}
                           isWinner={isWinner}
-                          onPress={() => router.push(`/player/${encodeURIComponent(player.username || player.name)}`)}
+                          onPress={() => {
+                            router.push(`/${roundId}/play`);
+                          }}
                         />
                         {!hasScores && players.length > 1 && (
                           <IconButton

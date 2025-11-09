@@ -233,6 +233,7 @@ export default function RoundHistoryScreen() {
                       player={player}
                       score={total}
                       isWinner={isWinner}
+                      onPress={() => router.push(`/${item.id}/play`)}
                     />
                   );
                 })}

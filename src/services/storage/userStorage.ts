@@ -200,6 +200,18 @@ export async function getUsernameForPlayerName(playerName: string): Promise<stri
 }
 
 /**
+ * Ensure a player has a username, setting it if missing
+ */
+export async function ensurePlayerHasUsername(player: { name: string; username?: string }): Promise<{ name: string; username: string }> {
+  if (player.username) {
+    return { name: player.name, username: player.username };
+  }
+  
+  const username = await getUsernameForPlayerName(player.name);
+  return { name: player.name, username };
+}
+
+/**
  * Get the current user's profile image hash
  */
 export async function getProfileImageHash(): Promise<string | null> {

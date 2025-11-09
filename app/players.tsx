@@ -46,7 +46,7 @@ export default function PlayersScreen() {
   }, [loadPlayers]);
 
   const handlePlayerPress = useCallback(
-    (playerId: string, playerName: string) => {
+    (playerId: string) => {
       // If in selection mode, toggle selection instead of navigating
       if (selectedPlayerIds.size > 0) {
         setSelectedPlayerIds((prev) => {
@@ -60,11 +60,14 @@ export default function PlayersScreen() {
         });
       } else {
         const player = players.find(p => p.id === playerId);
-        const identifier = player?.username || playerName;
-        router.push(`/player/${encodeURIComponent(identifier)}`);
+        if (!player || !player.username) {
+          console.error('Player missing username:', player);
+          return;
+        }
+        router.push(`/player/${encodeURIComponent(player.username)}`);
       }
     },
-    [selectedPlayerIds.size]
+    [selectedPlayerIds.size, players]
   );
 
   const handlePlayerLongPress = useCallback(
@@ -124,7 +127,7 @@ export default function PlayersScreen() {
       
       return (
         <TouchableOpacity
-          onPress={() => handlePlayerPress(item.id, item.name)}
+          onPress={() => handlePlayerPress(item.id)}
           onLongPress={() => handlePlayerLongPress(item.id)}
         >
           <Card style={[

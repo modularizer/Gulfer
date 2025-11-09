@@ -23,9 +23,11 @@ export default function PlayerChip({
     if (onPress) {
       onPress();
     } else {
-      // Use username if available, fallback to name for backward compatibility
-      const identifier = player.username || player.name;
-      router.push(`/player/${encodeURIComponent(identifier)}`);
+      if (!player.username) {
+        console.error('Player missing username:', player);
+        return;
+      }
+      router.push(`/player/${encodeURIComponent(player.username)}`);
     }
   };
 

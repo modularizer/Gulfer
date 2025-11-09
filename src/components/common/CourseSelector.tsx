@@ -40,12 +40,13 @@ export default function CourseSelector({
         
         // If we have an initial course name but no selected course ID, try to find it
         if (initialCourseName && !selectedCourseId && !isInitialized) {
-          const matchingCourse = loadedCourses.find(c => c.name === initialCourseName);
-            if (matchingCourse) {
-              onCourseChange(matchingCourse.id);
-              if (onHolesChange) {
-                onHolesChange(getHoleCount(matchingCourse));
-              }
+          const trimmedInitialName = initialCourseName.trim();
+          const matchingCourse = loadedCourses.find(c => c.name.trim() === trimmedInitialName);
+          if (matchingCourse) {
+            onCourseChange(matchingCourse.id);
+            if (onHolesChange) {
+              onHolesChange(getHoleCount(matchingCourse));
+            }
           } else {
             // No match found - default to last used or latest added
             const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();

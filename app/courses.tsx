@@ -10,6 +10,7 @@ import { Card, Title, Paragraph, useTheme, Chip, Button, Dialog, Portal, TextInp
 import { Course, Round, Player, Score } from '../src/types';
 import { getAllCourses, saveCourse, generateCourseId, deleteCourse } from '../src/services/storage/courseStorage';
 import { getAllRounds } from '../src/services/storage/roundStorage';
+import { ensurePlayerHasUsername } from '../src/services/storage/userStorage';
 import { getShadowStyle } from '../src/utils';
 import { router } from 'expo-router';
 import {
@@ -39,29 +40,52 @@ export default function CoursesScreen() {
       const allRounds = await getAllRounds();
       const bestScoresMap = new Map<string, Map<string, { player: Player; score: number }>>();
       
-      loadedCourses.forEach(course => {
-        const courseRounds = allRounds.filter(r => r.courseName === course.name);
+      // Debug: log all rounds and their course names
+      console.log('All rounds:', allRounds.map(r => ({ id: r.id, courseName: r.courseName, scoresCount: r.scores?.length || 0 })));
+      console.log('All courses:', loadedCourses.map(c => ({ id: c.id, name: c.name })));
+      
+      await Promise.all(loadedCourses.map(async (course) => {
+        // Match course name (trim whitespace for robustness)
+        const courseRounds = allRounds.filter(r => {
+          const roundCourseName = r.courseName?.trim();
+          const courseName = course.name.trim();
+          return roundCourseName === courseName;
+        });
+        
+        console.log(`Course "${course.name}": Found ${courseRounds.length} rounds`);
+        
         const courseBestScores = new Map<string, { player: Player; score: number }>();
         
-        courseRounds.forEach(round => {
+        await Promise.all(courseRounds.map(async (round) => {
           if (round.scores && round.scores.length > 0 && round.players) {
-            round.players.forEach(player => {
+            await Promise.all(round.players.map(async (player) => {
               const playerScores = round.scores!.filter(s => s.playerId === player.id);
+              if (playerScores.length === 0) return; // Skip if no scores for this player
+              
               const total = playerScores.reduce((sum, s) => sum + s.throws, 0);
               
-              // Use player name as key for consistency (since we're using names as IDs)
-              const existing = courseBestScores.get(player.name);
-              if (!existing || total < existing.score) {
-                courseBestScores.set(player.name, { player, score: total });
+              // Ensure player has username
+              const playerWithUsername = await ensurePlayerHasUsername(player);
+              if (!playerWithUsername.username) {
+                console.error('Player missing username:', player);
+                return;
               }
-            });
+              
+              const key = playerWithUsername.username;
+              const existing = courseBestScores.get(key);
+              if (!existing || total < existing.score) {
+                courseBestScores.set(key, { player: { ...player, username: playerWithUsername.username }, score: total });
+              }
+            }));
           }
-        });
+        }));
+        
+        console.log(`Course "${course.name}": Best scores count: ${courseBestScores.size}`);
         
         if (courseBestScores.size > 0) {
           bestScoresMap.set(course.id, courseBestScores);
         }
-      });
+      }));
       
       setBestScoresByCourse(bestScoresMap);
     } catch (error) {
@@ -200,23 +224,30 @@ export default function CoursesScreen() {
                   {item.name} ({holeCount} {holeCount === 1 ? 'hole' : 'holes'})
                 </Title>
               </View>
-              {bestScoresArray.length > 0 && (
+              {bestScoresArray.length > 0 ? (
                 <View style={styles.bestScoresContainer}>
                   {bestScoresArray
                     .sort((a, b) => a.score - b.score)
                     .map(({ player, score }) => {
-                      const isWinner = winner && (player.username || player.name) === (winner.player.username || winner.player.name);
+                      if (!player.username) {
+                        console.error('Player missing username:', player);
+                        return null;
+                      }
+                      const playerUsername = player.username; // TypeScript guard
+                      const isWinner = winner ? playerUsername === winner.player.username : false;
                       return (
                         <PlayerChip
-                          key={player.name}
+                          key={playerUsername}
                           player={player}
                           score={score}
                           isWinner={isWinner}
+                          onPress={() => router.push(`/player/${encodeURIComponent(playerUsername)}`)}
                         />
                       );
-                    })}
+                    })
+                    .filter(Boolean)}
                 </View>
-              )}
+              ) : null}
             </Card.Content>
           </Card>
         </TouchableOpacity>
