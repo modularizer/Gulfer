@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text } from 'react-native-paper';
+import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text, Chip } from 'react-native-paper';
 import { Player, Round } from '../../src/types';
 import PhotoGallery from '../../src/components/common/PhotoGallery';
 import CourseSelector from '../../src/components/common/CourseSelector';
 import PlayerSelector from '../../src/components/common/PlayerSelector';
 import { getRoundById, saveRound } from '../../src/services/storage/roundStorage';
 import { getCurrentUserName } from '../../src/services/storage/userStorage';
+import { getAllCourses } from '../../src/services/storage/courseStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFooterCenterButton } from '../../src/components/common/Footer';
 
@@ -23,6 +24,7 @@ export default function RoundOverviewScreen() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [numberOfHoles, setNumberOfHoles] = useState('9');
+  const [courses, setCourses] = useState<any[]>([]);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
 
@@ -72,6 +74,10 @@ export default function RoundOverviewScreen() {
         setNotes(loadedRound.notes || '');
         const loadedPhotos = loadedRound.photos || [];
         setPhotos(loadedPhotos);
+        
+        // Load courses to get hole count
+        const loadedCourses = await getAllCourses();
+        setCourses(loadedCourses);
         
         // Course selection will be handled by CourseSelector component
         // Just store the course name for initial matching
@@ -173,7 +179,7 @@ export default function RoundOverviewScreen() {
           icon="arrow-left"
           size={24}
           iconColor={theme.colors.onSurface}
-          onPress={() => router.push('/')}
+          onPress={() => router.push('/round-history')}
           style={styles.backButton}
         />
       </View>
@@ -212,20 +218,83 @@ export default function RoundOverviewScreen() {
         {/* Location and Number of Holes Input */}
         <View style={styles.inputSection}>
           <View style={styles.inputRow}>
-            <CourseSelector
-              selectedCourseId={selectedCourseId}
-              onCourseChange={setSelectedCourseId}
-              onHolesChange={(holes) => setNumberOfHoles(holes.toString())}
-              initialCourseName={round.courseName}
-            />
+            <View style={styles.courseSelectorContainer}>
+              <CourseSelector
+                selectedCourseId={selectedCourseId}
+                onCourseChange={setSelectedCourseId}
+                onHolesChange={(holes) => setNumberOfHoles(holes.toString())}
+                initialCourseName={round.courseName}
+              />
+              {round.courseName && (
+                <IconButton
+                  icon="arrow-right"
+                  size={20}
+                  iconColor={theme.colors.primary}
+                  onPress={() => {
+                    const encodedCourseName = encodeURIComponent(round.courseName!);
+                    router.push(`/course/${encodedCourseName}`);
+                  }}
+                  style={styles.courseLinkIcon}
+                />
+              )}
+            </View>
           </View>
         </View>
 
         {/* Players Section */}
-        <PlayerSelector
-          players={players}
-          onPlayersChange={handlePlayersChange}
-        />
+        {round.scores && round.scores.length > 0 ? (
+          // Show player badges with scores if game has been played
+          <View style={styles.playersSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+                Players
+              </Text>
+            </View>
+            {(() => {
+              // Calculate total score for each player
+              const playerScores = players.map((player) => {
+                const total = round.scores!
+                  .filter((s) => s.playerId === player.id)
+                  .reduce((sum, s) => sum + s.throws, 0);
+                return { player, total };
+              });
+
+              // Find winner (lowest score wins in golf/disc golf)
+              const winnerScore = Math.min(...playerScores.map((ps) => ps.total));
+              const winner = playerScores.find((ps) => ps.total === winnerScore);
+
+              return (
+                <View style={styles.playersContainer}>
+                  {playerScores.map(({ player, total }) => {
+                    const isWinner = winner && player.id === winner.player.id;
+                    return (
+                      <Chip
+                        key={player.id}
+                        style={[
+                          styles.playerChip,
+                          isWinner && styles.winnerChip,
+                        ]}
+                        textStyle={[
+                          styles.playerChipText,
+                          isWinner && styles.winnerChipText,
+                        ]}
+                        icon={isWinner ? 'crown' : undefined}
+                      >
+                        {player.name}: {total}
+                      </Chip>
+                    );
+                  })}
+                </View>
+              );
+            })()}
+          </View>
+        ) : (
+          // Show PlayerSelector for editing when no scores
+          <PlayerSelector
+            players={players}
+            onPlayersChange={handlePlayersChange}
+          />
+        )}
 
         {/* Notes Section */}
         <View style={styles.notesSection}>
@@ -318,14 +387,14 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     width: '100%',
-    height: 200,
+    height: 170,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f0f0',
   },
   logoImage: {
-    width: 120,
-    height: 120,
+    width: 80,
+    height: 80,
   },
   dateSection: {
     paddingHorizontal: 24,
@@ -336,6 +405,50 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  courseSelectorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  courseLinkIcon: {
+    margin: 0,
+    padding: 0,
+  },
+  playersSection: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  playersContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  playerChip: {
+    height: 36,
+    borderRadius: 8,
+  },
+  winnerChip: {
+    backgroundColor: '#FFD700',
+  },
+  playerChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  winnerChipText: {
+    color: '#000',
+    fontWeight: 'bold',
   },
   inputSection: {
     paddingHorizontal: 24,

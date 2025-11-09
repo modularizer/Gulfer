@@ -49,6 +49,32 @@ export async function saveCourse(course: Course): Promise<void> {
 }
 
 /**
+ * Get a course by ID
+ */
+export async function getCourseById(courseId: string): Promise<Course | null> {
+  try {
+    const courses = await getAllCourses();
+    return courses.find((c) => c.id === courseId) || null;
+  } catch (error) {
+    console.error('Error loading course:', error);
+    return null;
+  }
+}
+
+/**
+ * Get a course by name
+ */
+export async function getCourseByName(courseName: string): Promise<Course | null> {
+  try {
+    const courses = await getAllCourses();
+    return courses.find((c) => c.name === courseName) || null;
+  } catch (error) {
+    console.error('Error loading course by name:', error);
+    return null;
+  }
+}
+
+/**
  * Delete a course by ID
  */
 export async function deleteCourse(courseId: string): Promise<void> {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Text, Button } from 'react-native-paper';
+import { Text, Button, IconButton, useTheme } from 'react-native-paper';
 import { Player, Score, Course, Hole } from '../../types';
 import { getAllCourses } from '../../services/storage/courseStorage';
 import NumberModal from '../common/NumberModal';
@@ -17,6 +17,7 @@ interface ScorecardProps {
   readOnly?: boolean;
   allowAddPlayer?: boolean;
   courseName?: string;
+  onBack?: () => void;
 }
 
 export default function Scorecard({
@@ -31,7 +32,9 @@ export default function Scorecard({
   readOnly = false,
   allowAddPlayer = true,
   courseName,
+  onBack,
 }: ScorecardProps) {
+  const theme = useTheme();
   const [editModal, setEditModal] = useState<{
     visible: boolean;
     playerId: string | null;
@@ -127,7 +130,17 @@ export default function Scorecard({
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.headerRowContent}>
             <View style={[styles.cell, styles.headerCell, styles.holeHeaderCell]}>
-              <Text style={styles.headerText}>#</Text>
+              {onBack ? (
+                <IconButton
+                  icon="arrow-left"
+                  size={20}
+                  iconColor="#fff"
+                  onPress={onBack}
+                  style={styles.backIconButton}
+                />
+              ) : (
+                <Text style={styles.headerText}>#</Text>
+              )}
             </View>
             <TouchableOpacity
               style={[styles.cell, styles.headerCell, styles.distanceHeaderCell]}
@@ -285,6 +298,14 @@ const styles = StyleSheet.create({
   holeHeaderCell: {
     width: 40,
     minWidth: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backIconButton: {
+    margin: 0,
+    padding: 0,
+    width: 40,
+    height: 40,
   },
   distanceHeaderCell: {
     width: 70,

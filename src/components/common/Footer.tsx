@@ -24,11 +24,10 @@ interface FooterProps {
 }
 
 export default function Footer({ customCenterHandler }: FooterProps) {
-  const { toggleTheme } = useTheme();
   const pathname = usePathname();
   
-  // Check if we're on a play page
-  const isPlayPage = pathname?.includes('/play') || false;
+  // Check if we're on a play page (but not on /players page)
+  const isPlayPage = (pathname?.includes('/play') && !pathname?.includes('/players')) || false;
 
   const handleCenterPress = useCallback(() => {
     if (customCenterHandler) {
@@ -42,7 +41,7 @@ export default function Footer({ customCenterHandler }: FooterProps) {
     <HillFooter
       onHistoryPress={() => router.push('/round-history')}
       onNewRoundPress={handleCenterPress}
-      onProfilePress={toggleTheme}
+      onProfilePress={() => router.push('/profile')}
       showCenterButton={!isPlayPage}
     />
   );

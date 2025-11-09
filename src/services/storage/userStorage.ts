@@ -13,6 +13,7 @@ export interface User {
 
 const USERS_STORAGE_KEY = '@gulfer_users';
 const CURRENT_USER_KEY = '@gulfer_current_user';
+const PROFILE_IMAGE_KEY = '@gulfer_profile_image';
 
 /**
  * Get all saved users
@@ -112,5 +113,30 @@ export async function deleteUser(userId: string): Promise<void> {
  */
 export function generateUserId(): string {
   return `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Get the current user's profile image hash
+ */
+export async function getProfileImageHash(): Promise<string | null> {
+  try {
+    const hash = await getItem(PROFILE_IMAGE_KEY);
+    return hash;
+  } catch (error) {
+    console.error('Error loading profile image hash:', error);
+    return null;
+  }
+}
+
+/**
+ * Save the current user's profile image hash
+ */
+export async function saveProfileImageHash(hash: string): Promise<void> {
+  try {
+    await setItem(PROFILE_IMAGE_KEY, hash);
+  } catch (error) {
+    console.error('Error saving profile image hash:', error);
+    throw error;
+  }
 }
 

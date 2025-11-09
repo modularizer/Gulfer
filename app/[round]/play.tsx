@@ -144,18 +144,19 @@ export default function ScorecardPlayScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Scorecard
-          players={players}
-          holes={holes}
-          scores={scores}
-          onScoreChange={handleScoreChange}
-          onAddHole={handleAddHole}
-          onRemoveHole={handleRemoveHole}
-          onAddPlayer={() => {}}
-          onRemovePlayer={() => {}}
-          allowAddPlayer={false}
-          courseName={round.courseName}
-        />
+      <Scorecard
+        players={players}
+        holes={holes}
+        scores={scores}
+        onScoreChange={handleScoreChange}
+        onAddHole={handleAddHole}
+        onRemoveHole={handleRemoveHole}
+        onAddPlayer={() => {}}
+        onRemovePlayer={() => {}}
+        allowAddPlayer={false}
+        courseName={round.courseName}
+        onBack={() => router.push(`/${roundId}/overview`)}
+      />
 
       {/* Error Dialog */}
       <Portal>
