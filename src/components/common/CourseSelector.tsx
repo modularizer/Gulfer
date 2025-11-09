@@ -3,6 +3,14 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { IconButton, Text, Menu, Dialog, Portal, Button, TextInput, useTheme } from 'react-native-paper';
 import { Course, getAllCourses, saveCourse, generateCourseId, getLastUsedCourse, getLatestAddedCourse } from '../../services/storage/courseStorage';
 
+// Helper function to get number of holes from Course (handles both old and new format)
+const getHoleCount = (course: Course): number => {
+  if (Array.isArray(course.holes)) {
+    return course.holes.length;
+  }
+  return course.holes as unknown as number || 0;
+};
+
 interface CourseSelectorProps {
   selectedCourseId: string | null;
   onCourseChange: (courseId: string | null) => void;
@@ -33,18 +41,18 @@ export default function CourseSelector({
         // If we have an initial course name but no selected course ID, try to find it
         if (initialCourseName && !selectedCourseId && !isInitialized) {
           const matchingCourse = loadedCourses.find(c => c.name === initialCourseName);
-          if (matchingCourse) {
-            onCourseChange(matchingCourse.id);
-            if (onHolesChange) {
-              onHolesChange(matchingCourse.holes);
-            }
+            if (matchingCourse) {
+              onCourseChange(matchingCourse.id);
+              if (onHolesChange) {
+                onHolesChange(getHoleCount(matchingCourse));
+              }
           } else {
             // No match found - default to last used or latest added
             const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
             if (defaultCourse) {
               onCourseChange(defaultCourse.id);
               if (onHolesChange) {
-                onHolesChange(defaultCourse.holes);
+                onHolesChange(getHoleCount(defaultCourse));
               }
             }
           }
@@ -55,7 +63,7 @@ export default function CourseSelector({
           if (defaultCourse) {
             onCourseChange(defaultCourse.id);
             if (onHolesChange) {
-              onHolesChange(defaultCourse.holes);
+              onHolesChange(getHoleCount(defaultCourse));
             }
           }
           setIsInitialized(true);
@@ -74,7 +82,7 @@ export default function CourseSelector({
   // Helper function to format course display name
   const formatCourseDisplayName = useCallback((course: Course | undefined): string => {
     if (!course) return 'Select Course';
-    return `${course.name} (${course.holes} holes)`;
+    return `${course.name} (${getHoleCount(course)} holes)`;
   }, []);
 
   const handleSelectCourse = useCallback((courseId: string | null) => {
@@ -85,7 +93,7 @@ export default function CourseSelector({
     if (courseId && onHolesChange) {
       const selectedCourse = courses.find(c => c.id === courseId);
       if (selectedCourse) {
-        onHolesChange(selectedCourse.holes);
+        onHolesChange(getHoleCount(selectedCourse));
       }
     }
   }, [courses, onCourseChange, onHolesChange]);
@@ -111,7 +119,9 @@ export default function CourseSelector({
       const newCourse: Course = {
         id: generateCourseId(),
         name: newCourseDialog.name.trim(),
-        holes: holesNum,
+        holes: Array.from({ length: holesNum }, (_, i) => ({
+          number: i + 1,
+        })),
       };
 
       await saveCourse(newCourse);

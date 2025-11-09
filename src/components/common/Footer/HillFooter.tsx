@@ -15,12 +15,14 @@ interface HillFooterProps {
   onHistoryPress: () => void;
   onNewRoundPress: () => void;
   onProfilePress: () => void;
+  showCenterButton?: boolean;
 }
 
 export default function HillFooter({
   onHistoryPress,
   onNewRoundPress,
   onProfilePress,
+  showCenterButton = true,
 }: HillFooterProps) {
   const paperTheme = usePaperTheme();
   const { isDark } = useTheme();
@@ -49,14 +51,16 @@ export default function HillFooter({
           />
         </View>
         
-        <CenterButton
-          onPress={onNewRoundPress}
-          primaryColor={primaryColor}
-          backgroundColor={backgroundColor}
-          lighterGreen={lighterGreen}
-          buttonSize={BUTTON_SIZE}
-          buttonOffset={BUTTON_OFFSET}
-        />
+        {showCenterButton && (
+          <CenterButton
+            onPress={onNewRoundPress}
+            primaryColor={primaryColor}
+            backgroundColor={backgroundColor}
+            lighterGreen={lighterGreen}
+            buttonSize={BUTTON_SIZE}
+            buttonOffset={BUTTON_OFFSET}
+          />
+        )}
 
         <View style={styles.rightButtonContainer}>
           <IconButton
@@ -83,7 +87,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingTop: 12,
+    paddingTop: 4,
     paddingHorizontal: 24,
     height: TOTAL_HEIGHT,
     zIndex: 10,

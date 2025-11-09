@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { useTheme } from '../../theme/ThemeContext';
 import HillFooter from './Footer/HillFooter';
 
@@ -25,6 +25,10 @@ interface FooterProps {
 
 export default function Footer({ customCenterHandler }: FooterProps) {
   const { toggleTheme } = useTheme();
+  const pathname = usePathname();
+  
+  // Check if we're on a play page
+  const isPlayPage = pathname?.includes('/play') || false;
 
   const handleCenterPress = useCallback(() => {
     if (customCenterHandler) {
@@ -39,6 +43,7 @@ export default function Footer({ customCenterHandler }: FooterProps) {
       onHistoryPress={() => router.push('/round-history')}
       onNewRoundPress={handleCenterPress}
       onProfilePress={toggleTheme}
+      showCenterButton={!isPlayPage}
     />
   );
 }

@@ -4,12 +4,10 @@
  */
 
 import { getItem, setItem } from './storageAdapter';
+import { Course } from '../../types';
 
-export interface Course {
-  id: string;
-  name: string;
-  holes: number;
-}
+// Re-export Course type from types
+export type { Course };
 
 const COURSES_STORAGE_KEY = '@gulfer_courses';
 

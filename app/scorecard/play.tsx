@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Button, TextInput, Dialog, Portal, useTheme } from 'react-native-paper';
 import { Scorecard } from '../../src/components/Scorecard';
 import { Player, Score, Round } from '../../src/types';
 import { saveRound, generateRoundId } from '../../src/services/storage/roundStorage';
+import { getAllCourses } from '../../src/services/storage/courseStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 
 export default function ScorecardPlayScreen() {
@@ -31,8 +32,32 @@ export default function ScorecardPlayScreen() {
   );
   const [playerNameDialog, setPlayerNameDialog] = useState({ visible: false, playerId: '' });
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [courseHoles, setCourseHoles] = useState<number | undefined>(undefined);
 
   const currentDate = new Date();
+
+  // Load course information and initialize holes
+  useEffect(() => {
+    const loadCourseInfo = async () => {
+      if (courseName) {
+        try {
+          const courses = await getAllCourses();
+          const course = courses.find(c => c.name === courseName);
+          if (course) {
+            // Handle both old format (holes: number) and new format (holes: Hole[])
+            const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
+            setCourseHoles(holeCount);
+            // Initialize holes array based on course
+            const holeNumbers = Array.from({ length: holeCount }, (_, i) => i + 1);
+            setHoles(holeNumbers);
+          }
+        } catch (error) {
+          console.error('Error loading course info:', error);
+        }
+      }
+    };
+    loadCourseInfo();
+  }, [courseName]);
 
   const handleScoreChange = useCallback((playerId: string, holeNumber: number, throws: number) => {
     setScores((prev) => {
@@ -127,7 +152,7 @@ export default function ScorecardPlayScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <ScrollView style={styles.scrollView}>
+      <View style={styles.scorecardContainer}>
         <Scorecard
           players={players}
           holes={holes}
@@ -137,27 +162,9 @@ export default function ScorecardPlayScreen() {
           onRemovePlayer={handleRemovePlayer}
           onAddHole={handleAddHole}
           onRemoveHole={handleRemoveHole}
+          courseName={courseName}
         />
-
-        <View style={styles.actions}>
-          <Button
-            mode="outlined"
-            onPress={handleAddHole}
-            style={styles.actionButton}
-          >
-            Add Hole
-          </Button>
-          {holes.length > 1 && (
-            <Button
-              mode="outlined"
-              onPress={() => handleRemoveHole(holes[holes.length - 1])}
-              style={styles.actionButton}
-            >
-              Remove Last Hole
-            </Button>
-          )}
-        </View>
-      </ScrollView>
+      </View>
 
       <View style={[styles.saveButtonContainer, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.outlineVariant }]}>
         <Button
@@ -232,15 +239,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollView: {
+  scorecardContainer: {
     flex: 1,
   },
-  actions: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 8,
-  },
-  actionButton: {
+  scrollView: {
     flex: 1,
   },
   saveButtonContainer: {

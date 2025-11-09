@@ -4,6 +4,7 @@ import { Button, Dialog, Portal, Text, useTheme } from 'react-native-paper';
 import { Scorecard } from '../../src/components/Scorecard';
 import { Player, Score, Round } from '../../src/types';
 import { saveRound, getRoundById } from '../../src/services/storage/roundStorage';
+import { getAllCourses } from '../../src/services/storage/courseStorage';
 import { router, useLocalSearchParams } from 'expo-router';
 
 export default function ScorecardPlayScreen() {
@@ -15,6 +16,7 @@ export default function ScorecardPlayScreen() {
   const [scores, setScores] = useState<Score[]>([]);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
+  const [courseHoles, setCourseHoles] = useState<number | undefined>(undefined);
 
   // Load round data
   useEffect(() => {
@@ -36,12 +38,30 @@ export default function ScorecardPlayScreen() {
         setRound(loadedRound);
         setPlayers(loadedRound.players);
         setScores(loadedRound.scores || []);
-        
-        // Determine holes from scores
-        if (loadedRound.scores && loadedRound.scores.length > 0) {
-          const holeNumbers = [...new Set(loadedRound.scores.map(s => s.holeNumber))].sort((a, b) => a - b);
-          if (holeNumbers.length > 0) {
-            setHoles(holeNumbers);
+
+        // Load course information and initialize holes
+        if (loadedRound.courseName) {
+          try {
+            const courses = await getAllCourses();
+            const course = courses.find(c => c.name === loadedRound.courseName);
+            if (course) {
+              // Handle both old format (holes: number) and new format (holes: Hole[])
+              const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
+              setCourseHoles(holeCount);
+              // Initialize holes array based on course
+              const holeNumbers = Array.from({ length: holeCount }, (_, i) => i + 1);
+              setHoles(holeNumbers);
+            }
+          } catch (error) {
+            console.error('Error loading course info:', error);
+          }
+        } else {
+          // If no course, determine holes from scores or default to 9
+          if (loadedRound.scores && loadedRound.scores.length > 0) {
+            const holeNumbers = [...new Set(loadedRound.scores.map(s => s.holeNumber))].sort((a, b) => a - b);
+            if (holeNumbers.length > 0) {
+              setHoles(holeNumbers);
+            }
           }
         }
       } catch (error) {
@@ -124,7 +144,6 @@ export default function ScorecardPlayScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <ScrollView style={styles.scrollView}>
         <Scorecard
           players={players}
           holes={holes}
@@ -135,27 +154,8 @@ export default function ScorecardPlayScreen() {
           onAddPlayer={() => {}}
           onRemovePlayer={() => {}}
           allowAddPlayer={false}
+          courseName={round.courseName}
         />
-
-        <View style={styles.actions}>
-          <Button
-            mode="outlined"
-            onPress={handleAddHole}
-            style={styles.actionButton}
-          >
-            Add Hole
-          </Button>
-          {holes.length > 1 && (
-            <Button
-              mode="outlined"
-              onPress={() => handleRemoveHole(holes[holes.length - 1])}
-              style={styles.actionButton}
-            >
-              Remove Last Hole
-            </Button>
-          )}
-        </View>
-      </ScrollView>
 
       {/* Error Dialog */}
       <Portal>
@@ -205,14 +205,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollView: {
-    flex: 1,
-  },
-  actions: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 8,
-  },
-  actionButton: {
     flex: 1,
   },
 });

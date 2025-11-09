@@ -10,6 +10,7 @@ export const createSmoothHillPath = (width: number): string => {
   const rightPeak = width * 0.75;
   const center = width * 0.5;
   
+
   return `M 0 ${TOTAL_HEIGHT}
           L 0 ${HILL_HEIGHT}
           Q ${leftPeak} 0 ${center - 60} ${HILL_HEIGHT + VALLEY_DEPTH * 0.3}
