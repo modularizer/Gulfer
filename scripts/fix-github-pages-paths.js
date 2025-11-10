@@ -86,17 +86,42 @@ function fixPathsInFile(filePath) {
       }
       
       // Fix ALL absolute paths starting with /assets/ to relative paths
-      // This includes httpServerLocation and any other asset references
+      // Keep them as "/assets/" but patch the asset resolution to use current origin
       if (content.includes('/assets/')) {
         // Replace httpServerLocation:"/assets/..." -> httpServerLocation:"./assets/..."
         content = content.replace(/httpServerLocation:"\/assets\//g, 'httpServerLocation:"./assets/');
         content = content.replace(/httpServerLocation:'\/assets\//g, "httpServerLocation:'./assets/");
         
         // Replace any other "/assets/" strings in quotes with "./assets/"
-        content = content.replace(/"\/assets\//g, '"./assets/');
-        content = content.replace(/'\/assets\//g, "'./assets/");
-        content = content.replace(/`\/assets\//g, '`./assets/');
+        content = content.replace(/([^"'])"\/assets\//g, '$1"./assets/');
+        content = content.replace(/([^"'])'\/assets\//g, "$1'./assets/");
+        content = content.replace(/([^`])`\/assets\//g, '$1`./assets/');
         
+        modified = true;
+      }
+      
+      // Patch asset resolution code to use window.location.origin instead of hardcoded serverUrl
+      // Find: this.serverUrl=t||'https://expo.dev'
+      // Replace with code that uses window.location.origin
+      if (content.includes("this.serverUrl") && content.includes("'https://expo.dev'")) {
+        // Replace the serverUrl assignment to use current origin
+        content = content.replace(
+          /this\.serverUrl\s*=\s*t\s*\|\|\s*['"]https:\/\/expo\.dev['"]/g,
+          "this.serverUrl=t||(typeof window!=='undefined'&&window.location?window.location.origin:'https://expo.dev')"
+        );
+        modified = true;
+      }
+      
+      // Also patch: new URL(i(this.asset),this.serverUrl)
+      // To ensure relative paths work correctly, we need to handle the case where
+      // httpServerLocation is relative (starts with ./)
+      if (content.includes('new URL(i(this.asset),this.serverUrl)')) {
+        // Wrap the URL construction to handle relative paths
+        // This is complex, so we'll patch it to use location.origin when path is relative
+        content = content.replace(
+          /new URL\(i\(this\.asset\),this\.serverUrl\)/g,
+          "(function(){const p=i(this.asset);const base=p.startsWith('./')||p.startsWith('../')?(typeof window!=='undefined'&&window.location?window.location.origin:'https://expo.dev'):this.serverUrl;return new URL(p,base);}).call(this)"
+        );
         modified = true;
       }
     }
