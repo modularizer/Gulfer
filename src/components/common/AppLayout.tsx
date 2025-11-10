@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import Footer from './Footer';
-import PullToRefresh from './PullToRefresh';
 import { getAllUsers, saveUser, saveCurrentUserName, generateUserId, User } from '../../services/storage/userStorage';
 import NameUsernameDialog from './NameUsernameDialog';
 
@@ -97,20 +96,11 @@ export default function AppLayout({ children }: AppLayoutProps) {
     }
   };
 
-  // Check if we're on a mobile device (web)
-  // Also enable for testing on desktop by checking for touch support
-  const isMobileWeb = Platform.OS === 'web' && typeof window !== 'undefined' && (
-    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-    ('ontouchstart' in window || navigator.maxTouchPoints > 0)
-  );
-
   return (
     <View style={styles.container}>
-      <PullToRefresh enabled={isMobileWeb}>
-        <View style={styles.content}>
-          {children}
-        </View>
-      </PullToRefresh>
+      <View style={styles.content}>
+        {children}
+      </View>
       <SafeAreaView edges={['bottom']}>
         <Footer />
       </SafeAreaView>
