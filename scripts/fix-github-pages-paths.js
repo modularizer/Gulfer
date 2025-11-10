@@ -84,6 +84,19 @@ function fixPathsInFile(filePath) {
         content = content.replace(/caches\.match\(['"]\/['"]\)/g, "caches.match('./')");
         modified = true;
       }
+      
+      // Fix httpServerLocation paths in asset registrations
+      // These are used by Metro bundler for asset resolution
+      // Pattern: httpServerLocation:"/assets/..." -> httpServerLocation:"./assets/..."
+      if (content.includes('httpServerLocation:"/assets/')) {
+        content = content.replace(/httpServerLocation:"\/assets\//g, 'httpServerLocation:"./assets/');
+        modified = true;
+      }
+      // Also handle single quotes
+      if (content.includes("httpServerLocation:'/assets/")) {
+        content = content.replace(/httpServerLocation:'\/assets\//g, "httpServerLocation:'./assets/");
+        modified = true;
+      }
     }
     
     // For JSON files (like manifest.json), fix favicon paths
