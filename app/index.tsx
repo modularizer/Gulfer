@@ -1,42 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, Image } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import RoundHistoryScreen from "./round/list";
 
 export default function HomeScreen() {
-  const theme = useTheme();
-
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <View style={styles.content}>
-        <View style={styles.brandingContainer}>
-          <Image
-            source={require('../assets/favicon.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
-      </View>
-    </View>
+    <RoundHistoryScreen/>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  brandingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-  },
-});
 
