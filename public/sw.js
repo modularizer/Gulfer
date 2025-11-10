@@ -13,11 +13,10 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       // Cache will be populated as pages are visited
-      // Use relative paths for GitHub Pages compatibility
       return cache.addAll([
-        './',
-        './favicon.png',
-        './favicon.svg'
+        '/',
+        '/favicon.png',
+        '/favicon.svg'
       ]).catch((err) => {
         console.log('Cache install error:', err);
       });
@@ -103,7 +102,7 @@ self.addEventListener('fetch', (event) => {
               return response;
             }
             // If not in cache, return index.html for SPA routing
-            return caches.match('./');
+            return caches.match('/');
           });
         })
     );
@@ -241,7 +240,7 @@ self.addEventListener('fetch', (event) => {
               }
               // For favicons, try alternative paths
               if (isFavicon) {
-                const altPaths = ['./favicon.png', './favicon.svg'];
+                const altPaths = ['/favicon.png', '/favicon.svg'];
                 return Promise.all(altPaths.map(altPath => {
                   if (url.pathname !== altPath) {
                     const altRequest = new Request(altPath);
@@ -311,7 +310,7 @@ self.addEventListener('fetch', (event) => {
                   return cachedFavicon;
                 }
                 // Try alternative favicon paths
-                const altPaths = ['./favicon.png', './favicon.svg'];
+                const altPaths = ['/favicon.png', '/favicon.svg'];
                 return Promise.all(altPaths.map(altPath => {
                   if (errorUrl.pathname !== altPath) {
                     const altRequest = new Request(altPath);

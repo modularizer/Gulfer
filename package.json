@@ -8,7 +8,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:web": "expo export -p web --output-dir dist && node scripts/fix-github-pages-paths.js",
+    "build:web": "expo export -p web --output-dir dist",
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit"
   },

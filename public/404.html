@@ -5,31 +5,8 @@
   <title>Gulfer</title>
   <script>
     // Redirect to index.html for SPA routing
-    // Prevent infinite loops by checking current path
     sessionStorage.redirect = location.href;
-    const pathname = location.pathname;
-    
-    // If we're already at a directory (ends with /) or index.html, don't redirect
-    // This prevents loops when GitHub Pages serves index.html for directory requests
-    if (pathname.endsWith('/') || pathname.endsWith('/index.html')) {
-      // If at /Gulfer/index.html, redirect to /Gulfer/ (which serves index.html)
-      if (pathname.endsWith('/index.html')) {
-        const basePath = pathname.replace(/\/index\.html$/, '') || '/';
-        if (basePath !== location.pathname) {
-          location.replace(basePath);
-        }
-      }
-      return;
-    }
-    
-    // For other 404s, redirect to index.html in the same directory
-    const basePath = pathname.replace(/\/[^\/]*$/, '') || '/';
-    const indexPath = basePath === '/' ? '/index.html' : basePath + '/index.html';
-    
-    // Double-check we're not creating a loop
-    if (pathname !== indexPath && !pathname.endsWith('/')) {
-      location.replace(indexPath);
-    }
+    location.replace(location.pathname.split('/').slice(0, -1).join('/') + '/index.html');
   </script>
 </head>
 <body></body>
