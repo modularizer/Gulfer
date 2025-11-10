@@ -186,12 +186,98 @@ function copyFavicons() {
   }
 }
 
+// Inject runtime patch to fix asset URLs
+function injectAssetUrlPatch() {
+  const htmlFiles = ['index.html', '404.html'];
+  
+  const patchScript = `<script>
+(function() {
+  'use strict';
+  if (typeof window === 'undefined') return;
+  
+  // Get base path (e.g., "/Gulfer/")
+  function getBasePath() {
+    if (typeof document !== 'undefined') {
+      const scripts = document.querySelectorAll('script[src]');
+      for (let i = 0; i < scripts.length; i++) {
+        const src = scripts[i].getAttribute('src');
+        if (src && src.includes('/_expo/')) {
+          const match = src.match(/^(\\/[^\\/]+\\/)/);
+          if (match) return match[1];
+        }
+      }
+    }
+    const pathname = window.location.pathname;
+    if (pathname !== '/' && !pathname.startsWith('/_expo/')) {
+      const segments = pathname.split('/').filter(Boolean);
+      if (segments.length > 0) return '/' + segments[0] + '/';
+    }
+    return '/';
+  }
+  
+  const basePath = getBasePath();
+  if (basePath === '/') return;
+  
+  // Patch URL constructor to prepend base path for relative asset paths
+  const OriginalURL = window.URL;
+  window.URL = function(url, base) {
+    if (typeof url === 'string' && (url.startsWith('./assets/') || url.startsWith('/assets/'))) {
+      // If it's a relative asset path, prepend base path
+      const cleanPath = url.startsWith('./') ? url.substring(2) : url.startsWith('/') ? url.substring(1) : url;
+      url = basePath + cleanPath;
+      // Use current origin as base if no base provided
+      if (!base || base === 'https://expo.dev' || (typeof base === 'string' && base.includes('expo.dev'))) {
+        base = window.location.origin;
+      }
+    }
+    return new OriginalURL(url, base);
+  };
+  
+  // Also patch fetch to fix asset URLs
+  const originalFetch = window.fetch;
+  window.fetch = function(input, init) {
+    if (typeof input === 'string' && (input.startsWith('./assets/') || input.startsWith('/assets/'))) {
+      const cleanPath = input.startsWith('./') ? input.substring(2) : input.startsWith('/') ? input.substring(1) : input;
+      input = basePath + cleanPath;
+    } else if (input instanceof Request) {
+      const url = input.url;
+      if (url.startsWith('./assets/') || url.startsWith('/assets/')) {
+        const cleanPath = url.startsWith('./') ? url.substring(2) : url.startsWith('/') ? url.substring(1) : url;
+        input = new Request(basePath + cleanPath, input);
+      }
+    }
+    return originalFetch.call(this, input, init);
+  };
+})();
+</script>`;
+
+  htmlFiles.forEach(file => {
+    const htmlPath = path.join(distDir, file);
+    if (fs.existsSync(htmlPath)) {
+      let content = fs.readFileSync(htmlPath, 'utf8');
+      if (!content.includes('getBasePath()')) {
+        if (content.includes('</head>')) {
+          content = content.replace('</head>', patchScript + '\n</head>');
+        } else if (content.includes('<body')) {
+          content = content.replace('<body', patchScript + '\n<body');
+        } else {
+          content = patchScript + '\n' + content;
+        }
+        fs.writeFileSync(htmlPath, content, 'utf8');
+        console.log(`Injected asset URL patch into ${file}`);
+      }
+    }
+  });
+}
+
 
 if (fs.existsSync(distDir)) {
   console.log('Converting absolute paths to relative paths...');
   walkDir(distDir);
   console.log('Copying favicon files to dist root...');
   copyFavicons();
+  console.log('Injecting asset URL patch...');
+  injectAssetUrlPatch();
   console.log('Path fixing complete!');
 } else {
   console.error(`Dist directory not found: ${distDir}`);
