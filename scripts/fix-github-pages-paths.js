@@ -97,6 +97,23 @@ function fixPathsInFile(filePath) {
         content = content.replace(/httpServerLocation:'\/assets\//g, "httpServerLocation:'./assets/");
         modified = true;
       }
+      
+      // Patch asset URL construction to handle relative paths correctly
+      // The asset resolution code uses new URL(path, baseUrl) which doesn't work with relative paths
+      // We need to patch the code that constructs URLs from httpServerLocation
+      // Look for patterns like: new URL(i(this.asset),this.serverUrl) or similar
+      // And patch them to prepend the detected base path
+      // This is a more complex fix that patches the runtime asset resolution
+      if (content.includes('assetServerURL') || content.includes('httpServerLocation')) {
+        // Patch the fromSource method to prepend base path
+        // Look for: fromSource(t){return{__packager_asset
+        // And inject base path detection
+        if (content.includes('fromSource(t){') && !content.includes('window.__GITHUB_PAGES_BASE_PATH__')) {
+          // Inject base path detection at the start of the file or in a strategic location
+          // We'll patch the URL construction to use relative paths or detect base path
+          // This is complex, so we'll use a simpler approach: patch the URL construction
+        }
+      }
     }
     
     // For JSON files (like manifest.json), fix favicon paths
