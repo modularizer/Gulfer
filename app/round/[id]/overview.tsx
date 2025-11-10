@@ -7,7 +7,7 @@ import PhotoGallery from '@/components/common/PhotoGallery';
 import CourseSelector from '@/components/common/CourseSelector';
 import PlayerChip from '@/components/common/PlayerChip';
 import NameUsernameDialog from '@/components/common/NameUsernameDialog';
-import { getRoundById, saveRound, generateRoundTitle, deleteRound } from '@/services/storage/roundStorage';
+import { getRoundById, saveRound, generateRoundTitle } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
 import { exportRound } from '@/services/roundExport';
@@ -113,7 +113,7 @@ export default function RoundOverviewScreen() {
     try {
       const loadedRound = await getRoundById(roundIdParam);
       if (!loadedRound) {
-        // Round was deleted (likely auto-deleted), navigate away silently
+        // Round was deleted, navigate away silently
         router.replace('/round/list');
         return;
       }
@@ -313,68 +313,6 @@ export default function RoundOverviewScreen() {
         });
     }
   }, [players, notes, photos, selectedCourseId, selectedDate, loading]);
-
-  // Check if round should be auto-deleted when navigating away
-  const roundIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (round) {
-      roundIdRef.current = round.id;
-    }
-  }, [round]);
-
-  useEffect(() => {
-    if (!round || loading) return;
-
-    const checkAndDeleteEmptyRound = async (roundId: string) => {
-      try {
-        // Reload the round to get the latest state (including scores)
-        const latestRound = await getRoundById(roundId);
-        if (!latestRound) return; // Round already deleted
-
-        const hasPhotos = latestRound.photos && latestRound.photos.length > 0;
-        const hasCourse = !!latestRound.courseName;
-        const hasMultiplePlayers = latestRound.players.length > 1;
-        const hasNotes = !!latestRound.notes && latestRound.notes.trim().length > 0;
-        const hasScores = latestRound.scores && latestRound.scores.length > 0;
-
-        // Check if round is empty (no meaningful content)
-        const isEmpty = !hasPhotos && !hasCourse && !hasMultiplePlayers && !hasNotes && !hasScores;
-
-        // Check if round is >5 hours old with no scores
-        const roundAge = Date.now() - latestRound.date;
-        const fiveHoursInMs = 5 * 60 * 60 * 1000;
-        const isOldAndEmpty = roundAge > fiveHoursInMs && !hasScores;
-
-        // Delete if either condition is met
-        if (isEmpty || isOldAndEmpty) {
-          console.log(`Auto-deleting round ${latestRound.id}: isEmpty=${isEmpty}, isOldAndEmpty=${isOldAndEmpty}`);
-          await deleteRound(latestRound.id);
-        }
-      } catch (error) {
-        console.error('Error checking/deleting empty round:', error);
-      }
-    };
-
-    // Check when pathname changes to something that's not this round's pages
-    const isOnThisRoundPage = pathname?.includes(`/round/${round.id}/`);
-    const isLeavingThisRound = pathname && !isOnThisRoundPage;
-
-    if (isLeavingThisRound) {
-      checkAndDeleteEmptyRound(round.id);
-    }
-
-    // Also check on unmount (when component is being removed)
-    return () => {
-      const roundId = roundIdRef.current;
-      if (roundId) {
-        // Use a small delay to ensure we're actually navigating away
-        setTimeout(() => {
-          checkAndDeleteEmptyRound(roundId);
-        }, 100);
-      }
-    };
-  }, [pathname, round, loading]);
-  
 
   const handlePlayersChange = useCallback((newPlayers: Player[]) => {
     setPlayers(newPlayers);
@@ -859,10 +797,18 @@ export default function RoundOverviewScreen() {
             {Platform.OS === 'web' ? (
               <input
                 type="date"
-                value={selectedDate.toISOString().split('T')[0]}
+                value={(() => {
+                  // Format date in local timezone to avoid UTC conversion issues
+                  const year = selectedDate.getFullYear();
+                  const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                  const day = String(selectedDate.getDate()).padStart(2, '0');
+                  return `${year}-${month}-${day}`;
+                })()}
                 onChange={(e) => {
                   if (e.target.value) {
-                    const newDate = new Date(e.target.value);
+                    // Parse the date string as local time (not UTC)
+                    const [year, month, day] = e.target.value.split('-').map(Number);
+                    const newDate = new Date(year, month - 1, day);
                     newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
                     setSelectedDate(newDate);
                   }
