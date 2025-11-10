@@ -176,11 +176,117 @@ function copyFavicons() {
   }
 }
 
+// Inject asset path patch into HTML files
+function injectAssetPatch() {
+  const htmlFiles = ['index.html', '404.html'];
+  
+  const patchScript = `
+<script>
+(function() {
+  'use strict';
+  if (typeof window === 'undefined') return;
+  
+  function getBasePath() {
+    if (typeof document !== 'undefined') {
+      const scripts = document.querySelectorAll('script[src]');
+      for (let i = 0; i < scripts.length; i++) {
+        const src = scripts[i].getAttribute('src');
+        if (src && src.includes('/_expo/')) {
+          const match = src.match(/^(\\/[^\\/]+\\/)/);
+          if (match) return match[1];
+        }
+      }
+    }
+    if (window.location.pathname !== '/') {
+      const segments = window.location.pathname.split('/').filter(Boolean);
+      if (segments.length > 0) return '/' + segments[0] + '/';
+    }
+    return '/';
+  }
+  
+  const basePath = getBasePath();
+  if (basePath === '/') return;
+  
+  // Patch fetch
+  const originalFetch = window.fetch;
+  window.fetch = function(input, init) {
+    let urlToFix = null;
+    if (typeof input === 'string') {
+      if (input.startsWith('/assets/') && !input.startsWith(basePath)) {
+        urlToFix = basePath + input.substring(1);
+      }
+    } else if (input instanceof Request) {
+      const url = input.url;
+      if (url.startsWith('/assets/') && !url.startsWith(basePath)) {
+        urlToFix = basePath + url.substring(1);
+        input = new Request(urlToFix, input);
+      }
+    } else if (input instanceof URL) {
+      if (input.pathname.startsWith('/assets/') && !input.pathname.startsWith(basePath)) {
+        input.pathname = basePath + input.pathname.substring(1);
+      }
+    }
+    if (urlToFix) {
+      return originalFetch.call(this, urlToFix, init);
+    }
+    return originalFetch.call(this, input, init);
+  };
+  
+  // Patch XMLHttpRequest
+  const originalOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url, async, username, password) {
+    if (typeof url === 'string' && url.startsWith('/assets/') && !url.startsWith(basePath)) {
+      url = basePath + url.substring(1);
+    }
+    return originalOpen.call(this, method, url, async, username, password);
+  };
+  
+  // Patch document.createElement to intercept link and style tags
+  const originalCreateElement = document.createElement;
+  document.createElement = function(tagName, options) {
+    const element = originalCreateElement.call(this, tagName, options);
+    if (tagName === 'link' || tagName === 'style') {
+      const originalSetAttribute = element.setAttribute;
+      element.setAttribute = function(name, value) {
+        if ((name === 'href' || name === 'src') && typeof value === 'string' && 
+            value.startsWith('/assets/') && !value.startsWith(basePath)) {
+          value = basePath + value.substring(1);
+        }
+        return originalSetAttribute.call(this, name, value);
+      };
+    }
+    return element;
+  };
+})();
+</script>`;
+
+  htmlFiles.forEach(file => {
+    const htmlPath = path.join(distDir, file);
+    if (fs.existsSync(htmlPath)) {
+      let content = fs.readFileSync(htmlPath, 'utf8');
+      // Inject script before closing head tag or before first script tag
+      if (!content.includes('getBasePath()')) {
+        if (content.includes('</head>')) {
+          content = content.replace('</head>', patchScript + '\n</head>');
+        } else if (content.includes('<script')) {
+          content = content.replace('<script', patchScript + '\n<script');
+        } else {
+          content = patchScript + '\n' + content;
+        }
+        fs.writeFileSync(htmlPath, content, 'utf8');
+        console.log(`Injected asset path patch into ${file}`);
+      }
+    }
+  });
+}
+
 if (fs.existsSync(distDir)) {
   console.log('Converting absolute paths to relative paths...');
   walkDir(distDir);
   console.log('Copying favicon files to dist root...');
   copyFavicons();
+  console.log('Injecting asset path patch into HTML...');
+  injectAssetPatch();
   console.log('Path fixing complete!');
 } else {
   console.error(`Dist directory not found: ${distDir}`);
