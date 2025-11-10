@@ -136,10 +136,25 @@ export function usePWARouteCache() {
     if (!hasRestoredRef.current) {
       hasRestoredRef.current = true;
       const lastPage = getLastVisitedPage();
-      if (lastPage && lastPage !== window.location.pathname && lastPage !== '/') {
+      const currentPath = window.location.pathname;
+      // Get base path to check if we're at root
+      const basePath = getBasePath();
+      const rootPath = basePath === '/' ? '/' : basePath;
+      
+      if (lastPage && lastPage !== currentPath && lastPage !== '/' && lastPage !== rootPath) {
         // Only navigate if we're on the root page and have a cached page
-        if (window.location.pathname === '/') {
-          router.replace(lastPage as any);
+        // Make sure lastPage doesn't already have base path
+        if (currentPath === '/' || currentPath === rootPath || currentPath === rootPath + 'index.html') {
+          // Ensure lastPage doesn't have double base path
+          let targetPath = lastPage;
+          if (basePath !== '/' && !targetPath.startsWith(basePath)) {
+            targetPath = basePath + targetPath.replace(/^\//, '');
+          } else if (basePath !== '/' && targetPath.startsWith(basePath + basePath.replace(/\/$/, ''))) {
+            // Remove double base path
+            targetPath = targetPath.replace(new RegExp('^' + basePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '');
+            if (!targetPath.startsWith('/')) targetPath = '/' + targetPath;
+          }
+          router.replace(targetPath as any);
         }
       }
     }
