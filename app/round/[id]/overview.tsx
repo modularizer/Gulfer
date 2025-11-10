@@ -124,7 +124,17 @@ export default function RoundOverviewScreen() {
       const loadedPhotos = loadedRound.photos || [];
       setPhotos(loadedPhotos);
       // Initialize selected date from round date
-      setSelectedDate(new Date(loadedRound.date));
+      const loadedDate = new Date(loadedRound.date);
+      setSelectedDate(loadedDate);
+      
+      // Initialize previous values to prevent saving on load
+      prevValuesRef.current = {
+        players: [...loadedRound.players],
+        notes: loadedRound.notes || '',
+        photos: [...loadedPhotos],
+        selectedCourseId: null, // Will be set below
+        selectedDate: loadedDate.getTime(),
+      };
       
       const loadedCourses = await getAllCourses();
       setCourses(loadedCourses);
@@ -232,6 +242,14 @@ export default function RoundOverviewScreen() {
   const isSavingRef = useRef(false);
   // Store save function in ref to avoid dependency issues
   const saveRoundDataRef = useRef(saveRoundData);
+  // Track previous values to prevent saving when nothing actually changed
+  const prevValuesRef = useRef<{
+    players: Player[];
+    notes: string;
+    photos: string[];
+    selectedCourseId: string | null;
+    selectedDate: number; // Store as timestamp for comparison
+  } | null>(null);
   
   // Update ref when save function changes
   useEffect(() => {
@@ -257,9 +275,36 @@ export default function RoundOverviewScreen() {
   // round is NOT in dependencies - we only check it exists, we don't react to its changes
   useEffect(() => {
     if (round && !loading && !isSavingRef.current && initialLoadCompleteRef.current) {
+      // Check if values actually changed
+      const currentDate = selectedDate.getTime();
+      const prev = prevValuesRef.current;
+      
+      if (prev) {
+        const playersChanged = JSON.stringify(prev.players) !== JSON.stringify(players);
+        const notesChanged = prev.notes !== notes;
+        const photosChanged = JSON.stringify(prev.photos) !== JSON.stringify(photos);
+        const courseChanged = prev.selectedCourseId !== selectedCourseId;
+        const dateChanged = prev.selectedDate !== currentDate;
+        
+        if (!playersChanged && !notesChanged && !photosChanged && !courseChanged && !dateChanged) {
+          console.log('[SAVE] Round overview: No actual changes detected, skipping save');
+          return;
+        }
+      }
+      
       isSavingRef.current = true;
       console.log('[SAVE] Round overview: Data changed, triggering save');
       saveRoundDataRef.current()
+        .then(() => {
+          // Only update previous values after successful save
+          prevValuesRef.current = {
+            players: [...players],
+            notes,
+            photos: [...photos],
+            selectedCourseId,
+            selectedDate: currentDate,
+          };
+        })
         .catch((error) => {
           console.error('[SAVE] Round overview: Error in auto-save', error);
         })
