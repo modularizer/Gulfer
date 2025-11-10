@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { IconButton, useTheme, Text, TextInput, Button } from 'react-native-paper';
 import { router } from 'expo-router';
 import { getCurrentUserName, saveCurrentUserName, getAllUsers, saveUser, generateUserId, User } from '@/services/storage/userStorage';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
 
 export default function YouScreen() {
   const theme = useTheme();
@@ -66,7 +67,6 @@ export default function YouScreen() {
       const usersAfterSave = await getAllUsers();
       const savedUser = usersAfterSave.find(u => u.isCurrentUser);
       if (savedUser) {
-        const { encodeNameForUrl } = await import('@/utils/urlEncoding');
         router.replace(`/player/${encodeNameForUrl(savedUser.name)}/overview`);
       }
     } catch (error) {

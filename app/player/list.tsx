@@ -6,6 +6,7 @@ import { getAllUsers, saveUser, generateUserId, deleteUser } from '@/services/st
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { getShadowStyle } from '@/utils';
 import { router } from 'expo-router';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
 import {
   ListPageLayout,
   NameUsernameDialog,
@@ -75,7 +76,6 @@ export default function PlayersScreen() {
       } else {
         const player = players.find(p => p.id === playerId);
         if (!player) return;
-        const { encodeNameForUrl } = await import('@/utils/urlEncoding');
         router.push(`/player/${encodeNameForUrl(player.name)}/overview`);
       }
     },

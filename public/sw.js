@@ -1,11 +1,11 @@
 // Service Worker for Gulfer PWA
 // Offline Strategy:
 // - Navigation (HTML): Network-first, fallback to cache, then index.html
-// - JavaScript bundles: Network-first (fresh when online), fallback to cache (offline)
+// - JavaScript bundles: Cache-first with background update (100% offline, fresh when online)
 // - Other assets: Cache-first (fast), fallback to network, then graceful error
 // All successful responses are cached for offline use
-const CACHE_NAME = 'gulfer-v2';
-const RUNTIME_CACHE = 'gulfer-runtime-v2';
+const CACHE_NAME = 'gulfer-v3';
+const RUNTIME_CACHE = 'gulfer-runtime-v3';
 const CURRENT_PAGE_KEY = 'gulfer-current-page';
 
 // Install event - cache static assets
@@ -15,7 +15,8 @@ self.addEventListener('install', (event) => {
       // Cache will be populated as pages are visited
       return cache.addAll([
         '/',
-        '/favicon.png'
+        '/favicon.png',
+        '/favicon.svg'
       ]).catch((err) => {
         console.log('Cache install error:', err);
       });
@@ -54,6 +55,21 @@ self.addEventListener('fetch', (event) => {
 
   // Skip cross-origin requests
   if (url.origin !== location.origin) {
+    return;
+  }
+
+  // Skip Metro bundler internal requests in development
+  // These should go directly to the dev server without service worker interception
+  const isDev = url.searchParams.has('dev') && url.searchParams.get('dev') === 'true';
+  const isMetroInternal = url.pathname === '/symbolicate' || 
+                          url.pathname.includes('/hot') ||
+                          url.pathname.includes('/message');
+  const isAssetRequest = url.searchParams.has('unstable_path');
+  
+  // In development mode, don't intercept Metro's internal communication
+  // But DO intercept and cache bundle requests (they need to work offline)
+  // Skip only: symbolicate, hot reload, message socket, and asset requests
+  if (isDev && (isMetroInternal || isAssetRequest)) {
     return;
   }
 
@@ -96,73 +112,102 @@ self.addEventListener('fetch', (event) => {
       return;
     }
 
-    const url = new URL(request.url);
     const isJavaScript = url.pathname.endsWith('.js') || 
                          url.pathname.includes('entry.bundle') ||
                          url.pathname.includes('.bundle');
     
-    // For JavaScript bundles: network-first strategy (fresh when online, cached for offline)
+    // For JavaScript bundles: network-first with aggressive caching (100% offline support)
+    // Always try network first when online to ensure everything gets cached
+    // Fall back to cache when offline or network fails
     if (isJavaScript) {
       event.respondWith(
-        fetch(request, { 
-          cache: 'no-store',  // Bypass HTTP cache to get fresh code
-          headers: {
-            'Cache-Control': 'no-cache'
-          }
-        })
+        // Try network first (ensures all bundles get cached when online)
+        fetch(request, { cache: 'no-store' })
           .then((response) => {
-            // Cache successful responses for offline use
+            // Cache ALL successful JavaScript responses for offline use
+            // Cache using both the full URL and the base path (for query param variations)
             if (response && response.status === 200 && response.type === 'basic') {
               const responseToCache = response.clone();
+              const url = new URL(request.url);
+              const basePath = url.pathname;
+              
               caches.open(RUNTIME_CACHE).then((cache) => {
-                cache.put(request, responseToCache);
+                // Cache with full URL
+                cache.put(request, responseToCache.clone());
+                
+                // Also cache with base path only (for query param matching)
+                // This helps when query params change but the bundle is the same
+                if (url.search) {
+                  const baseRequest = new Request(basePath, request);
+                  cache.put(baseRequest, responseToCache.clone());
+                }
               });
             }
             return response;
           })
           .catch(() => {
-            // If network fails, try cache (offline mode)
+            // Network failed - try cache (offline mode or network error)
             return caches.match(request).then((cachedResponse) => {
               if (cachedResponse) {
                 return cachedResponse;
               }
-              // If exact match not found, try to find similar bundle in cache
-              // This helps with SPA routing where query params might differ
+              
+              // Not in cache - try to find similar bundle by base path
               const url = new URL(request.url);
               const basePath = url.pathname;
               
+              // Try matching base path (ignoring query params)
               return caches.open(RUNTIME_CACHE).then((cache) => {
-                return cache.keys().then((keys) => {
-                  // Try to find a bundle with the same base path
-                  const similarKey = keys.find(key => {
-                    const keyUrl = new URL(key.url);
-                    return keyUrl.pathname === basePath;
-                  });
-                  
-                  if (similarKey) {
-                    return cache.match(similarKey);
+                return cache.match(new Request(basePath)).then((basePathMatch) => {
+                  if (basePathMatch) {
+                    return basePathMatch;
                   }
                   
-                  // If still not found and it's an entry bundle, try any entry bundle
-                  if (basePath.includes('entry.bundle')) {
-                    const bundleKey = keys.find(key => {
+                  // Try to find any bundle with the same base path
+                  return cache.keys().then((keys) => {
+                    const similarKey = keys.find(key => {
                       const keyUrl = new URL(key.url);
-                      return keyUrl.pathname.includes('entry.bundle');
+                      return keyUrl.pathname === basePath;
                     });
-                    if (bundleKey) {
-                      return cache.match(bundleKey);
+                    
+                    if (similarKey) {
+                      return cache.match(similarKey);
                     }
+                    
+                    // If still not found and it's a bundle, try any bundle with similar name
+                    if (basePath.includes('.bundle')) {
+                      // Extract the module name from the path
+                      const moduleName = basePath.split('/').pop()?.split('.')[0];
+                      if (moduleName) {
+                        const moduleBundleKey = keys.find(key => {
+                          const keyUrl = new URL(key.url);
+                          return keyUrl.pathname.includes(moduleName) && keyUrl.pathname.includes('.bundle');
+                        });
+                        if (moduleBundleKey) {
+                          return cache.match(moduleBundleKey);
+                        }
+                      }
+                      
+                      // Last resort: try any .bundle file
+                      const anyBundleKey = keys.find(key => {
+                        const keyUrl = new URL(key.url);
+                        return keyUrl.pathname.includes('.bundle');
+                      });
+                      if (anyBundleKey) {
+                        return cache.match(anyBundleKey);
+                      }
+                    }
+                    
+                    return null;
+                  });
+                }).then((fallbackResponse) => {
+                  if (fallbackResponse) {
+                    return fallbackResponse;
                   }
-                  
-                  return null;
+                  // If no cache found and we're offline, the request will fail
+                  // This is expected - the bundle wasn't cached because it was never requested while online
+                  throw new Error('Bundle not cached - was never loaded while online');
                 });
-              }).then((fallbackResponse) => {
-                if (fallbackResponse) {
-                  return fallbackResponse;
-                }
-                // If no cache found, the request will fail naturally
-                // The app should handle this gracefully
-                throw new Error('Resource not cached and offline');
               });
             });
           })
@@ -171,12 +216,74 @@ self.addEventListener('fetch', (event) => {
     }
 
     // For other requests (assets, images, etc.), use cache-first strategy with network fallback
+    const isImage = url.pathname.match(/\.(jpg|jpeg|png|gif|svg|webp|ico)$/i);
+    const isFavicon = url.pathname.includes('favicon') || url.pathname.includes('favicon.png') || url.pathname.includes('favicon.svg');
+    
     event.respondWith(
+      // First check runtime cache
       caches.match(request).then((response) => {
         if (response) {
           return response;
         }
-        // If not in cache, try network
+        
+        // For images and favicons, also check the install cache
+        if (isImage || isFavicon) {
+          return caches.open(CACHE_NAME).then((installCache) => {
+            return installCache.match(request).then((cachedAsset) => {
+              if (cachedAsset) {
+                // Also cache in runtime cache for faster access
+                const responseToCache = cachedAsset.clone();
+                caches.open(RUNTIME_CACHE).then((cache) => {
+                  cache.put(request, responseToCache);
+                });
+                return cachedAsset;
+              }
+              // For favicons, try alternative paths
+              if (isFavicon) {
+                const altPaths = ['/favicon.png', '/favicon.svg'];
+                return Promise.all(altPaths.map(altPath => {
+                  if (url.pathname !== altPath) {
+                    const altRequest = new Request(altPath);
+                    return installCache.match(altRequest);
+                  }
+                  return Promise.resolve(null);
+                })).then((altCachedResults) => {
+                  const found = altCachedResults.find(result => result !== null);
+                  if (found) {
+                    // Cache in runtime cache
+                    const responseToCache = found.clone();
+                    caches.open(RUNTIME_CACHE).then((cache) => {
+                      cache.put(request, responseToCache);
+                    });
+                    return found;
+                  }
+                  // Not in install cache, try network
+                  return null;
+                });
+              }
+              // Not in install cache, try network
+              return null;
+            });
+          }).then((cachedResponse) => {
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            // If not in any cache, try network
+            return fetch(request).then((response) => {
+              if (!response || response.status !== 200 || response.type !== 'basic') {
+                return response;
+              }
+              // Cache successful responses for offline use
+              const responseToCache = response.clone();
+              caches.open(RUNTIME_CACHE).then((cache) => {
+                cache.put(request, responseToCache);
+              });
+              return response;
+            });
+          });
+        }
+        
+        // For non-image requests, try network
         return fetch(request).then((response) => {
           // Don't cache non-successful responses
           if (!response || response.status !== 200 || response.type !== 'basic') {
@@ -188,16 +295,62 @@ self.addEventListener('fetch', (event) => {
             cache.put(request, responseToCache);
           });
           return response;
-        }).catch(() => {
-          // Network failed and not in cache - try to find a fallback
-          // For images, we could return a placeholder, but for now return a basic response
-          // The app should handle missing assets gracefully
-          return new Response('Offline - resource not available', { 
+        });
+      }).catch(() => {
+          // Network failed and not in cache
+          const errorUrl = new URL(request.url);
+          const isImage = errorUrl.pathname.match(/\.(jpg|jpeg|png|gif|svg|webp|ico)$/i);
+          const isFaviconError = errorUrl.pathname.includes('favicon');
+          
+          // For favicons, try to find them in the install cache
+          if (isFaviconError) {
+            return caches.open(CACHE_NAME).then((installCache) => {
+              return installCache.match(request).then((cachedFavicon) => {
+                if (cachedFavicon) {
+                  return cachedFavicon;
+                }
+                // Try alternative favicon paths
+                const altPaths = ['/favicon.png', '/favicon.svg'];
+                return Promise.all(altPaths.map(altPath => {
+                  if (errorUrl.pathname !== altPath) {
+                    const altRequest = new Request(altPath);
+                    return installCache.match(altRequest);
+                  }
+                  return Promise.resolve(null);
+                })).then((altCachedResults) => {
+                  // Find first non-null result
+                  const found = altCachedResults.find(result => result !== null);
+                  if (found) {
+                    return found;
+                  }
+                  // If still not found, return empty response
+                  return new Response('', {
+                    status: 200,
+                    headers: {
+                      'Content-Type': errorUrl.pathname.includes('.svg') ? 'image/svg+xml' : 'image/png'
+                    }
+                  });
+                });
+              });
+            });
+          }
+          
+          if (isImage) {
+            // Return empty image response - browser will handle it gracefully
+            return new Response('', {
+              status: 200,
+              headers: {
+                'Content-Type': 'image/png'
+              }
+            });
+          }
+          
+          // For other assets, return 503 but don't break the app
+          return new Response('', { 
             status: 503, 
             statusText: 'Service Unavailable' 
           });
-        });
-      })
+        })
     );
   }
 });

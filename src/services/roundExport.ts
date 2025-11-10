@@ -3,9 +3,9 @@
  */
 
 import { Round, Course, Player, Hole, Score } from '../types';
-import { getAllCourses, saveCourse, getCourseByName, getCourseById } from './storage/courseStorage';
+import { getAllCourses, saveCourse, getCourseByName, getCourseById, generateCourseId } from './storage/courseStorage';
 import { getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, getUserById } from './storage/userStorage';
-import { saveRound, generateRoundId } from './storage/roundStorage';
+import { saveRound, generateRoundId, getRoundById } from './storage/roundStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
 import { getStorageId } from './storage/storageId';
 
@@ -173,7 +173,6 @@ function validateExportText(exportText: string): void {
  * Export a round to a human-readable format
  */
 export async function exportRound(roundId: string): Promise<string> {
-  const { getRoundById } = await import('./storage/roundStorage');
   const round = await getRoundById(roundId);
   
   if (!round) {
@@ -412,7 +411,6 @@ export async function importRound(
               ? courseHolesData 
               : Array.from({ length: courseHoles }, (_, i) => ({ number: i + 1 }));
             
-            const { generateCourseId } = await import('./storage/courseStorage');
             localCourseId = await generateCourseId();
             const newCourse: Course = {
               id: localCourseId,
@@ -531,7 +529,7 @@ export async function importRound(
       notes,
     };
 
-    await saveRound(newRound);
+    await saveRound(newRound, true); // allowRestore=true for new rounds
     
     // If we had a foreign round ID, we could optionally track it, but rounds aren't merged
     // so we just create new ones

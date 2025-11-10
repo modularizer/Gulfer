@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { User } from '@/services/storage/userStorage';
 import { saveUser, generateUserId } from '@/services/storage/userStorage';
 import { ErrorDialog } from '@/components/common';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
 
 export default function NewPlayerScreen() {
   const theme = useTheme();
@@ -24,7 +25,6 @@ export default function NewPlayerScreen() {
       };
 
       await saveUser(newUser);
-      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       router.push(`/player/${encodeNameForUrl(newUser.name)}/overview`);
     } catch (error) {
       console.error('Error saving player:', error);

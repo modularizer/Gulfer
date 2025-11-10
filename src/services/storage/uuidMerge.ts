@@ -6,6 +6,7 @@
  */
 
 import { getItem, setItem } from './storageAdapter';
+import { getStorageId } from './storageId';
 
 const MERGE_TABLE_KEY = '@gulfer_uuid_merges';
 
@@ -92,13 +93,7 @@ export async function mapForeignToLocal(
   }
 }
 
-/**
- * Get storage ID (imported to avoid circular dependency)
- */
-async function getStorageId(): Promise<string> {
-  const { getStorageId: getStorageIdFn } = await import('./storageId');
-  return getStorageIdFn();
-}
+// getStorageId is now imported statically at the top
 
 /**
  * Get all foreign entities that map to a given local UUID

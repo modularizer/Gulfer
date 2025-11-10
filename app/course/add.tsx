@@ -6,6 +6,7 @@ import { Course } from '@/types';
 import { saveCourse, generateCourseId, getCourseById } from '@/services/storage/courseStorage';
 import { importCourse } from '@/services/courseExport';
 import { ErrorDialog, ImportDialog } from '@/components/common';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
 
 export default function AddCourseScreen() {
   const theme = useTheme();
@@ -37,7 +38,6 @@ export default function AddCourseScreen() {
       };
 
       await saveCourse(newCourse);
-      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       router.push(`/course/${encodeNameForUrl(newCourse.name)}/overview`);
     } catch (error) {
       console.error('Error saving course:', error);
@@ -55,7 +55,6 @@ export default function AddCourseScreen() {
       const newCourseId = await importCourse(importText);
       setImportText('');
       setImportDialogVisible(false);
-      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       const importedCourse = await getCourseById(newCourseId);
       if (importedCourse) {
         router.push(`/course/${encodeNameForUrl(importedCourse.name)}/overview`);

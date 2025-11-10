@@ -6,6 +6,7 @@ import { User } from '@/services/storage/userStorage';
 import { saveUser, generateUserId, getUserById } from '@/services/storage/userStorage';
 import { importPlayer } from '@/services/playerExport';
 import { ErrorDialog, ImportDialog } from '@/components/common';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
 
 export default function AddPlayerScreen() {
   const theme = useTheme();
@@ -27,7 +28,6 @@ export default function AddPlayerScreen() {
       };
 
       await saveUser(newUser);
-      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       router.push(`/player/${encodeNameForUrl(newUser.name)}/overview`);
     } catch (error) {
       console.error('Error saving player:', error);
@@ -45,7 +45,6 @@ export default function AddPlayerScreen() {
       const newPlayerId = await importPlayer(importText);
       setImportText('');
       setImportDialogVisible(false);
-      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       const importedPlayer = await getUserById(newPlayerId);
       if (importedPlayer) {
         router.push(`/player/${encodeNameForUrl(importedPlayer.name)}/overview`);

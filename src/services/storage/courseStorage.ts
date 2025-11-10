@@ -5,6 +5,8 @@
 
 import { getItem, setItem } from './storageAdapter';
 import { Course } from '../../types';
+import { getAllRounds } from './roundStorage';
+import { generateUniqueUUID } from '../../utils/uuid';
 
 // Re-export Course type from types
 export type { Course };
@@ -105,7 +107,6 @@ export async function deleteCourse(courseId: string): Promise<void> {
  * Ensures local uniqueness by checking existing courses
  */
 export async function generateCourseId(): Promise<string> {
-  const { generateUniqueUUID } = await import('../../utils/uuid');
   const courses = await getAllCourses();
   const existingIds = new Set(courses.map(c => c.id));
   return generateUniqueUUID(existingIds);
@@ -134,8 +135,6 @@ export async function isCourseNameAvailable(name: string, excludeCourseId?: stri
  */
 export async function getLastUsedCourse(): Promise<Course | null> {
   try {
-    // Import here to avoid circular dependency
-    const { getAllRounds } = await import('./roundStorage');
     const rounds = await getAllRounds();
     
     // Find the most recent round with a courseName

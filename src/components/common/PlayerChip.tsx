@@ -3,6 +3,7 @@ import { Chip } from 'react-native-paper';
 import { Player } from '../../types';
 import { router } from 'expo-router';
 import { StyleSheet } from 'react-native';
+import { idToCodename } from '../../utils/idUtils';
 
 interface PlayerChipProps {
   player: Player;
@@ -19,11 +20,10 @@ export default function PlayerChip({
   isCurrentPlayer = false,
   onPress,
 }: PlayerChipProps) {
-  const handlePress = async () => {
+  const handlePress = () => {
     if (onPress) {
       onPress();
     } else {
-      const { idToCodename } = await import('../../utils/idUtils');
       const playerCodename = idToCodename(player.id);
       router.push(`/player/${playerCodename}`);
     }

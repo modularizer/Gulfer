@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useTheme, Text, Card, Chip } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
-import { getAllUsers, getUserById, User } from '@/services/storage/userStorage';
+import { getAllUsers, getUserById, getUserByName, User } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { Round, Player, Score } from '@/types';
 import { getAllCourses, Course } from '@/services/storage/courseStorage';
 import { getShadowStyle } from '@/utils';
 import { exportPlayer } from '@/services/playerExport';
+import { decodeNameFromUrl } from '@/utils/urlEncoding';
 import {
   DetailPageLayout,
   SectionTitle,
@@ -57,9 +58,7 @@ export default function PlayerDetailScreen() {
       }
 
       try {
-        const { decodeNameFromUrl } = await import('@/utils/urlEncoding');
         const playerName = decodeNameFromUrl(playerNameParam);
-        const { getUserByName } = await import('@/services/storage/userStorage');
         const foundPlayer = await getUserByName(playerName);
         
         if (!foundPlayer) {

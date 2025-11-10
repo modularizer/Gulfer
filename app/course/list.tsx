@@ -6,6 +6,7 @@ import { getAllCourses, saveCourse, generateCourseId, deleteCourse } from '@/ser
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { getShadowStyle } from '@/utils';
 import { router } from 'expo-router';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
 import { Alert } from 'react-native';
 import {
   ListPageLayout,
@@ -88,7 +89,6 @@ export default function CoursesScreen() {
       if (selection.selectedCount > 0) {
         selection.toggleSelection(courseId);
       } else {
-        const { encodeNameForUrl } = await import('@/utils/urlEncoding');
         router.push(`/course/${encodeNameForUrl(courseName)}/overview`);
       }
     },

@@ -1,10 +1,7 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useCallback } from 'react';
 import { router, usePathname } from 'expo-router';
-import { useTheme } from '../../theme/ThemeContext';
-import { getAllUsers, getCurrentUserName, getUserIdForPlayerName } from '../../services/storage/userStorage';
-import { createNewRound } from '../../services/storage/roundStorage';
-import { getLastUsedCourse, getLatestAddedCourse } from '../../services/storage/courseStorage';
-import { Player } from '../../types';
+import { getAllUsers } from '../../services/storage/userStorage';
+import { encodeNameForUrl } from '../../utils/urlEncoding';
 import HillFooter from './Footer/HillFooter';
 
 // Context to allow pages to register custom center button handlers
@@ -33,34 +30,12 @@ export default function Footer({ customCenterHandler }: FooterProps) {
   // Check if we're on a holes page (but not on /players page)
   const isHolesPage = (pathname?.includes('/holes') && !pathname?.includes('/players')) || false;
 
-  const handleCenterPress = useCallback(async () => {
+  const handleCenterPress = useCallback(() => {
     if (customCenterHandler) {
       customCenterHandler();
     } else {
-      // Create a round immediately (same as "Play Now")
-      try {
-        const currentUserName = await getCurrentUserName();
-        const playerName = currentUserName || 'You';
-        const playerId = await getUserIdForPlayerName(playerName);
-        const defaultPlayer: Player = { 
-          id: playerId, 
-          name: playerName,
-        };
-        
-        const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
-        const courseName = defaultCourse ? defaultCourse.name : undefined;
-        
-               const newRound = await createNewRound({
-                 players: [defaultPlayer],
-                 courseName,
-                 date: Date.now(),
-               });
-        
-        router.replace(`/round/${newRound.id}/overview`);
-      } catch (error) {
-        console.error('Error creating round:', error);
-        router.push('/');
-      }
+      // Navigate to the new round screen
+      router.push('/round/new');
     }
   }, [customCenterHandler]);
 
@@ -70,7 +45,6 @@ export default function Footer({ customCenterHandler }: FooterProps) {
       const currentUser = users.find(u => u.isCurrentUser);
       if (currentUser) {
         // Navigate to player page using encoded name
-        const { encodeNameForUrl } = await import('../../utils/urlEncoding');
         router.push(`/player/${encodeNameForUrl(currentUser.name)}/overview`);
       } else {
         // No user set, navigate to /you page to set it

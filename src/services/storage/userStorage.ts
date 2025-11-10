@@ -4,6 +4,7 @@
  */
 
 import { getItem, setItem } from './storageAdapter';
+import { generateUniqueUUID } from '../../utils/uuid';
 
 export interface User {
   id: string; // UUID for global uniqueness
@@ -139,7 +140,6 @@ export async function deleteUser(userId: string): Promise<void> {
  * Ensures local uniqueness by checking existing users
  */
 export async function generateUserId(): Promise<string> {
-  const { generateUniqueUUID } = await import('../../utils/uuid');
   const users = await getAllUsers();
   const existingIds = new Set(users.map(u => u.id));
   return generateUniqueUUID(existingIds);

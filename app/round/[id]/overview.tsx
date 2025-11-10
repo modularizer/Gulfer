@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text } from 'react-native-paper';
 import { Player, Round } from '@/types';
@@ -7,18 +7,25 @@ import PhotoGallery from '@/components/common/PhotoGallery';
 import CourseSelector from '@/components/common/CourseSelector';
 import PlayerChip from '@/components/common/PlayerChip';
 import NameUsernameDialog from '@/components/common/NameUsernameDialog';
-import { getRoundById, saveRound } from '@/services/storage/roundStorage';
+import { getRoundById, saveRound, generateRoundTitle, deleteRound } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
 import { exportRound } from '@/services/roundExport';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { useFooterCenterButton } from '@/components/common/Footer';
 import { Platform, Share, Alert, Clipboard } from 'react-native';
+
+// Conditional DateTimePicker import for native platforms
+let DateTimePicker: any;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
 
 const { width, height } = Dimensions.get('window');
 
 export default function RoundOverviewScreen() {
   const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
+  const pathname = usePathname();
   const { registerCenterButtonHandler } = useFooterCenterButton();
   const [round, setRound] = useState<Round | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +40,9 @@ export default function RoundOverviewScreen() {
   const [addPlayerDialogVisible, setAddPlayerDialogVisible] = useState(false);
   const [editPlayerDialog, setEditPlayerDialog] = useState<{ visible: boolean; playerId: string | null; initialName: string }>({ visible: false, playerId: null, initialName: '' });
   const [copySuccess, setCopySuccess] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
 
   // Load current user name and update "You" player
@@ -69,8 +79,8 @@ export default function RoundOverviewScreen() {
       try {
         const loadedRound = await getRoundById(roundIdParam);
         if (!loadedRound) {
-          setErrorDialog({ visible: true, title: 'Error', message: 'Round not found' });
-          setTimeout(() => router.push('/'), 1000);
+          // Round was deleted (likely auto-deleted), navigate away silently
+          router.replace('/round/list');
           return;
         }
 
@@ -79,6 +89,8 @@ export default function RoundOverviewScreen() {
         setNotes(loadedRound.notes || '');
         const loadedPhotos = loadedRound.photos || [];
         setPhotos(loadedPhotos);
+        // Initialize selected date from round date
+        setSelectedDate(new Date(loadedRound.date));
         
         const loadedCourses = await getAllCourses();
         setCourses(loadedCourses);
@@ -117,7 +129,14 @@ export default function RoundOverviewScreen() {
   const saveRoundData = useCallback(async () => {
     if (!round) return;
 
-    const { getAllCourses } = await import('@/services/storage/courseStorage');
+    // Verify the round still exists in storage before saving
+    // This prevents auto-save from restoring deleted rounds
+    const existingRound = await getRoundById(round.id);
+    if (!existingRound) {
+      // Round was deleted, don't save it back - silently skip
+      return;
+    }
+
     let courseName: string | undefined = round.courseName;
     if (selectedCourseId) {
       const courses = await getAllCourses();
@@ -125,8 +144,14 @@ export default function RoundOverviewScreen() {
       courseName = selectedCourse ? selectedCourse.name.trim() : round.courseName;
     }
 
+    // Use selectedDate for the round date, or keep existing date
+    const roundDate = selectedDate.getTime();
+    const updatedTitle = generateRoundTitle(roundDate);
+
     const updatedRound: Round = {
       ...round,
+      date: roundDate,
+      title: updatedTitle,
       players,
       notes: notes.trim() || undefined,
       photos: photos.length > 0 ? photos : undefined,
@@ -135,9 +160,9 @@ export default function RoundOverviewScreen() {
 
     await saveRound(updatedRound);
     setRound(updatedRound);
-  }, [round, players, notes, photos, selectedCourseId]);
+  }, [round, players, notes, photos, selectedCourseId, selectedDate]);
 
-  // Auto-save when data changes
+  // Auto-save when data changes (including date changes)
   useEffect(() => {
     if (round && !loading) {
       const timeoutId = setTimeout(() => {
@@ -146,7 +171,68 @@ export default function RoundOverviewScreen() {
 
       return () => clearTimeout(timeoutId);
     }
-  }, [players, notes, photos, selectedCourseId, round, loading, saveRoundData]);
+  }, [players, notes, photos, selectedCourseId, selectedDate, round, loading, saveRoundData]);
+
+  // Check if round should be auto-deleted when navigating away
+  const roundIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (round) {
+      roundIdRef.current = round.id;
+    }
+  }, [round]);
+
+  useEffect(() => {
+    if (!round || loading) return;
+
+    const checkAndDeleteEmptyRound = async (roundId: string) => {
+      try {
+        // Reload the round to get the latest state (including scores)
+        const latestRound = await getRoundById(roundId);
+        if (!latestRound) return; // Round already deleted
+
+        const hasPhotos = latestRound.photos && latestRound.photos.length > 0;
+        const hasCourse = !!latestRound.courseName;
+        const hasMultiplePlayers = latestRound.players.length > 1;
+        const hasNotes = !!latestRound.notes && latestRound.notes.trim().length > 0;
+        const hasScores = latestRound.scores && latestRound.scores.length > 0;
+
+        // Check if round is empty (no meaningful content)
+        const isEmpty = !hasPhotos && !hasCourse && !hasMultiplePlayers && !hasNotes && !hasScores;
+
+        // Check if round is >5 hours old with no scores
+        const roundAge = Date.now() - latestRound.date;
+        const fiveHoursInMs = 5 * 60 * 60 * 1000;
+        const isOldAndEmpty = roundAge > fiveHoursInMs && !hasScores;
+
+        // Delete if either condition is met
+        if (isEmpty || isOldAndEmpty) {
+          console.log(`Auto-deleting round ${latestRound.id}: isEmpty=${isEmpty}, isOldAndEmpty=${isOldAndEmpty}`);
+          await deleteRound(latestRound.id);
+        }
+      } catch (error) {
+        console.error('Error checking/deleting empty round:', error);
+      }
+    };
+
+    // Check when pathname changes to something that's not this round's pages
+    const isOnThisRoundPage = pathname?.includes(`/round/${round.id}/`);
+    const isLeavingThisRound = pathname && !isOnThisRoundPage;
+
+    if (isLeavingThisRound) {
+      checkAndDeleteEmptyRound(round.id);
+    }
+
+    // Also check on unmount (when component is being removed)
+    return () => {
+      const roundId = roundIdRef.current;
+      if (roundId) {
+        // Use a small delay to ensure we're actually navigating away
+        setTimeout(() => {
+          checkAndDeleteEmptyRound(roundId);
+        }, 100);
+      }
+    };
+  }, [pathname, round, loading]);
   
 
   const handlePlayersChange = useCallback((newPlayers: Player[]) => {
@@ -241,23 +327,66 @@ export default function RoundOverviewScreen() {
     }
   }, [round]);
 
-  const handleStartRound = useCallback(() => {
-    if (!round) return;
-    router.push(`/round/${round.id}/holes`);
-  }, [round]);
-
-  // Register the start round handler with the footer
+  // Register footer button to navigate to holes - only on overview page
   useEffect(() => {
-    registerCenterButtonHandler(handleStartRound);
+    const isOverviewPage = pathname?.includes('/overview') && !pathname?.includes('/holes');
+    
+    if (!round || loading || !isOverviewPage) {
+      registerCenterButtonHandler(null);
+      return;
+    }
+    
+    const handler = () => {
+      router.push(`/round/${round.id}/holes`);
+    };
+    
+    registerCenterButtonHandler(handler);
+    
     return () => {
       registerCenterButtonHandler(null);
     };
-  }, [handleStartRound, registerCenterButtonHandler]);
+  }, [round, loading, pathname, registerCenterButtonHandler]);
 
   const handlePhotosChange = useCallback((newPhotos: string[]) => {
     setPhotos(newPhotos);
   }, []);
 
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const formatTime = (date: Date): string => {
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  };
+
+  const handleDateChange = (event: any, date?: Date) => {
+    setShowDatePicker(false);
+    if (date) {
+      // Preserve the time when changing date
+      const newDate = new Date(date);
+      newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
+      setSelectedDate(newDate);
+    }
+  };
+
+  const handleTimeChange = (event: any, date?: Date) => {
+    setShowTimePicker(false);
+    if (date) {
+      // Preserve the date when changing time
+      const newDate = new Date(selectedDate);
+      newDate.setHours(date.getHours(), date.getMinutes());
+      setSelectedDate(newDate);
+    }
+  };
 
   const theme = useTheme();
 
@@ -275,7 +404,7 @@ export default function RoundOverviewScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      {/* Back Button */}
+      {/* Back Button and Copy Button */}
       <View style={styles.header}>
         <IconButton
           icon="arrow-left"
@@ -283,6 +412,13 @@ export default function RoundOverviewScreen() {
           iconColor={theme.colors.onSurface}
           onPress={() => router.push('/round/list')}
           style={styles.backButton}
+        />
+        <IconButton
+          icon={copySuccess ? "check" : "content-copy"}
+          size={24}
+          iconColor={copySuccess ? theme.colors.primary : theme.colors.onSurface}
+          onPress={handleExportRound}
+          style={styles.headerCopyButton}
         />
       </View>
       
@@ -296,9 +432,10 @@ export default function RoundOverviewScreen() {
           {photos.length === 0 && (
             <View style={styles.logoContainer}>
               <Image 
-                source={require('../../../assets/favicon.png')} 
+                source={require('../../../assets/favicon.png')}
                 style={styles.logoImage}
-                resizeMode="contain"
+                contentFit="contain"
+                cachePolicy="memory-disk"
               />
             </View>
           )}
@@ -310,12 +447,30 @@ export default function RoundOverviewScreen() {
           />
         </View>
 
-        {/* Date Display */}
-        <View style={styles.dateSection}>
-          <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>
-            {round.title}
-          </Text>
-        </View>
+        {/* Date Display - Editable */}
+        <TouchableOpacity 
+          style={styles.dateSection}
+          onPress={() => setShowDatePicker(true)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.dateContent}>
+            <IconButton
+              icon="calendar"
+              size={20}
+              iconColor={theme.colors.primary}
+              style={styles.dateIcon}
+            />
+            <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>
+              {round.title}
+            </Text>
+            <IconButton
+              icon="pencil"
+              size={18}
+              iconColor={theme.colors.onSurfaceVariant}
+              style={styles.editIcon}
+            />
+          </View>
+        </TouchableOpacity>
 
         {/* Location and Number of Holes Input */}
         <View style={styles.inputSection}>
@@ -346,19 +501,8 @@ export default function RoundOverviewScreen() {
 
         {/* Players Section */}
         <View style={styles.playersSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-              Players
-            </Text>
-            <IconButton
-              icon={copySuccess ? "check" : "content-copy"}
-              size={20}
-              iconColor={copySuccess ? theme.colors.primary : theme.colors.primary}
-              onPress={handleExportRound}
-              style={styles.exportButton}
-            />
-          </View>
           {(() => {
+            const hasScores = round.scores && round.scores.length > 0;
             const playerScores = players.map((player) => {
               const total = round.scores && round.scores.length > 0
                 ? round.scores
@@ -373,11 +517,26 @@ export default function RoundOverviewScreen() {
               const winnerScore = Math.min(...playerScores.map((ps) => ps.total));
               winner = playerScores.find((ps) => ps.total === winnerScore);
             }
-
-            const hasScores = round.scores && round.scores.length > 0;
             
             return (
               <>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+                    Players
+                  </Text>
+                  {!hasScores && (
+                    <Button
+                      mode="text"
+                      icon="account-plus"
+                      onPress={() => setAddPlayerDialogVisible(true)}
+                      textColor={theme.colors.primary}
+                      compact
+                      style={styles.addPlayerButton}
+                    >
+                      Add Player
+                    </Button>
+                  )}
+                </View>
                 <View style={styles.playersContainer}>
                   {playerScores.map(({ player, total }) => {
                     const isWinner = winner && player.id === winner.player.id;
@@ -389,6 +548,7 @@ export default function RoundOverviewScreen() {
                           isWinner={isWinner}
                           onPress={() => {
                             if (!round) return;
+                            console.log('Navigating to holes page via PlayerChip click');
                             router.push(`/round/${round.id}/holes`);
                           }}
                         />
@@ -405,19 +565,6 @@ export default function RoundOverviewScreen() {
                     );
                   })}
                 </View>
-                {!hasScores && (
-                  <View style={styles.addButtonRow}>
-                    <Button
-                      mode="text"
-                      icon="account-plus"
-                      onPress={() => setAddPlayerDialogVisible(true)}
-                      textColor={theme.colors.primary}
-                      compact
-                    >
-                      Add Player
-                    </Button>
-                  </View>
-                )}
               </>
             );
           })()}
@@ -463,6 +610,131 @@ export default function RoundOverviewScreen() {
           />
         </View>
       </ScrollView>
+
+      {/* Date/Time Picker Dialogs */}
+      <Portal>
+        <Dialog
+          visible={showDatePicker}
+          onDismiss={() => setShowDatePicker(false)}
+        >
+          <Dialog.Title>Select Date</Dialog.Title>
+          <Dialog.Content>
+            {Platform.OS === 'web' ? (
+              <input
+                type="date"
+                value={selectedDate.toISOString().split('T')[0]}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const newDate = new Date(e.target.value);
+                    newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
+                    setSelectedDate(newDate);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  fontSize: '16px',
+                  border: `1px solid ${theme.colors.outline}`,
+                  borderRadius: '4px',
+                  backgroundColor: theme.colors.surface,
+                  color: theme.colors.onSurface,
+                }}
+              />
+            ) : (
+              <View>
+                {showDatePicker && DateTimePicker && (
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display="default"
+                    onChange={handleDateChange}
+                  />
+                )}
+              </View>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowDatePicker(false)}>Cancel</Button>
+            <Button 
+              mode="contained" 
+              onPress={() => {
+                setShowDatePicker(false);
+                setShowTimePicker(true);
+              }}
+            >
+              Next: Time
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={showTimePicker}
+          onDismiss={() => setShowTimePicker(false)}
+        >
+          <Dialog.Title>Select Time</Dialog.Title>
+          <Dialog.Content>
+            {Platform.OS === 'web' ? (
+              <input
+                type="time"
+                value={selectedDate.toTimeString().slice(0, 5)}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const [hours, minutes] = e.target.value.split(':');
+                    const newDate = new Date(selectedDate);
+                    newDate.setHours(parseInt(hours), parseInt(minutes));
+                    setSelectedDate(newDate);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  fontSize: '16px',
+                  border: `1px solid ${theme.colors.outline}`,
+                  borderRadius: '4px',
+                  backgroundColor: theme.colors.surface,
+                  color: theme.colors.onSurface,
+                }}
+              />
+            ) : (
+              <View>
+                {showTimePicker && DateTimePicker && (
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="time"
+                    display="default"
+                    onChange={handleTimeChange}
+                    is24Hour={false}
+                  />
+                )}
+              </View>
+            )}
+            <Text style={[styles.previewText, { color: theme.colors.onSurfaceVariant, marginTop: 16 }]}>
+              {selectedDate.toLocaleString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+              })}
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowTimePicker(false)}>Cancel</Button>
+            <Button 
+              mode="contained" 
+              onPress={() => {
+                setShowTimePicker(false);
+                // Date/time is already updated in selectedDate state
+                // Auto-save will handle saving it
+              }}
+            >
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       {/* Error Dialog */}
       <Portal>
@@ -514,10 +786,16 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 8,
-    paddingLeft: 8,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     zIndex: 10,
   },
   backButton: {
+    margin: 0,
+  },
+  headerCopyButton: {
     margin: 0,
   },
   scrollView: {
@@ -549,10 +827,27 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 16,
   },
+  dateContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dateIcon: {
+    margin: 0,
+  },
   dateText: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '600',
     letterSpacing: 0.5,
+    flex: 1,
+  },
+  editIcon: {
+    margin: 0,
+  },
+  previewText: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   courseSelectorContainer: {
     flexDirection: 'row',
@@ -592,10 +887,7 @@ const styles = StyleSheet.create({
   removeButton: {
     margin: 0,
   },
-  addButtonRow: {
-    marginTop: 8,
-  },
-  exportButton: {
+  addPlayerButton: {
     margin: 0,
   },
   inputSection: {

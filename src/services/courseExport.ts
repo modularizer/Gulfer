@@ -6,7 +6,7 @@
 
 import { Course, Hole } from '../types';
 import { getStorageId } from './storage/storageId';
-import { saveCourse, getCourseByName, generateCourseId } from './storage/courseStorage';
+import { saveCourse, getCourseByName, generateCourseId, getCourseById } from './storage/courseStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
 
 /**
@@ -14,7 +14,6 @@ import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
  * Includes both UUID and name for merging support
  */
 export async function exportCourse(courseId: string): Promise<string> {
-  const { getCourseById } = await import('./storage/courseStorage');
   const course = await getCourseById(courseId);
   
   if (!course) {

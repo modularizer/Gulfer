@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   date: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   boldText: {
@@ -163,6 +163,7 @@ const styles = StyleSheet.create({
   },
   normalText: {
     fontWeight: 'normal',
+    fontSize: 12,
   },
   playersContainer: {
     flexDirection: 'row',

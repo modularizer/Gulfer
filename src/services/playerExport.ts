@@ -6,7 +6,7 @@
 
 import { User } from './storage/userStorage';
 import { getStorageId } from './storage/storageId';
-import { saveUser, getUserByName, generateUserId } from './storage/userStorage';
+import { saveUser, getUserByName, generateUserId, getUserById } from './storage/userStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
 
 /**
@@ -14,7 +14,6 @@ import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
  * Includes both UUID and name for merging support
  */
 export async function exportPlayer(playerId: string): Promise<string> {
-  const { getUserById } = await import('./storage/userStorage');
   const player = await getUserById(playerId);
   
   if (!player) {

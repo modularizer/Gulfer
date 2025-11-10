@@ -117,7 +117,7 @@ export default function ScorecardScreen({ navigation }: Props) {
         photos: photos.length > 0 ? photos : undefined,
       };
 
-      await saveRound(round);
+      await saveRound(round, true); // allowRestore=true for new rounds
       setShowSaveDialog(false);
       Alert.alert('Success', 'Round saved successfully!', [
         {

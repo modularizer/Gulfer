@@ -5,6 +5,7 @@
  */
 
 import { getItem, setItem } from './storageAdapter';
+import { generateUUID } from '../../utils/uuid';
 
 const STORAGE_ID_KEY = '@gulfer_storage_id';
 
@@ -18,7 +19,6 @@ export async function getStorageId(): Promise<string> {
     
     if (!storageId) {
       // Generate new storage ID (6 hex characters)
-      const { generateUUID } = await import('../../utils/uuid');
       storageId = await generateUUID();
       await setItem(STORAGE_ID_KEY, storageId);
     }
@@ -27,7 +27,6 @@ export async function getStorageId(): Promise<string> {
   } catch (error) {
     console.error('Error getting storage ID:', error);
     // Fallback: generate a new one (shouldn't happen in normal operation)
-    const { generateUUID } = await import('../../utils/uuid');
     return await generateUUID();
   }
 }

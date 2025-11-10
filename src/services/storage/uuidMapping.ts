@@ -5,8 +5,8 @@
  */
 
 import { mapForeignToLocal, getLocalUuidForForeign, getForeignEntitiesForLocal } from './uuidMerge';
-import { getAllCourses } from './courseStorage';
-import { getAllUsers } from './userStorage';
+import { getAllCourses, getCourseById } from './courseStorage';
+import { getAllUsers, getUserById } from './userStorage';
 
 /**
  * Manually map a foreign course to a local course
@@ -50,7 +50,6 @@ export async function getForeignCourseInfo(
   // Check if already mapped
   const localId = await getLocalUuidForForeign(foreignStorageId, foreignCourseId, 'course');
   if (localId) {
-    const { getCourseById } = await import('./courseStorage');
     const course = await getCourseById(localId);
     return {
       id: foreignCourseId,
@@ -71,7 +70,6 @@ export async function getForeignPlayerInfo(
   // Check if already mapped
   const localId = await getLocalUuidForForeign(foreignStorageId, foreignPlayerId, 'player');
   if (localId) {
-    const { getUserById } = await import('./userStorage');
     const user = await getUserById(localId);
     return {
       id: foreignPlayerId,

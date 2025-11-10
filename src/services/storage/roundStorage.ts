@@ -5,21 +5,33 @@
 
 import { getItem, setItem } from './storageAdapter';
 import { Round } from '../../types';
+import { generateUniqueUUID } from '../../utils/uuid';
 
 const ROUNDS_STORAGE_KEY = '@gulfer_rounds';
 
 /**
  * Save a round to local storage
+ * Note: This function will NOT restore a round that was deleted. If a round doesn't exist,
+ * it will only add it if it's a new round (not a deleted one being restored).
  */
-export async function saveRound(round: Round): Promise<void> {
+export async function saveRound(round: Round, allowRestore: boolean = false): Promise<void> {
   try {
     const rounds = await getAllRounds();
     const existingIndex = rounds.findIndex((r) => r.id === round.id);
     
     if (existingIndex >= 0) {
+      // Round exists, update it
       rounds[existingIndex] = round;
     } else {
-      rounds.push(round);
+      // Round doesn't exist - only add it if explicitly allowed (for new rounds)
+      // This prevents auto-save from restoring deleted rounds
+      if (allowRestore) {
+        rounds.push(round);
+      } else {
+        // Round was deleted or doesn't exist - don't restore it
+        console.warn(`Attempted to save round "${round.id}" that doesn't exist. This may be a deleted round being restored by auto-save. Skipping save.`);
+        return;
+      }
     }
     
     await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
@@ -71,23 +83,65 @@ export async function getRoundById(roundId: string): Promise<Round | null> {
  */
 export async function deleteRound(roundId: string): Promise<void> {
   try {
-    const rounds = await getAllRounds();
-    const initialLength = rounds.length;
-    const filtered = rounds.filter((r) => r.id !== roundId);
+    // Retry logic to handle race conditions with pending writes
+    let attempts = 0;
+    const maxAttempts = 3;
     
-    // Verify that a round was actually found and removed
-    if (filtered.length === initialLength) {
-      console.warn(`Round with ID "${roundId}" not found for deletion`);
-      return; // Round doesn't exist, consider it already deleted
+    while (attempts < maxAttempts) {
+      const rounds = await getAllRounds();
+      const initialLength = rounds.length;
+      const filtered = rounds.filter((r) => r.id !== roundId);
+      
+      // Verify that a round was actually found and removed
+      if (filtered.length === initialLength) {
+        // Round not found - verify it's actually gone by reading back
+        // This handles the case where we read stale data due to a pending write
+        if (attempts < maxAttempts - 1) {
+          // Wait a bit and retry in case there's a pending write
+          await new Promise(resolve => setTimeout(resolve, 50));
+          attempts++;
+          continue;
+        }
+        // On final attempt, check if round exists by reading back
+        const verifyRounds = await getAllRounds();
+        const roundStillExists = verifyRounds.some((r) => r.id === roundId);
+        if (!roundStillExists) {
+          // Round is already deleted, consider it success
+          return;
+        }
+        console.warn(`Round with ID "${roundId}" not found for deletion`);
+        return; // Round doesn't exist, consider it already deleted
+      }
+      
+      // Write the filtered list
+      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
+      
+      // Verify the write succeeded by reading back
+      // This ensures the IndexedDB transaction is fully committed
+      let verified = false;
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        const verifyRounds = await getAllRounds();
+        const roundStillExists = verifyRounds.some((r) => r.id === roundId);
+        if (!roundStillExists) {
+          verified = true;
+          break;
+        }
+      }
+      
+      if (verified) {
+        return; // Successfully deleted and verified
+      }
+      
+      // If verification failed, retry the deletion
+      attempts++;
+      if (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
     }
     
-    await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
-    
-    // Verify the deletion was successful
-    const verifyRounds = await getAllRounds();
-    if (verifyRounds.find((r) => r.id === roundId)) {
-      throw new Error('Round deletion verification failed - round still exists in storage');
-    }
+    // If we get here, all attempts failed
+    throw new Error(`Failed to delete round "${roundId}" after ${maxAttempts} attempts`);
   } catch (error) {
     console.error('Error deleting round:', error);
     throw error;
@@ -99,23 +153,67 @@ export async function deleteRound(roundId: string): Promise<void> {
  */
 export async function deleteRounds(roundIds: string[]): Promise<void> {
   try {
-    const rounds = await getAllRounds();
-    const initialLength = rounds.length;
-    const filtered = rounds.filter((r) => !roundIds.includes(r.id));
+    // Retry logic to handle race conditions with pending writes
+    let attempts = 0;
+    const maxAttempts = 3;
     
-    if (filtered.length === initialLength) {
-      console.warn(`None of the provided round IDs were found for deletion`);
-      return;
+    while (attempts < maxAttempts) {
+      const rounds = await getAllRounds();
+      const initialLength = rounds.length;
+      const filtered = rounds.filter((r) => !roundIds.includes(r.id));
+      
+      if (filtered.length === initialLength) {
+        // No rounds found to delete - verify they're actually gone
+        if (attempts < maxAttempts - 1) {
+          // Wait a bit and retry in case there's a pending write
+          await new Promise(resolve => setTimeout(resolve, 50));
+          attempts++;
+          continue;
+        }
+        // On final attempt, check if any rounds still exist
+        const verifyRounds = await getAllRounds();
+        const roundsStillExist = roundIds.some(id => 
+          verifyRounds.some((r) => r.id === id)
+        );
+        if (!roundsStillExist) {
+          // Rounds are already deleted, consider it success
+          return;
+        }
+        console.warn(`None of the provided round IDs were found for deletion`);
+        return;
+      }
+      
+      // Write the filtered list
+      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
+      
+      // Verify the write succeeded by reading back
+      // This ensures the IndexedDB transaction is fully committed
+      let verified = false;
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        const verifyRounds = await getAllRounds();
+        const roundsStillExist = roundIds.some(id => 
+          verifyRounds.some((r) => r.id === id)
+        );
+        if (!roundsStillExist) {
+          verified = true;
+          break;
+        }
+      }
+      
+      if (verified) {
+        return; // Successfully deleted and verified
+      }
+      
+      // If verification failed, retry the deletion
+      attempts++;
+      if (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
     }
     
-    await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
-    
-    // Verify the deletions were successful
-    const verifyRounds = await getAllRounds();
-    const stillExists = roundIds.filter(id => verifyRounds.some(r => r.id === id));
-    if (stillExists.length > 0) {
-      throw new Error(`Round deletion verification failed - rounds still exist: ${stillExists.join(', ')}`);
-    }
+    // If we get here, all attempts failed
+    throw new Error(`Failed to delete rounds after ${maxAttempts} attempts`);
   } catch (error) {
     console.error('Error deleting rounds:', error);
     throw error;
@@ -127,7 +225,6 @@ export async function deleteRounds(roundIds: string[]): Promise<void> {
  * Ensures local uniqueness by checking existing rounds
  */
 export async function generateRoundId(): Promise<string> {
-  const { generateUniqueUUID } = await import('../../utils/uuid');
   const rounds = await getAllRounds();
   const existingIds = new Set(rounds.map(r => r.id));
   return generateUniqueUUID(existingIds);
@@ -179,7 +276,7 @@ export async function createNewRound(initialData: {
     courseName: initialData.courseName,
   };
 
-  await saveRound(newRound);
+  await saveRound(newRound, true); // allowRestore=true for new rounds
   return newRound;
 }
 

@@ -30,8 +30,8 @@ export default function ScorecardPlayScreen() {
       try {
         const loadedRound = await getRoundById(roundIdParam);
         if (!loadedRound) {
-          setErrorDialog({ visible: true, title: 'Error', message: 'Round not found' });
-          setTimeout(() => router.push('/'), 1000);
+          // Round was deleted (likely auto-deleted), navigate away silently
+          router.replace('/round/list');
           return;
         }
 
@@ -78,6 +78,14 @@ export default function ScorecardPlayScreen() {
   // Auto-save scores
   const saveRoundData = useCallback(async () => {
     if (!round) return;
+
+    // Verify the round still exists in storage before saving
+    // This prevents auto-save from restoring deleted rounds
+    const existingRound = await getRoundById(round.id);
+    if (!existingRound) {
+      // Round was deleted, don't save it back - silently skip
+      return;
+    }
 
     const updatedRound: Round = {
       ...round,

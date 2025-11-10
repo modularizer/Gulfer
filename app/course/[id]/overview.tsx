@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
 import { Course, Round, Player } from '@/types';
-import { getCourseById } from '@/services/storage/courseStorage';
+import { getCourseById, getCourseByName } from '@/services/storage/courseStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { exportCourse } from '@/services/courseExport';
 import { router, useLocalSearchParams } from 'expo-router';
+import { decodeNameFromUrl } from '@/utils/urlEncoding';
 import { useFooterCenterButton } from '@/components/common/Footer';
 import {
   DetailPageLayout,
@@ -43,8 +44,6 @@ export default function CourseDetailScreen() {
       }
 
       try {
-        const { decodeNameFromUrl } = await import('@/utils/urlEncoding');
-        const { getCourseByName } = await import('@/services/storage/courseStorage');
         const courseName = decodeNameFromUrl(encodedNameParam);
         
         const loadedCourse = await getCourseByName(courseName);

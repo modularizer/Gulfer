@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import { Course } from '@/types';
 import { saveCourse, generateCourseId } from '@/services/storage/courseStorage';
 import { ErrorDialog } from '@/components/common';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
 
 export default function NewCourseScreen() {
   const theme = useTheme();
@@ -34,7 +35,6 @@ export default function NewCourseScreen() {
       };
 
       await saveCourse(newCourse);
-      const { encodeNameForUrl } = await import('@/utils/urlEncoding');
       router.push(`/course/${encodeNameForUrl(newCourse.name)}/overview`);
     } catch (error) {
       console.error('Error saving course:', error);

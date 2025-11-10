@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TouchableOpacity } from 'react-native';
 import { Round, Course } from '@/types';
 import { getAllRounds, deleteRound, deleteRounds } from '@/services/storage/roundStorage';
@@ -15,6 +15,12 @@ export default function RoundHistoryScreen() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [filteredRounds, setFilteredRounds] = useState<Round[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const roundsRef = useRef<Round[]>([]);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    roundsRef.current = rounds;
+  }, [rounds]);
 
   const loadRounds = useCallback(async () => {
     try {
@@ -30,12 +36,32 @@ export default function RoundHistoryScreen() {
   const selection = useSelection<string>();
   const listPage = useListPage<string>({
     onDelete: async (ids) => {
-      if (ids.length === 1) {
-        await deleteRound(ids[0]);
-      } else {
-        await deleteRounds(ids);
+      // Store original state in case we need to rollback (use ref to get current value)
+      const originalRounds = [...roundsRef.current];
+      
+      try {
+        // Update local state first to provide immediate UI feedback (optimistic update)
+        setRounds((prevRounds) => {
+          const filtered = prevRounds.filter((r) => !ids.includes(r.id));
+          return filtered;
+        });
+        
+        // Delete from storage
+        if (ids.length === 1) {
+          await deleteRound(ids[0]);
+        } else {
+          await deleteRounds(ids);
+        }
+        
+        // Don't reload immediately - trust the optimistic update
+        // This avoids race conditions with IndexedDB timing
+        // The state is already correct from the optimistic update
+      } catch (error) {
+        console.error('Error deleting rounds:', error);
+        // On error, rollback to original state
+        setRounds(originalRounds);
+        throw error; // Re-throw so useListPage can handle the error
       }
-      await loadRounds();
     },
     onRefresh: loadRounds,
     itemType: 'round',
