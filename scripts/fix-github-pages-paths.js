@@ -21,8 +21,13 @@ function fixPathsInFile(filePath) {
       // Pattern: /Gulfer/favicon.ico -> ./favicon.ico
       // Pattern: /Gulfer/_expo/... -> ./_expo/...
       // We detect base path by looking for /[word]/ followed by common paths
-      content = content.replace(/href="\/[^\/]+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'href="./$1');
-      content = content.replace(/src="\/[^\/]+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'src="./$1');
+      // But be careful - only strip if it's a single segment (base path), not a real route
+      content = content.replace(/href="\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'href="./$1');
+      content = content.replace(/src="\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'src="./$1');
+      
+      // Also fix any double-prefixed paths like ./Gulfer/favicon -> ./favicon
+      content = content.replace(/href="\.\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'href="./$1');
+      content = content.replace(/src="\.\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'src="./$1');
       
       // Then replace any remaining absolute paths (simple root paths)
       if (content.includes('href="/') && !content.includes('href="//') && !content.includes('href="./')) {
@@ -42,10 +47,21 @@ function fixPathsInFile(filePath) {
       }
       
       // Fix any malformed paths like "./Gulfer../" -> "./" or "./Gulfer/favicon" -> "./favicon"
+      // This must run AFTER the previous replacements to catch double-prefixed paths
       content = content.replace(/\.\/[^\/"']+\.\.\//g, './');
-      content = content.replace(/href="\.\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'href="./$1');
-      content = content.replace(/src="\.\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'src="./$1');
+      
+      // Fix double-prefixed relative paths: ./Gulfer/favicon.ico -> ./favicon.ico
+      // Match: ./[word]/favicon, ./[word]/manifest, etc.
+      const doublePrefixPattern = /(href|src)="\.\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g;
+      if (doublePrefixPattern.test(content)) {
+        content = content.replace(doublePrefixPattern, '$1="./$2');
+        modified = true;
+      }
+      
+      // Also fix any remaining ./Gulfer patterns that might cause issues
       if (content.includes('./Gulfer') || content.includes('./../') || content.match(/\.\/[^\/]+\.\./)) {
+        // Remove any ./[word]/ patterns before common files
+        content = content.replace(/(href|src)="\.\/[A-Za-z0-9_-]+\/(favicon|manifest|sw\.js)/g, '$1="./$2');
         modified = true;
       }
     }

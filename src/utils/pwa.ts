@@ -90,7 +90,24 @@ export function getLastVisitedPage(): string | null {
   }
 
   try {
-    return localStorage.getItem('gulfer-last-page');
+    const lastPage = localStorage.getItem('gulfer-last-page');
+    if (!lastPage) return null;
+    
+    // Get base path to check if cached path already has it
+    const basePath = getBasePath();
+    
+    // If cached path has base path, remove it to avoid double-prefixing
+    if (basePath !== '/' && lastPage.startsWith(basePath)) {
+      // Remove base path and update cache
+      let cleanPath = lastPage.substring(basePath.length - 1);
+      if (!cleanPath.startsWith('/')) {
+        cleanPath = '/' + cleanPath;
+      }
+      localStorage.setItem('gulfer-last-page', cleanPath);
+      return cleanPath;
+    }
+    
+    return lastPage;
   } catch (error) {
     console.log('Error getting last visited page:', error);
     return null;
@@ -106,14 +123,25 @@ export function cacheCurrentPage(url: string) {
   try {
     // Store just the pathname for routing
     const urlObj = new URL(url);
-    localStorage.setItem('gulfer-last-page', urlObj.pathname + urlObj.search);
+    let pathname = urlObj.pathname + urlObj.search;
+    
+    // Remove base path from stored path to avoid double-prefixing on restore
+    const basePath = getBasePath();
+    if (basePath !== '/' && pathname.startsWith(basePath)) {
+      pathname = pathname.substring(basePath.length - 1); // Keep leading /
+      if (!pathname.startsWith('/')) {
+        pathname = '/' + pathname;
+      }
+    }
+    
+    localStorage.setItem('gulfer-last-page', pathname);
     
     // Also notify service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then((registration) => {
         registration.active?.postMessage({
           type: 'CACHE_CURRENT_PAGE',
-          url: urlObj.pathname + urlObj.search,
+          url: pathname,
         });
       });
     }
@@ -141,20 +169,38 @@ export function usePWARouteCache() {
       const basePath = getBasePath();
       const rootPath = basePath === '/' ? '/' : basePath;
       
-      if (lastPage && lastPage !== currentPath && lastPage !== '/' && lastPage !== rootPath) {
+      // Don't restore if lastPage is just root or empty
+      if (lastPage && lastPage !== '/' && lastPage !== rootPath && lastPage.trim() !== '') {
         // Only navigate if we're on the root page and have a cached page
-        // Make sure lastPage doesn't already have base path
+        // lastPage is stored without base path, so we need to add it
         if (currentPath === '/' || currentPath === rootPath || currentPath === rootPath + 'index.html') {
-          // Ensure lastPage doesn't have double base path
+          // Construct target path: add base path if needed
           let targetPath = lastPage;
-          if (basePath !== '/' && !targetPath.startsWith(basePath)) {
-            targetPath = basePath + targetPath.replace(/^\//, '');
-          } else if (basePath !== '/' && targetPath.startsWith(basePath + basePath.replace(/\/$/, ''))) {
-            // Remove double base path
-            targetPath = targetPath.replace(new RegExp('^' + basePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '');
+          
+          // Remove any existing base path (in case of old cached data)
+          if (basePath !== '/' && targetPath.startsWith(basePath)) {
+            targetPath = targetPath.substring(basePath.length - 1);
             if (!targetPath.startsWith('/')) targetPath = '/' + targetPath;
           }
-          router.replace(targetPath as any);
+          
+          // Don't navigate if target is just root
+          if (targetPath === '/' || targetPath === rootPath) {
+            return;
+          }
+          
+          // Add base path if we're not at root
+          if (basePath !== '/' && !targetPath.startsWith(basePath)) {
+            targetPath = basePath + targetPath.replace(/^\//, '');
+          }
+          
+          // Only navigate if target is different from current and not root
+          if (targetPath !== currentPath && 
+              targetPath !== currentPath.replace(/\/$/, '') && 
+              targetPath !== currentPath + '/' &&
+              targetPath !== rootPath &&
+              targetPath !== rootPath + '/') {
+            router.replace(targetPath as any);
+          }
         }
       }
     }
