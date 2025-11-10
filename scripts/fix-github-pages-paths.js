@@ -17,27 +17,35 @@ function fixPathsInFile(filePath) {
 
     // For HTML files, fix href, src, and manifest attributes
     if (filePath.endsWith('.html')) {
-      // Replace absolute paths starting with /_expo/ with relative path
-      if (content.includes('/_expo/')) {
-        content = content.replace(/\/_expo\//g, './_expo/');
+      // First, strip base paths from URLs that Expo might have added
+      // Pattern: /Gulfer/favicon.ico -> ./favicon.ico
+      // Pattern: /Gulfer/_expo/... -> ./_expo/...
+      // We detect base path by looking for /[word]/ followed by common paths
+      content = content.replace(/href="\/[^\/]+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'href="./$1');
+      content = content.replace(/src="\/[^\/]+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'src="./$1');
+      
+      // Then replace any remaining absolute paths (simple root paths)
+      if (content.includes('href="/') && !content.includes('href="//') && !content.includes('href="./')) {
+        content = content.replace(/href="\/(favicon|manifest|sw\.js|assets\/|_expo\/)(?!\/)/g, 'href="./$1');
         modified = true;
       }
 
-      // Replace absolute paths for href (but not // for protocols)
-      if (content.includes('href="/') && !content.includes('href="//')) {
-        content = content.replace(/href="\//g, 'href="./');
-        modified = true;
-      }
-
-      // Replace absolute paths for src (but not // for protocols)
-      if (content.includes('src="/') && !content.includes('src="//')) {
-        content = content.replace(/src="\//g, 'src="./');
+      if (content.includes('src="/') && !content.includes('src="//') && !content.includes('src="./')) {
+        content = content.replace(/src="\/(favicon|manifest|sw\.js|assets\/|_expo\/)(?!\/)/g, 'src="./$1');
         modified = true;
       }
 
       // Fix manifest path
-      if (content.includes('manifest="/')) {
+      if (content.includes('manifest="/') && !content.includes('manifest="./')) {
         content = content.replace(/manifest="\//g, 'manifest="./');
+        modified = true;
+      }
+      
+      // Fix any malformed paths like "./Gulfer../" -> "./" or "./Gulfer/favicon" -> "./favicon"
+      content = content.replace(/\.\/[^\/"']+\.\.\//g, './');
+      content = content.replace(/href="\.\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'href="./$1');
+      content = content.replace(/src="\.\/[^\/"']+\/(favicon|manifest|sw\.js|assets\/|_expo\/)/g, 'src="./$1');
+      if (content.includes('./Gulfer') || content.includes('./../') || content.match(/\.\/[^\/]+\.\./)) {
         modified = true;
       }
     }
@@ -221,13 +229,16 @@ function injectAssetUrlPatch() {
   // Patch URL constructor to prepend base path for relative asset paths
   const OriginalURL = window.URL;
   window.URL = function(url, base) {
-    if (typeof url === 'string' && (url.startsWith('./assets/') || url.startsWith('/assets/'))) {
-      // If it's a relative asset path, prepend base path
-      const cleanPath = url.startsWith('./') ? url.substring(2) : url.startsWith('/') ? url.substring(1) : url;
-      url = basePath + cleanPath;
-      // Use current origin as base if no base provided
-      if (!base || base === 'https://expo.dev' || (typeof base === 'string' && base.includes('expo.dev'))) {
-        base = window.location.origin;
+    if (typeof url === 'string') {
+      // Only fix asset paths that don't already have the base path
+      if ((url.startsWith('./assets/') || url.startsWith('/assets/')) && !url.startsWith(basePath)) {
+        // If it's a relative asset path, prepend base path
+        const cleanPath = url.startsWith('./') ? url.substring(2) : url.startsWith('/') ? url.substring(1) : url;
+        url = basePath + cleanPath;
+        // Use current origin as base if no base provided
+        if (!base || base === 'https://expo.dev' || (typeof base === 'string' && base.includes('expo.dev'))) {
+          base = window.location.origin;
+        }
       }
     }
     return new OriginalURL(url, base);
@@ -236,12 +247,16 @@ function injectAssetUrlPatch() {
   // Also patch fetch to fix asset URLs
   const originalFetch = window.fetch;
   window.fetch = function(input, init) {
-    if (typeof input === 'string' && (input.startsWith('./assets/') || input.startsWith('/assets/'))) {
-      const cleanPath = input.startsWith('./') ? input.substring(2) : input.startsWith('/') ? input.substring(1) : input;
-      input = basePath + cleanPath;
+    if (typeof input === 'string') {
+      // Only fix asset paths that don't already have the base path
+      if ((input.startsWith('./assets/') || input.startsWith('/assets/')) && !input.startsWith(basePath)) {
+        const cleanPath = input.startsWith('./') ? input.substring(2) : input.startsWith('/') ? input.substring(1) : input;
+        input = basePath + cleanPath;
+      }
     } else if (input instanceof Request) {
       const url = input.url;
-      if (url.startsWith('./assets/') || url.startsWith('/assets/')) {
+      // Only fix asset paths that don't already have the base path
+      if ((url.startsWith('./assets/') || url.startsWith('/assets/')) && !url.startsWith(basePath)) {
         const cleanPath = url.startsWith('./') ? url.substring(2) : url.startsWith('/') ? url.substring(1) : url;
         input = new Request(basePath + cleanPath, input);
       }

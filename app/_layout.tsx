@@ -71,8 +71,10 @@ export default function RootLayout() {
         basePath += '/';
       }
       
-      const faviconPng = `${basePath}favicon.png`;
-      const faviconSvg = `${basePath}favicon.svg`;
+      // Use relative paths for favicons - browser will resolve them correctly
+      // Don't use basePath here to avoid double-prefixing (HTML may already have base path)
+      const faviconPng = './favicon.png';
+      const faviconSvg = './favicon.svg';
       
       // Check if preload links already exist
       const existingPng = document.querySelector('link[rel="preload"][href*="favicon.png"]');
