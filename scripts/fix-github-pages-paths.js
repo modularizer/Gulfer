@@ -42,7 +42,7 @@ function fixPathsInFile(filePath) {
       }
     }
 
-    // For JavaScript files, fix string literals containing /_expo/
+    // For JavaScript files, fix string literals containing /_expo/, /favicon, /sw.js
     if (filePath.endsWith('.js')) {
       // Replace /_expo/ in string literals with relative path
       if (content.includes('/_expo/')) {
@@ -55,6 +55,41 @@ function fixPathsInFile(filePath) {
         // Also handle cases where it might be concatenated: + "/_expo/" -> + "./_expo/"
         content = content.replace(/\+\s*"\/_expo\//g, '+ "./_expo/');
         content = content.replace(/\+\s*'\/_expo\//g, "+ './_expo/");
+        modified = true;
+      }
+      
+      // Replace /favicon.png and /favicon.svg with relative paths
+      if (content.includes('/favicon.png') || content.includes('/favicon.svg')) {
+        content = content.replace(/"\/favicon\.(png|svg)"/g, '"./favicon.$1"');
+        content = content.replace(/'\/favicon\.(png|svg)'/g, "'./favicon.$1'");
+        content = content.replace(/`\/favicon\.(png|svg)`/g, '`./favicon.$1`');
+        modified = true;
+      }
+      
+      // Replace /sw.js with relative path
+      if (content.includes('/sw.js')) {
+        content = content.replace(/"\/sw\.js"/g, '"./sw.js"');
+        content = content.replace(/'\/sw\.js'/g, "'./sw.js'");
+        content = content.replace(/`\/sw\.js`/g, '`./sw.js`');
+        modified = true;
+      }
+      
+      // Replace root path '/' in cache.addAll and caches.match (but be careful)
+      // Only replace standalone '/' in array literals and match calls
+      if (content.includes("cache.addAll([") || content.includes("caches.match('/')")) {
+        // Replace '/', in array literals (but not '//' for protocols)
+        content = content.replace(/cache\.addAll\(\s*\[\s*'\/'\s*,/g, "cache.addAll(['./',");
+        content = content.replace(/cache\.addAll\(\s*\[\s*"\/"\s*,/g, 'cache.addAll(["./",');
+        // Replace caches.match('/') with caches.match('./')
+        content = content.replace(/caches\.match\(['"]\/['"]\)/g, "caches.match('./')");
+        modified = true;
+      }
+    }
+    
+    // For JSON files (like manifest.json), fix favicon paths
+    if (filePath.endsWith('.json')) {
+      if (content.includes('"/favicon')) {
+        content = content.replace(/"\/favicon/g, '"./favicon');
         modified = true;
       }
     }

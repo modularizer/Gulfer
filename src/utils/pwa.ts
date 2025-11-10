@@ -14,9 +14,9 @@ export function registerServiceWorker() {
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      // Use absolute path to ensure it works from any route
+      // Use relative path for GitHub Pages compatibility
       navigator.serviceWorker
-        .register('/sw.js', { updateViaCache: 'none' })
+        .register('./sw.js', { updateViaCache: 'none' })
         .then((registration) => {
           console.log('Service Worker registered:', registration.scope);
           

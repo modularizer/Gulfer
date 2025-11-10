@@ -32,15 +32,16 @@ export default function RootLayout() {
   // Preload and cache favicons on web
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      // Use relative paths for GitHub Pages compatibility
       // Check if preload links already exist
-      const existingPng = document.querySelector('link[rel="preload"][href="/favicon.png"]');
-      const existingSvg = document.querySelector('link[rel="preload"][href="/favicon.svg"]');
+      const existingPng = document.querySelector('link[rel="preload"][href*="favicon.png"]');
+      const existingSvg = document.querySelector('link[rel="preload"][href*="favicon.svg"]');
       
       if (!existingPng) {
         const linkPng = document.createElement('link');
         linkPng.rel = 'preload';
         linkPng.as = 'image';
-        linkPng.href = '/favicon.png';
+        linkPng.href = './favicon.png';
         linkPng.type = 'image/png';
         document.head.appendChild(linkPng);
       }
@@ -49,19 +50,19 @@ export default function RootLayout() {
         const linkSvg = document.createElement('link');
         linkSvg.rel = 'preload';
         linkSvg.as = 'image';
-        linkSvg.href = '/favicon.svg';
+        linkSvg.href = './favicon.svg';
         linkSvg.type = 'image/svg+xml';
         document.head.appendChild(linkSvg);
       }
       
       // Also add as icon links for browser compatibility
-      const existingIconPng = document.querySelector('link[rel="icon"][href="/favicon.png"]');
-      const existingIconSvg = document.querySelector('link[rel="icon"][href="/favicon.svg"]');
+      const existingIconPng = document.querySelector('link[rel="icon"][href*="favicon.png"]');
+      const existingIconSvg = document.querySelector('link[rel="icon"][href*="favicon.svg"]');
       
       if (!existingIconPng) {
         const iconPng = document.createElement('link');
         iconPng.rel = 'icon';
-        iconPng.href = '/favicon.png';
+        iconPng.href = './favicon.png';
         iconPng.type = 'image/png';
         document.head.appendChild(iconPng);
       }
@@ -69,7 +70,7 @@ export default function RootLayout() {
       if (!existingIconSvg) {
         const iconSvg = document.createElement('link');
         iconSvg.rel = 'icon';
-        iconSvg.href = '/favicon.svg';
+        iconSvg.href = './favicon.svg';
         iconSvg.type = 'image/svg+xml';
         document.head.appendChild(iconSvg);
       }
