@@ -8,7 +8,6 @@ import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
 import AppLayout from '@/components/common/AppLayout';
 import { usePWARouteCache } from '@/utils/pwa';
 import '@/utils/suppressWarnings';
-import '@/utils/assetPathPatch';
 
 function RootLayoutNav() {
   const { theme, isDark } = useTheme();
