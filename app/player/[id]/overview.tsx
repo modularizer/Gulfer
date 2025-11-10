@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { useTheme, Text, Card, Chip } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import { useTheme, Text, Card, Chip, Button } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
 import { getAllUsers, getUserById, getUserByName, User } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
@@ -37,6 +37,7 @@ export default function PlayerDetailScreen() {
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   
   const { exportToClipboard } = useExport();
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const handleExport = useCallback(async () => {
     if (!player) return;
@@ -48,6 +49,60 @@ export default function PlayerDetailScreen() {
       setErrorDialog({ visible: true, title: 'Error', message: 'Failed to export player' });
     }
   }, [player, exportToClipboard]);
+
+  const handleUpdateApp = useCallback(async () => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      setErrorDialog({ 
+        visible: true, 
+        title: 'Not Available', 
+        message: 'App updates are only available on web.' 
+      });
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      // Clear all caches
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+        console.log('[UpdateApp] Cleared', cacheNames.length, 'caches');
+      }
+
+      // Update service worker if available
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.getRegistration();
+          if (registration) {
+            // Force service worker update
+            await registration.update();
+            console.log('[UpdateApp] Service worker update requested');
+            
+            // If there's a waiting worker, skip waiting
+            if (registration.waiting) {
+              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+              console.log('[UpdateApp] Sent SKIP_WAITING to waiting worker');
+            }
+          }
+        } catch (error) {
+          console.error('[UpdateApp] Error updating service worker:', error);
+        }
+      }
+
+      // Reload the page to get the latest version
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (error) {
+      console.error('[UpdateApp] Error updating app:', error);
+      setErrorDialog({ 
+        visible: true, 
+        title: 'Update Error', 
+        message: 'Failed to update app. Please try refreshing manually.' 
+      });
+      setIsUpdating(false);
+    }
+  }, []);
 
   // Load player data and calculate course scores
   useEffect(() => {
@@ -171,6 +226,15 @@ export default function PlayerDetailScreen() {
                 icon: 'export',
                 onPress: handleExport,
               },
+              ...(player.isCurrentUser && Platform.OS === 'web'
+                ? [
+                    {
+                      title: 'Update App',
+                      icon: 'refresh',
+                      onPress: handleUpdateApp,
+                    },
+                  ]
+                : []),
             ]
           : undefined
       }
@@ -266,6 +330,33 @@ export default function PlayerDetailScreen() {
           </View>
         </View>
       )}
+
+      {/* Update App Section - Only show for current user on web */}
+      {player && player.isCurrentUser && Platform.OS === 'web' && (
+        <View style={detailPageStyles.section}>
+          <SectionTitle>App Settings</SectionTitle>
+          <Card style={[styles.updateCard, { backgroundColor: theme.colors.surface }, getShadowStyle(2)]}>
+            <Card.Content>
+              <Text style={[styles.updateTitle, { color: theme.colors.onSurface }]}>
+                Update App
+              </Text>
+              <Text style={[styles.updateDescription, { color: theme.colors.onSurfaceVariant }]}>
+                If you're not seeing the latest version of the app, tap this button to clear the cache and reload the latest version.
+              </Text>
+              <Button
+                mode="contained"
+                icon="refresh"
+                onPress={handleUpdateApp}
+                loading={isUpdating}
+                disabled={isUpdating}
+                style={styles.updateButton}
+              >
+                {isUpdating ? 'Updating...' : 'Update App Now'}
+              </Button>
+            </Card.Content>
+          </Card>
+        </View>
+      )}
     </DetailPageLayout>
   );
 }
@@ -330,5 +421,21 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#999',
+  },
+  updateCard: {
+    marginTop: 8,
+  },
+  updateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  updateDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  updateButton: {
+    marginTop: 8,
   },
 });
