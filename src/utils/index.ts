@@ -4,6 +4,8 @@
 
 import { Platform, ViewStyle } from 'react-native';
 
+export { getAppVersion, getAppVersionSync } from './appVersion';
+
 /**
  * Format a Unix timestamp to a readable date string
  */

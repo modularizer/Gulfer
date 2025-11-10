@@ -6,7 +6,7 @@ import { getAllUsers, getUserById, getUserByName, User } from '@/services/storag
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { Round, Player, Score } from '@/types';
 import { getAllCourses, Course } from '@/services/storage/courseStorage';
-import { getShadowStyle } from '@/utils';
+import { getShadowStyle, getAppVersion } from '@/utils';
 import { exportPlayer } from '@/services/playerExport';
 import { decodeNameFromUrl } from '@/utils/urlEncoding';
 import {
@@ -38,6 +38,7 @@ export default function PlayerDetailScreen() {
   
   const { exportToClipboard } = useExport();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>('Loading...');
 
   const handleExport = useCallback(async () => {
     if (!player) return;
@@ -189,6 +190,17 @@ export default function PlayerDetailScreen() {
       loadPlayerData();
     }
   }, [playerNameParam]);
+
+  // Load app version on mount
+  useEffect(() => {
+    const loadAppVersion = async () => {
+      if (Platform.OS === 'web') {
+        const version = await getAppVersion();
+        setAppVersion(version);
+      }
+    };
+    loadAppVersion();
+  }, []);
 
   return (
     <DetailPageLayout
@@ -343,6 +355,9 @@ export default function PlayerDetailScreen() {
               <Text style={[styles.updateDescription, { color: theme.colors.onSurfaceVariant }]}>
                 If you're not seeing the latest version of the app, tap this button to clear the cache and reload the latest version.
               </Text>
+              <Text style={[styles.versionText, { color: theme.colors.onSurfaceVariant }]}>
+                App Version: {appVersion}
+              </Text>
               <Button
                 mode="contained"
                 icon="refresh"
@@ -433,7 +448,13 @@ const styles = StyleSheet.create({
   updateDescription: {
     fontSize: 14,
     lineHeight: 20,
+    marginBottom: 8,
+  },
+  versionText: {
+    fontSize: 12,
+    fontFamily: 'monospace',
     marginBottom: 16,
+    opacity: 0.7,
   },
   updateButton: {
     marginTop: 8,

@@ -28,6 +28,13 @@ jobs:
       - name: Build web
         run: npx expo export -p web
 
+      # Generate build version with timestamp
+      - name: Generate build version
+        run: |
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "{\"version\":\"$BUILD_TIME\"}" > dist/build-version.json
+          echo "Build version: $BUILD_TIME"
+
       # SPA fallback + disable Jekyll
       - run: |
           cp dist/index.html dist/404.html
