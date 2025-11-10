@@ -88,8 +88,14 @@ function fixPathsInFile(filePath) {
     
     // For JSON files (like manifest.json), fix favicon paths
     if (filePath.endsWith('.json')) {
+      // Fix absolute paths starting with /favicon
       if (content.includes('"/favicon')) {
         content = content.replace(/"\/favicon/g, '"./favicon');
+        modified = true;
+      }
+      // Also handle paths that might be in different formats
+      if (content.includes('"src": "/favicon')) {
+        content = content.replace(/"src": "\/favicon/g, '"src": "./favicon');
         modified = true;
       }
     }
@@ -118,9 +124,33 @@ function walkDir(dir) {
   }
 }
 
+// Copy favicon files to dist root if they don't exist
+function copyFavicons() {
+  const assetsDir = path.join(__dirname, '..', 'assets');
+  const faviconPng = path.join(assetsDir, 'favicon.png');
+  const faviconSvg = path.join(assetsDir, 'favicon.svg');
+  const distFaviconPng = path.join(distDir, 'favicon.png');
+  const distFaviconSvg = path.join(distDir, 'favicon.svg');
+  
+  try {
+    if (fs.existsSync(faviconPng) && !fs.existsSync(distFaviconPng)) {
+      fs.copyFileSync(faviconPng, distFaviconPng);
+      console.log('Copied favicon.png to dist root');
+    }
+    if (fs.existsSync(faviconSvg) && !fs.existsSync(distFaviconSvg)) {
+      fs.copyFileSync(faviconSvg, distFaviconSvg);
+      console.log('Copied favicon.svg to dist root');
+    }
+  } catch (error) {
+    console.error('Error copying favicon files:', error);
+  }
+}
+
 if (fs.existsSync(distDir)) {
   console.log('Converting absolute paths to relative paths...');
   walkDir(distDir);
+  console.log('Copying favicon files to dist root...');
+  copyFavicons();
   console.log('Path fixing complete!');
 } else {
   console.error(`Dist directory not found: ${distDir}`);
