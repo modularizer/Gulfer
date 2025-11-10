@@ -7,7 +7,6 @@ import { getAllRounds } from '@/services/storage/roundStorage';
 import { exportCourse } from '@/services/courseExport';
 import { router, useLocalSearchParams } from 'expo-router';
 import { decodeNameFromUrl } from '@/utils/urlEncoding';
-import { useFooterCenterButton } from '@/components/common/Footer';
 import {
   DetailPageLayout,
   HeroSection,
@@ -99,20 +98,6 @@ export default function CourseDetailScreen() {
     setPhotos(newPhotos);
   }, []);
 
-  // Set up footer center button to navigate to holes table
-  const { registerCenterButtonHandler } = useFooterCenterButton();
-  useEffect(() => {
-    if (encodedNameParam && course) {
-      const { encodeNameForUrl } = require('@/utils/urlEncoding');
-      registerCenterButtonHandler(() => {
-        const encodedName = encodeNameForUrl(course.name);
-        router.push(`/course/${encodedName}/holes`);
-      });
-    }
-    return () => {
-      registerCenterButtonHandler(null);
-    };
-  }, [encodedNameParam, course, registerCenterButtonHandler]);
 
   const handleExport = useCallback(async () => {
     if (!course) return;
@@ -134,7 +119,7 @@ export default function CourseDetailScreen() {
   return (
     <DetailPageLayout
       loading={loading}
-      onBack={() => router.push('/course/list')}
+      onBack={() => router.replace('/course/list')}
       headerMenuItems={[
         {
           title: 'Export Course',

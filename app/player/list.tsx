@@ -5,7 +5,7 @@ import { User } from '@/services/storage/userStorage';
 import { getAllUsers, saveUser, generateUserId, deleteUser } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { getShadowStyle } from '@/utils';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { encodeNameForUrl } from '@/utils/urlEncoding';
 import {
   ListPageLayout,
@@ -65,9 +65,12 @@ export default function PlayersScreen() {
     itemType: 'player',
   });
 
-  useEffect(() => {
-    loadPlayers();
-  }, []);
+  // Load players on mount and when page comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadPlayers();
+    }, [loadPlayers])
+  );
 
   const handlePlayerPress = useCallback(
     async (playerId: string) => {

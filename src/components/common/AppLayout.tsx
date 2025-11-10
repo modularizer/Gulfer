@@ -1,8 +1,8 @@
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
-import Footer, { FooterContext } from './Footer';
+import Footer from './Footer';
 import { getAllUsers, saveUser, saveCurrentUserName, generateUserId, User } from '../../services/storage/userStorage';
 import NameUsernameDialog from './NameUsernameDialog';
 
@@ -12,33 +12,9 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const pathname = usePathname();
-  const [customCenterHandler, setCustomCenterHandler] = useState<(() => void) | null>(null);
   const [showNameModal, setShowNameModal] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [initialName, setInitialName] = useState('');
-  
-  // Use ref to store handler to avoid re-renders when handler changes
-  const handlerRef = useRef<(() => void) | null>(null);
-
-  const registerCenterButtonHandler = useCallback((handler: (() => void) | null) => {
-    // Only update state if handler actually changed to prevent unnecessary re-renders
-    if (handlerRef.current !== handler) {
-      handlerRef.current = handler;
-      // Defer state update to avoid updating during render
-      // This prevents the "Cannot update a component while rendering" warning
-      Promise.resolve().then(() => {
-        setCustomCenterHandler(handler);
-      });
-    }
-  }, []);
-
-  // Memoize context value to prevent unnecessary re-renders
-  // Note: We use handlerRef.current in the context value so Footer can access the latest handler
-  // even if state hasn't updated yet
-  const contextValue = useMemo(() => ({
-    registerCenterButtonHandler,
-    customCenterHandler: handlerRef.current || customCenterHandler,
-  }), [registerCenterButtonHandler, customCenterHandler]);
 
   // Check if username is set on mount and on navigation changes
   useEffect(() => {
@@ -121,15 +97,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
   };
 
   return (
-    <FooterContext.Provider value={contextValue}>
-      <View style={styles.container}>
-        <View style={styles.content}>
-          {children}
-        </View>
-        <SafeAreaView edges={['bottom']}>
-          <Footer customCenterHandler={customCenterHandler} />
-        </SafeAreaView>
+    <View style={styles.container}>
+      <View style={styles.content}>
+        {children}
       </View>
+      <SafeAreaView edges={['bottom']}>
+        <Footer />
+      </SafeAreaView>
 
       {/* Name Modal */}
       {showNameModal && !isChecking && (
@@ -142,7 +116,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           onSave={handleSaveName}
         />
       )}
-    </FooterContext.Provider>
+    </View>
   );
 }
 

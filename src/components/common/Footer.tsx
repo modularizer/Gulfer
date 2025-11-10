@@ -1,43 +1,43 @@
-import React, { createContext, useContext, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { router, usePathname } from 'expo-router';
 import { getAllUsers } from '../../services/storage/userStorage';
 import { encodeNameForUrl } from '../../utils/urlEncoding';
 import HillFooter from './Footer/HillFooter';
 
-// Context to allow pages to register custom center button handlers
-interface FooterContextType {
-  registerCenterButtonHandler: (handler: (() => void) | null) => void;
-  customCenterHandler: (() => void) | null;
-}
+interface FooterProps {}
 
-export const FooterContext = createContext<FooterContextType | null>(null);
-
-export function useFooterCenterButton() {
-  const context = useContext(FooterContext);
-  if (!context) {
-    throw new Error('useFooterCenterButton must be used within AppLayout');
-  }
-  return context;
-}
-
-interface FooterProps {
-  customCenterHandler: (() => void) | null;
-}
-
-export default function Footer({ customCenterHandler }: FooterProps) {
+export default function Footer({}: FooterProps) {
   const pathname = usePathname();
   
   // Check if we're on a holes page (but not on /players page)
   const isHolesPage = (pathname?.includes('/holes') && !pathname?.includes('/players')) || false;
 
   const handleCenterPress = useCallback(() => {
-    if (customCenterHandler) {
-      customCenterHandler();
-    } else {
-      // Navigate to the new round screen
+    if (!pathname) {
       router.push('/round/new');
+      return;
     }
-  }, [customCenterHandler]);
+
+    // Determine route based on current page
+    if (pathname.includes('/round/') && pathname.includes('/overview')) {
+      // On round overview page - navigate to holes
+      const roundIdMatch = pathname.match(/\/round\/([^/]+)\/overview/);
+      if (roundIdMatch) {
+        router.push(`/round/${roundIdMatch[1]}/holes`);
+        return;
+      }
+    } else if (pathname.includes('/course/') && pathname.includes('/overview')) {
+      // On course overview page - navigate to holes
+      const courseIdMatch = pathname.match(/\/course\/([^/]+)\/overview/);
+      if (courseIdMatch) {
+        router.push(`/course/${courseIdMatch[1]}/holes`);
+        return;
+      }
+    }
+    
+    // Default: navigate to new round
+    router.push('/round/new');
+  }, [pathname]);
 
   const handleProfilePress = useCallback(async () => {
     try {

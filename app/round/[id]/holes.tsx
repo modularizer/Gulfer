@@ -1,11 +1,11 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Button, Dialog, Portal, Text, useTheme } from 'react-native-paper';
 import { Scorecard } from '@/components/Scorecard';
 import { Player, Score, Round } from '@/types';
 import { saveRound, getRoundById } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 
 export default function ScorecardPlayScreen() {
   const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
@@ -18,72 +18,94 @@ export default function ScorecardPlayScreen() {
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
   const [courseHoles, setCourseHoles] = useState<number | undefined>(undefined);
 
-  // Load round data
-  useEffect(() => {
-    const loadRound = async () => {
-      if (!roundIdParam) {
-        setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
-        setTimeout(() => router.push('/'), 1000);
+  // Track if initial load is complete - don't save during initial load or reload
+  const initialLoadCompleteRef = useRef(false);
+
+  // Load round data - reload on mount and whenever page comes into focus
+  const loadRound = useCallback(async () => {
+    if (!roundIdParam) {
+      setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
+      setTimeout(() => router.push('/'), 1000);
+      return;
+    }
+
+    // Reset initial load flag when reloading - don't save during reload
+    initialLoadCompleteRef.current = false;
+    setLoading(true);
+    try {
+      const loadedRound = await getRoundById(roundIdParam);
+      if (!loadedRound) {
+        // Round was deleted (likely auto-deleted), navigate away silently
+        router.replace('/round/list');
         return;
       }
 
-      try {
-        const loadedRound = await getRoundById(roundIdParam);
-        if (!loadedRound) {
-          // Round was deleted (likely auto-deleted), navigate away silently
-          router.replace('/round/list');
-          return;
-        }
+      setRound(loadedRound);
+      setPlayers(loadedRound.players);
+      setScores(loadedRound.scores || []);
 
-        setRound(loadedRound);
-        setPlayers(loadedRound.players);
-        setScores(loadedRound.scores || []);
-
-        // Load course information and initialize holes
-        if (loadedRound.courseName) {
-          try {
-            const courses = await getAllCourses();
-            const course = courses.find(c => c.name === loadedRound.courseName);
-            if (course) {
-              const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
-              setCourseHoles(holeCount);
-              const holeNumbers = Array.from({ length: holeCount }, (_, i) => i + 1);
-              setHoles(holeNumbers);
-            }
-          } catch (error) {
-            console.error('Error loading course info:', error);
+      // Load course information and initialize holes
+      if (loadedRound.courseName) {
+        try {
+          const courses = await getAllCourses();
+          const course = courses.find(c => c.name === loadedRound.courseName);
+          if (course) {
+            const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
+            setCourseHoles(holeCount);
+            const holeNumbers = Array.from({ length: holeCount }, (_, i) => i + 1);
+            setHoles(holeNumbers);
           }
-        } else {
-          if (loadedRound.scores && loadedRound.scores.length > 0) {
-            const holeNumbers = [...new Set(loadedRound.scores.map(s => s.holeNumber))].sort((a, b) => a - b);
-            if (holeNumbers.length > 0) {
-              setHoles(holeNumbers);
-            }
+        } catch (error) {
+          console.error('Error loading course info:', error);
+        }
+      } else {
+        if (loadedRound.scores && loadedRound.scores.length > 0) {
+          const holeNumbers = [...new Set(loadedRound.scores.map(s => s.holeNumber))].sort((a, b) => a - b);
+          if (holeNumbers.length > 0) {
+            setHoles(holeNumbers);
           }
         }
-      } catch (error) {
-        console.error('Error loading round:', error);
-        setErrorDialog({ visible: true, title: 'Error', message: 'Failed to load round' });
-        setTimeout(() => router.push('/'), 1000);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    if (roundIdParam) {
-      loadRound();
+    } catch (error) {
+      console.error('Error loading round:', error);
+      setErrorDialog({ visible: true, title: 'Error', message: 'Failed to load round' });
+      setTimeout(() => router.push('/'), 1000);
+    } finally {
+      setLoading(false);
     }
   }, [roundIdParam]);
 
+  // Load on mount
+  useEffect(() => {
+    if (roundIdParam) {
+      loadRound();
+    }
+  }, [roundIdParam, loadRound]);
+
+  // Reload whenever page comes into focus to get latest data
+  useFocusEffect(
+    useCallback(() => {
+      if (roundIdParam) {
+        loadRound();
+      }
+    }, [roundIdParam, loadRound])
+  );
+
   // Auto-save scores
   const saveRoundData = useCallback(async () => {
-    if (!round) return;
+    if (!round) {
+      console.log('[SAVE] Round holes: No round, skipping save');
+      return;
+    }
+
+    console.log('[SAVE] Round holes: Starting save for round', round.id);
 
     // Verify the round still exists in storage before saving
     // This prevents auto-save from restoring deleted rounds
     const existingRound = await getRoundById(round.id);
     if (!existingRound) {
       // Round was deleted, don't save it back - silently skip
+      console.log('[SAVE] Round holes: Round was deleted, skipping save');
       return;
     }
 
@@ -93,19 +115,62 @@ export default function ScorecardPlayScreen() {
       scores,
     };
 
-    await saveRound(updatedRound);
-    setRound(updatedRound);
+    console.log('[SAVE] Round holes: Saving round', round.id, {
+      players: updatedRound.players.length,
+      scores: updatedRound.scores?.length || 0
+    });
+
+    try {
+      await saveRound(updatedRound);
+      console.log('[SAVE] Round holes: Successfully saved round', round.id);
+      // Don't update round state here - it causes infinite loop
+      // State will be updated when data actually changes
+    } catch (error) {
+      console.error('[SAVE] Round holes: Failed to save round', round.id, error);
+      throw error;
+    }
   }, [round, players, scores]);
 
+  // Track if we're currently saving to prevent concurrent saves
+  const isSavingRef = useRef(false);
+  // Store save function in ref to avoid dependency issues
+  const saveRoundDataRef = useRef(saveRoundData);
+  
+  // Update ref when save function changes
+  useEffect(() => {
+    saveRoundDataRef.current = saveRoundData;
+  }, [saveRoundData]);
+
+  // Mark initial load as complete after first load
   useEffect(() => {
     if (round && !loading) {
+      // Use a small delay to ensure all state updates from load are complete
       const timeoutId = setTimeout(() => {
-        saveRoundData();
-      }, 500);
-
+        initialLoadCompleteRef.current = true;
+      }, 100);
       return () => clearTimeout(timeoutId);
+    } else {
+      initialLoadCompleteRef.current = false;
     }
-  }, [scores, players, round, loading, saveRoundData]);
+  }, [round, loading]);
+
+  // Auto-save when data changes - save immediately
+  // Note: Use ref for save function to avoid infinite loop from saveRoundData changing
+  // Only save if initial load is complete (user has actually changed data)
+  // round is NOT in dependencies - we only check it exists, we don't react to its changes
+  useEffect(() => {
+    if (round && !loading && !isSavingRef.current && initialLoadCompleteRef.current) {
+      isSavingRef.current = true;
+      console.log('[SAVE] Round holes: Data changed, triggering save');
+      saveRoundDataRef.current()
+        .catch((error) => {
+          console.error('[SAVE] Round holes: Error in auto-save', error);
+        })
+        .finally(() => {
+          isSavingRef.current = false;
+        });
+    }
+  }, [scores, players, loading]);
 
   const handleScoreChange = useCallback((playerId: string, holeNumber: number, throws: number) => {
     setScores((prev) => {

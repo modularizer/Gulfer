@@ -5,7 +5,7 @@ import { Course, Player } from '@/types';
 import { getAllCourses, saveCourse, generateCourseId, deleteCourse } from '@/services/storage/courseStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { getShadowStyle } from '@/utils';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { encodeNameForUrl } from '@/utils/urlEncoding';
 import { Alert } from 'react-native';
 import {
@@ -80,9 +80,12 @@ export default function CoursesScreen() {
     itemType: 'course',
   });
 
-  useEffect(() => {
-    loadCourses();
-  }, []);
+  // Load courses on mount and when page comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadCourses();
+    }, [loadCourses])
+  );
 
   const handleCoursePress = useCallback(
     async (courseId: string, courseName: string) => {

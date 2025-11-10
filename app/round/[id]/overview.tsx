@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
-import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text } from 'react-native-paper';
+import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text, Menu } from 'react-native-paper';
 import { Player, Round } from '@/types';
 import PhotoGallery from '@/components/common/PhotoGallery';
 import CourseSelector from '@/components/common/CourseSelector';
@@ -11,8 +11,7 @@ import { getRoundById, saveRound, generateRoundTitle, deleteRound } from '@/serv
 import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
 import { exportRound } from '@/services/roundExport';
-import { router, useLocalSearchParams, usePathname } from 'expo-router';
-import { useFooterCenterButton } from '@/components/common/Footer';
+import { router, useLocalSearchParams, usePathname, useFocusEffect } from 'expo-router';
 import { Platform, Share, Alert, Clipboard } from 'react-native';
 
 // Conditional DateTimePicker import for native platforms
@@ -26,7 +25,6 @@ const { width, height } = Dimensions.get('window');
 export default function RoundOverviewScreen() {
   const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
   const pathname = usePathname();
-  const { registerCenterButtonHandler } = useFooterCenterButton();
   const [round, setRound] = useState<Round | null>(null);
   const [loading, setLoading] = useState(true);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -38,12 +36,46 @@ export default function RoundOverviewScreen() {
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
   const [addPlayerDialogVisible, setAddPlayerDialogVisible] = useState(false);
+  const [addPlayerMenuVisible, setAddPlayerMenuVisible] = useState(false);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const [editPlayerDialog, setEditPlayerDialog] = useState<{ visible: boolean; playerId: string | null; initialName: string }>({ visible: false, playerId: null, initialName: '' });
   const [copySuccess, setCopySuccess] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
+  // Track if initial load is complete - don't save during initial load or reload
+  const initialLoadCompleteRef = useRef(false);
+
+  // Load all users for the add player menu
+  useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const users = await getAllUsers();
+        console.log('[Add Player] Loaded users:', users.length);
+        setAllUsers(users);
+      } catch (error) {
+        console.error('Error loading users:', error);
+      }
+    };
+    loadUsers();
+  }, []);
+
+  // Reload users when page comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const loadUsers = async () => {
+        try {
+          const users = await getAllUsers();
+          console.log('[Add Player] Reloaded users on focus:', users.length);
+          setAllUsers(users);
+        } catch (error) {
+          console.error('Error loading users:', error);
+        }
+      };
+      loadUsers();
+    }, [])
+  );
 
   // Load current user name and update "You" player
   useEffect(() => {
@@ -67,73 +99,92 @@ export default function RoundOverviewScreen() {
     loadCurrentUserName();
   }, []);
 
-  // Load round data
-  useEffect(() => {
-    const loadRound = async () => {
-      if (!roundIdParam) {
-        setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
-        setTimeout(() => router.push('/'), 1000);
+  // Load round data - reload on mount and whenever page comes into focus
+  const loadRound = useCallback(async () => {
+    if (!roundIdParam) {
+      setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
+      setTimeout(() => router.push('/'), 1000);
+      return;
+    }
+
+    // Reset initial load flag when reloading - don't save during reload
+    initialLoadCompleteRef.current = false;
+    setLoading(true);
+    try {
+      const loadedRound = await getRoundById(roundIdParam);
+      if (!loadedRound) {
+        // Round was deleted (likely auto-deleted), navigate away silently
+        router.replace('/round/list');
         return;
       }
 
-      try {
-        const loadedRound = await getRoundById(roundIdParam);
-        if (!loadedRound) {
-          // Round was deleted (likely auto-deleted), navigate away silently
-          router.replace('/round/list');
-          return;
-        }
-
-        setRound(loadedRound);
-        setPlayers(loadedRound.players);
-        setNotes(loadedRound.notes || '');
-        const loadedPhotos = loadedRound.photos || [];
-        setPhotos(loadedPhotos);
-        // Initialize selected date from round date
-        setSelectedDate(new Date(loadedRound.date));
-        
-        const loadedCourses = await getAllCourses();
-        setCourses(loadedCourses);
-        
-        if (loadedRound.courseName) {
-          const matchingCourse = loadedCourses.find(c => c.name.trim() === loadedRound.courseName!.trim());
-          if (matchingCourse) {
-            setSelectedCourseId(matchingCourse.id);
-            const holeCount = Array.isArray(matchingCourse.holes) 
-              ? matchingCourse.holes.length 
-              : (matchingCourse.holes as unknown as number || 0);
-            setNumberOfHoles(holeCount.toString());
-          } else {
-            setSelectedCourseId(null);
-            setNumberOfHoles('9');
-          }
+      setRound(loadedRound);
+      setPlayers(loadedRound.players);
+      setNotes(loadedRound.notes || '');
+      const loadedPhotos = loadedRound.photos || [];
+      setPhotos(loadedPhotos);
+      // Initialize selected date from round date
+      setSelectedDate(new Date(loadedRound.date));
+      
+      const loadedCourses = await getAllCourses();
+      setCourses(loadedCourses);
+      
+      if (loadedRound.courseName) {
+        const matchingCourse = loadedCourses.find(c => c.name.trim() === loadedRound.courseName!.trim());
+        if (matchingCourse) {
+          setSelectedCourseId(matchingCourse.id);
+          const holeCount = Array.isArray(matchingCourse.holes) 
+            ? matchingCourse.holes.length 
+            : (matchingCourse.holes as unknown as number || 0);
+          setNumberOfHoles(holeCount.toString());
         } else {
           setSelectedCourseId(null);
           setNumberOfHoles('9');
         }
-      } catch (error) {
-        console.error('Error loading round:', error);
-        setErrorDialog({ visible: true, title: 'Error', message: 'Failed to load round' });
-        setTimeout(() => router.push('/'), 1000);
-      } finally {
-        setLoading(false);
+      } else {
+        setSelectedCourseId(null);
+        setNumberOfHoles('9');
       }
-    };
-
-    if (roundIdParam) {
-      loadRound();
+    } catch (error) {
+      console.error('Error loading round:', error);
+      setErrorDialog({ visible: true, title: 'Error', message: 'Failed to load round' });
+      setTimeout(() => router.push('/'), 1000);
+    } finally {
+      setLoading(false);
     }
   }, [roundIdParam]);
 
+  // Load on mount
+  useEffect(() => {
+    if (roundIdParam) {
+      loadRound();
+    }
+  }, [roundIdParam, loadRound]);
+
+  // Reload whenever page comes into focus to get latest data
+  useFocusEffect(
+    useCallback(() => {
+      if (roundIdParam) {
+        loadRound();
+      }
+    }, [roundIdParam, loadRound])
+  );
+
   // Save round data
   const saveRoundData = useCallback(async () => {
-    if (!round) return;
+    if (!round) {
+      console.log('[SAVE] Round overview: No round, skipping save');
+      return;
+    }
 
+    console.log('[SAVE] Round overview: Starting save for round', round.id);
+    
     // Verify the round still exists in storage before saving
     // This prevents auto-save from restoring deleted rounds
     const existingRound = await getRoundById(round.id);
     if (!existingRound) {
       // Round was deleted, don't save it back - silently skip
+      console.log('[SAVE] Round overview: Round was deleted, skipping save');
       return;
     }
 
@@ -158,20 +209,65 @@ export default function RoundOverviewScreen() {
       courseName: courseName?.trim() || undefined,
     };
 
-    await saveRound(updatedRound);
-    setRound(updatedRound);
+    console.log('[SAVE] Round overview: Saving round', round.id, {
+      players: updatedRound.players.length,
+      notes: updatedRound.notes?.length || 0,
+      photos: updatedRound.photos?.length || 0,
+      courseName: updatedRound.courseName,
+      date: new Date(updatedRound.date).toISOString()
+    });
+
+    try {
+      await saveRound(updatedRound);
+      console.log('[SAVE] Round overview: Successfully saved round', round.id);
+      // Don't update round state here - it causes infinite loop
+      // State will be updated when data actually changes
+    } catch (error) {
+      console.error('[SAVE] Round overview: Failed to save round', round.id, error);
+      throw error;
+    }
   }, [round, players, notes, photos, selectedCourseId, selectedDate]);
 
-  // Auto-save when data changes (including date changes)
+  // Track if we're currently saving to prevent concurrent saves
+  const isSavingRef = useRef(false);
+  // Store save function in ref to avoid dependency issues
+  const saveRoundDataRef = useRef(saveRoundData);
+  
+  // Update ref when save function changes
+  useEffect(() => {
+    saveRoundDataRef.current = saveRoundData;
+  }, [saveRoundData]);
+
+  // Mark initial load as complete after first load
   useEffect(() => {
     if (round && !loading) {
+      // Use a small delay to ensure all state updates from load are complete
       const timeoutId = setTimeout(() => {
-        saveRoundData();
-      }, 500);
-
+        initialLoadCompleteRef.current = true;
+      }, 100);
       return () => clearTimeout(timeoutId);
+    } else {
+      initialLoadCompleteRef.current = false;
     }
-  }, [players, notes, photos, selectedCourseId, selectedDate, round, loading, saveRoundData]);
+  }, [round, loading]);
+
+  // Auto-save when data changes (including date changes) - save immediately
+  // Note: Use ref for save function to avoid infinite loop from saveRoundData changing
+  // Only save if initial load is complete (user has actually changed data)
+  // round is NOT in dependencies - we only check it exists, we don't react to its changes
+  useEffect(() => {
+    if (round && !loading && !isSavingRef.current && initialLoadCompleteRef.current) {
+      isSavingRef.current = true;
+      console.log('[SAVE] Round overview: Data changed, triggering save');
+      saveRoundDataRef.current()
+        .catch((error) => {
+          console.error('[SAVE] Round overview: Error in auto-save', error);
+        })
+        .finally(() => {
+          isSavingRef.current = false;
+        });
+    }
+  }, [players, notes, photos, selectedCourseId, selectedDate, loading]);
 
   // Check if round should be auto-deleted when navigating away
   const roundIdRef = useRef<string | null>(null);
@@ -252,13 +348,32 @@ export default function RoundOverviewScreen() {
         id: playerId,
         name,
       };
-      setPlayers([...players, newPlayer]);
+      const updatedPlayers = [...players, newPlayer];
+      setPlayers(updatedPlayers);
       setAddPlayerDialogVisible(false);
+      
+      // Reload users to include the newly added player
+      const users = await getAllUsers();
+      setAllUsers(users);
+      
+      // Save round with updated players
+      if (round) {
+        const updatedRound = { ...round, players: updatedPlayers };
+        console.log('[SAVE] Round overview: Saving after adding player', round.id, { playerCount: updatedPlayers.length });
+        try {
+          await saveRound(updatedRound);
+          console.log('[SAVE] Round overview: Successfully saved after adding player', round.id);
+          setRound(updatedRound);
+        } catch (error) {
+          console.error('[SAVE] Round overview: Failed to save after adding player', round.id, error);
+          throw error;
+        }
+      }
     } catch (error) {
       console.error('Error saving player:', error);
       setErrorDialog({ visible: true, title: 'Error', message: 'Failed to save player' });
     }
-  }, [players]);
+  }, [players, round]);
 
   const handleSaveEditPlayer = useCallback(async (name: string, username: string) => {
     try {
@@ -271,11 +386,25 @@ export default function RoundOverviewScreen() {
       });
       setPlayers(updatedPlayers);
       setEditPlayerDialog({ visible: false, playerId: null, initialName: '' });
+      
+      // Save round with updated players
+      if (round) {
+        const updatedRound = { ...round, players: updatedPlayers };
+        console.log('[SAVE] Round overview: Saving after editing player', round.id, { playerCount: updatedPlayers.length });
+        try {
+          await saveRound(updatedRound);
+          console.log('[SAVE] Round overview: Successfully saved after editing player', round.id);
+          setRound(updatedRound);
+        } catch (error) {
+          console.error('[SAVE] Round overview: Failed to save after editing player', round.id, error);
+          throw error;
+        }
+      }
     } catch (error) {
       console.error('Error updating player:', error);
       setErrorDialog({ visible: true, title: 'Error', message: 'Failed to update player' });
     }
-  }, [players, editPlayerDialog.playerId]);
+  }, [players, editPlayerDialog.playerId, round]);
 
   const handleEditPlayer = useCallback((playerId: string) => {
     const player = players.find((p) => p.id === playerId);
@@ -288,13 +417,71 @@ export default function RoundOverviewScreen() {
     }
   }, [players]);
 
-  const handleRemovePlayer = useCallback((playerId: string) => {
+  const handleAddPlayerPress = useCallback(() => {
+    console.log('[Add Player] All users:', allUsers.length, 'Current players:', players.length);
+    // Filter out players already in the round
+    const availableUsers = allUsers.filter(
+      (user) => !players.some((p) => p.id === user.id)
+    );
+    console.log('[Add Player] Available users:', availableUsers.length, availableUsers.map(u => u.name));
+
+    // If there are no available players, immediately open the dialog
+    if (availableUsers.length === 0) {
+      console.log('[Add Player] No available users, opening dialog directly');
+      setAddPlayerDialogVisible(true);
+    } else {
+      // Otherwise, show the menu with available players
+      console.log('[Add Player] Showing menu with', availableUsers.length, 'available users');
+      setAddPlayerMenuVisible(true);
+    }
+  }, [allUsers, players]);
+
+  const handleAddExistingPlayer = useCallback(async (userId: string, userName: string) => {
+    const newPlayer: Player = {
+      id: userId,
+      name: userName,
+    };
+    const updatedPlayers = [...players, newPlayer];
+    setPlayers(updatedPlayers);
+    setAddPlayerMenuVisible(false);
+    
+    // Save round with updated players
+    if (round) {
+      const updatedRound = { ...round, players: updatedPlayers };
+      console.log('[SAVE] Round overview: Saving after adding existing player', round.id, { playerCount: updatedPlayers.length });
+      try {
+        await saveRound(updatedRound);
+        console.log('[SAVE] Round overview: Successfully saved after adding existing player', round.id);
+        setRound(updatedRound);
+      } catch (error) {
+        console.error('[SAVE] Round overview: Failed to save after adding existing player', round.id, error);
+        throw error;
+      }
+    }
+  }, [players, round]);
+
+  const handleRemovePlayer = useCallback(async (playerId: string) => {
     if (players.length === 1) {
       setWarningDialog({ visible: true, message: 'You must have at least one player' });
       return;
     }
-    setPlayers(players.filter((p) => p.id !== playerId));
-  }, [players]);
+    const updatedPlayers = players.filter((p) => p.id !== playerId);
+    setPlayers(updatedPlayers);
+    
+    // Save round with updated players
+    if (round) {
+      const updatedRound = { ...round, players: updatedPlayers };
+      console.log('[SAVE] Round overview: Saving after removing player', round.id, { playerCount: updatedPlayers.length });
+      try {
+        await saveRound(updatedRound);
+        console.log('[SAVE] Round overview: Successfully saved after removing player', round.id);
+        setRound(updatedRound);
+      } catch (error) {
+        console.error('[SAVE] Round overview: Failed to save after removing player', round.id, error);
+        throw error;
+      }
+    }
+  }, [players, round]);
 
   const handleExportRound = useCallback(async () => {
     if (!round) return;
@@ -327,25 +514,6 @@ export default function RoundOverviewScreen() {
     }
   }, [round]);
 
-  // Register footer button to navigate to holes - only on overview page
-  useEffect(() => {
-    const isOverviewPage = pathname?.includes('/overview') && !pathname?.includes('/holes');
-    
-    if (!round || loading || !isOverviewPage) {
-      registerCenterButtonHandler(null);
-      return;
-    }
-    
-    const handler = () => {
-      router.push(`/round/${round.id}/holes`);
-    };
-    
-    registerCenterButtonHandler(handler);
-    
-    return () => {
-      registerCenterButtonHandler(null);
-    };
-  }, [round, loading, pathname, registerCenterButtonHandler]);
 
   const handlePhotosChange = useCallback((newPhotos: string[]) => {
     setPhotos(newPhotos);
@@ -406,13 +574,13 @@ export default function RoundOverviewScreen() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Back Button and Copy Button */}
       <View style={styles.header}>
-        <IconButton
-          icon="arrow-left"
-          size={24}
-          iconColor={theme.colors.onSurface}
-          onPress={() => router.push('/round/list')}
-          style={styles.backButton}
-        />
+          <IconButton
+            icon="arrow-left"
+            size={24}
+            iconColor={theme.colors.onSurface}
+            onPress={() => router.replace('/round/list')}
+            style={styles.backButton}
+          />
         <IconButton
           icon={copySuccess ? "check" : "content-copy"}
           size={24}
@@ -525,16 +693,40 @@ export default function RoundOverviewScreen() {
                     Players
                   </Text>
                   {!hasScores && (
-                    <Button
-                      mode="text"
-                      icon="account-plus"
-                      onPress={() => setAddPlayerDialogVisible(true)}
-                      textColor={theme.colors.primary}
-                      compact
-                      style={styles.addPlayerButton}
+                    <Menu
+                      visible={addPlayerMenuVisible}
+                      onDismiss={() => setAddPlayerMenuVisible(false)}
+                      anchor={
+                        <Button
+                          mode="text"
+                          icon="account-plus"
+                          onPress={handleAddPlayerPress}
+                          textColor={theme.colors.primary}
+                          compact
+                          style={styles.addPlayerButton}
+                        >
+                          Add Player
+                        </Button>
+                      }
                     >
-                      Add Player
-                    </Button>
+                      {allUsers
+                        .filter((user) => !players.some((p) => p.id === user.id))
+                        .map((user) => (
+                          <Menu.Item
+                            key={user.id}
+                            onPress={() => handleAddExistingPlayer(user.id, user.name)}
+                            title={user.name}
+                          />
+                        ))}
+                      <Menu.Item
+                        onPress={() => {
+                          setAddPlayerDialogVisible(true);
+                          setAddPlayerMenuVisible(false);
+                        }}
+                        title="+ Add New Player"
+                        titleStyle={{ color: theme.colors.primary }}
+                      />
+                    </Menu>
                   )}
                 </View>
                 <View style={styles.playersContainer}>
@@ -823,20 +1015,20 @@ const styles = StyleSheet.create({
     height: 80,
   },
   dateSection: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 16,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 0,
   },
   dateContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
   dateIcon: {
     margin: 0,
   },
   dateText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     letterSpacing: 0.5,
     flex: 1,
@@ -866,7 +1058,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 20,
@@ -877,7 +1069,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   playerChipWrapper: {
     flexDirection: 'row',
@@ -918,7 +1110,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 12,
+    marginBottom: 0,
   },
   notesInput: {
     backgroundColor: 'transparent',
@@ -927,6 +1119,7 @@ const styles = StyleSheet.create({
   notesContent: {
     fontSize: 16,
     paddingVertical: 8,
+    paddingTop: 0,
   },
   startButton: {
     marginHorizontal: 24,

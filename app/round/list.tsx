@@ -3,7 +3,7 @@ import { TouchableOpacity } from 'react-native';
 import { Round, Course } from '@/types';
 import { getAllRounds, deleteRound, deleteRounds } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
   ListPageLayout,
   RoundCard,
@@ -75,9 +75,12 @@ export default function RoundHistoryScreen() {
     []
   );
 
-  useEffect(() => {
-    loadRounds();
-  }, []);
+  // Load rounds on mount and when page comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadRounds();
+    }, [loadRounds])
+  );
 
   useEffect(() => {
     applyFilters(rounds);
