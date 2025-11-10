@@ -67,6 +67,7 @@ export default function NameUsernameDialog({
             placeholder={`Enter ${nameLabel.toLowerCase()}`}
             style={styles.nameInput}
             autoFocus
+            onSubmitEditing={handleSave}
           />
         </Dialog.Content>
         <Dialog.Actions>

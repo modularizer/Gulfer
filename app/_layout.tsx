@@ -20,17 +20,7 @@ function RootLayoutNav() {
             headerShown: false,
             contentStyle: { backgroundColor: theme.colors.background },
           }}
-        >
-          <Stack.Screen 
-            name="round/[id]" 
-            options={{
-              headerShown: true,
-              title: 'Round Details',
-              headerStyle: { backgroundColor: theme.colors.surface },
-              headerTintColor: theme.colors.onSurface,
-            }}
-          />
-        </Stack>
+        />
       </AppLayout>
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </PaperProvider>

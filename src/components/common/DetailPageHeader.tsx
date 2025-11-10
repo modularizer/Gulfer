@@ -93,9 +93,10 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
     gap: 12,
+    minWidth: 0, // Allow flex shrinking
   },
   headerSpacer: {
-    flex: 1,
+    width: 8, // Small fixed spacer instead of flex: 1
   },
 });
 

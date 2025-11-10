@@ -6,7 +6,6 @@ import { getAllUsers, saveUser, generateUserId, deleteUser } from '@/services/st
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { getShadowStyle } from '@/utils';
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import {
   ListPageLayout,
   NameUsernameDialog,

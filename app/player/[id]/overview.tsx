@@ -144,7 +144,10 @@ export default function PlayerDetailScreen() {
         player ? (
           <>
             <View style={styles.headerNameRow}>
-              <Text style={[styles.headerName, { color: theme.colors.onSurface }]}>
+              <Text 
+                style={[styles.headerName, { color: theme.colors.onSurface }]}
+                numberOfLines={1}
+              >
                 {player.name}
               </Text>
               {playerRounds.length > 0 && (

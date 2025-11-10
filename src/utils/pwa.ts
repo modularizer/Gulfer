@@ -14,11 +14,29 @@ export function registerServiceWorker() {
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      // Use relative path - works regardless of subdirectory
+      // Use absolute path to ensure it works from any route
       navigator.serviceWorker
-        .register('./sw.js')
+        .register('/sw.js', { updateViaCache: 'none' })
         .then((registration) => {
           console.log('Service Worker registered:', registration.scope);
+          
+          // Check for updates immediately and force activation
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // New service worker available, force activation
+                  newWorker.postMessage({ type: 'SKIP_WAITING' });
+                  // Reload to use new service worker
+                  window.location.reload();
+                }
+              });
+            }
+          });
+          
+          // Check for updates on every page load
+          registration.update();
         })
         .catch((error) => {
           console.log('Service Worker registration failed:', error);

@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, Platform, TouchableOpacity, Alert } from 
 import { useTheme, Button, Text, IconButton, Dialog, Portal, TextInput } from 'react-native-paper';
 import { router } from 'expo-router';
 
+// Conditional DateTimePicker import for native platforms
 let DateTimePicker: any;
 if (Platform.OS !== 'web') {
   DateTimePicker = require('@react-native-community/datetimepicker').default;
