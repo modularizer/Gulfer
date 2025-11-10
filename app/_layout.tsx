@@ -4,11 +4,11 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PaperProvider } from 'react-native-paper';
-import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
-import AppLayout from '../src/components/common/AppLayout';
-import { usePWARouteCache } from '../src/utils/pwa';
-import '../src/utils/suppressWarnings';
-import '../src/utils/assetPathPatch';
+import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
+import AppLayout from '@/components/common/AppLayout';
+import { usePWARouteCache } from '@/utils/pwa';
+import '@/utils/suppressWarnings';
+import '@/utils/assetPathPatch';
 
 function RootLayoutNav() {
   const { theme, isDark } = useTheme();
