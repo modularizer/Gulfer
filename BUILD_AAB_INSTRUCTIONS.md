@@ -86,6 +86,57 @@ The signed AAB will be generated at:
 android/app/build/outputs/bundle/release/app-release.aab
 ```
 
+## Step 3.5: Test the Release Build on Your Phone
+
+**Important**: AAB files cannot be directly installed on devices. You need to either build a release APK or use bundletool to extract APKs from the AAB.
+
+### Option A: Build a Release APK for Testing (Recommended)
+
+Build a signed release APK using the same signing configuration:
+
+```bash
+cd android
+./gradlew assembleRelease
+```
+
+The signed APK will be at:
+```
+android/app/build/outputs/apk/release/app-release.apk
+```
+
+You can then install it on your phone:
+1. Transfer the APK to your phone (via USB, email, cloud storage, etc.)
+2. On your phone, enable "Install from unknown sources" in Settings
+3. Open the APK file and install it
+
+Or use ADB to install directly:
+```bash
+adb install android/app/build/outputs/apk/release/app-release.apk
+```
+
+### Option B: Extract APKs from AAB using bundletool
+
+If you want to test the exact AAB you'll upload:
+
+1. Download bundletool from [GitHub](https://github.com/google/bundletool/releases)
+2. Extract APKs from your AAB:
+   ```bash
+   java -jar bundletool.jar build-apks \
+     --bundle=android/app/build/outputs/bundle/release/app-release.aab \
+     --output=app-release.apks \
+     --mode=universal
+   ```
+3. Extract the universal APK:
+   ```bash
+   unzip app-release.apks universal.apk
+   ```
+4. Install on your phone:
+   ```bash
+   adb install universal.apk
+   ```
+
+**Note**: The release APK (Option A) is simpler and uses the same signing, so it's the recommended approach for testing.
+
 ## Step 4: Upload to Google Play Console
 
 1. Go to [Google Play Console](https://play.google.com/console)

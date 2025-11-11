@@ -16,6 +16,7 @@ interface HillFooterProps {
   onNewRoundPress: () => void;
   onProfilePress: () => void;
   showCenterButton?: boolean;
+  centerButtonLabel?: string;
 }
 
 export default function HillFooter({
@@ -23,6 +24,7 @@ export default function HillFooter({
   onNewRoundPress,
   onProfilePress,
   showCenterButton = true,
+  centerButtonLabel = 'Start Round',
 }: HillFooterProps) {
   const paperTheme = usePaperTheme();
   const { isDark } = useTheme();
@@ -73,6 +75,7 @@ export default function HillFooter({
             buttonSize={BUTTON_SIZE}
             buttonOffset={BUTTON_OFFSET}
             containerWidth={containerWidth}
+            label={centerButtonLabel}
           />
         )}
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, Image, Platform, TouchableOpacity, Dimensions } from 'react-native';
-import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
+import Svg, { Defs, RadialGradient, Stop, Ellipse, Path, Text, TextPath } from 'react-native-svg';
+import { useTheme } from 'react-native-paper';
 
 interface CenterButtonProps {
   onPress: () => void;
@@ -10,6 +11,7 @@ interface CenterButtonProps {
   buttonSize: number;
   buttonOffset: number;
   containerWidth?: number;
+  label?: string;
 }
 
 const styles = StyleSheet.create({
@@ -33,11 +35,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   faviconImage: {
-    width: 108, // 1.5x the width (72 * 1.5)
-    height: 52, // 1.25x the height (42 * 1.25)
+    width: 119, // 1.5x the width (72 * 1.5) * 1.1 (10% larger)
+    height: 57, // 1.25x the height (42 * 1.25) * 1.1 (10% larger)
     resizeMode: 'contain',
     transform: [
-      { translateY: 4 }, // Move down
+      { translateY: -1 }, // Move up (moved up by 2px more)
       { rotate: '8deg' }, // Tilt right (clockwise)
     ],
   },
@@ -51,7 +53,9 @@ export default function CenterButton({
   buttonSize,
   buttonOffset,
   containerWidth: footerContainerWidth,
+  label = 'Start Round',
 }: CenterButtonProps) {
+  const theme = useTheme();
   const containerWidth = buttonSize * 1.4 + 20;
   const containerHeight = buttonSize * 0.7 + 20;
   const buttonWidth = buttonSize * 1.4;
@@ -61,6 +65,37 @@ export default function CenterButton({
   // This ensures proper centering on large desktop screens where the app container is constrained
   const widthForCentering = footerContainerWidth ?? Dimensions.get('window').width;
   const centerPosition = (widthForCentering / 2) - (containerWidth / 2);
+
+  // Calculate ellipse parameters for curved text path
+  // Use smaller radius for tighter text curve
+  const textRx = (buttonSize / 2) * 0.75; // 25% smaller radius for tighter arc
+  const textRy = (buttonHeight / 2) * 0.75; // 25% smaller radius for tighter arc
+  const cx = buttonWidth / 2;
+  const cy = buttonHeight / 2;
+  
+  // Create a path along the top arc of the ellipse
+  // Path goes from left to right along the top arc (symmetric for centering)
+  const startAngle = Math.PI; // 180 degrees (left side)
+  const endAngle = 0; // 0 degrees (right side)
+  
+  // Calculate points along the top arc for smooth curve
+  const numPoints = 100;
+  const pathPoints: string[] = [];
+  for (let i = 0; i <= numPoints; i++) {
+    const angle = startAngle + (endAngle - startAngle) * (i / numPoints);
+    const x = cx + textRx * Math.cos(angle);
+    const y = cy + textRy * Math.sin(angle);
+    if (i === 0) {
+      pathPoints.push(`M ${x} ${y}`);
+    } else {
+      pathPoints.push(`L ${x} ${y}`);
+    }
+  }
+  const textPath = pathPoints.join(' ');
+  
+  // Offset the text above the button - adjusted to compensate for smaller radius
+  const textOffsetY = 1; // Distance above the button (moved down 4px)
+  const textOffsetX = -1; // Move left by 1px
 
   return (
     <View
@@ -119,6 +154,30 @@ export default function CenterButton({
           fill="url(#buttonGradient)"
         />
       </Svg>
+      
+      {/* Curved text along the top of the button */}
+      {label && (
+        <Svg
+          width={buttonWidth}
+          height={buttonHeight + 30}
+          style={[styles.fabSvg, { top: textOffsetY, left: textOffsetX }]}
+        >
+          <Defs>
+            <Path id="textPath" d={textPath} />
+          </Defs>
+          <Text
+            fill={theme.colors.onSurface}
+            fontSize="14"
+            fontWeight="600"
+            textAnchor="middle"
+            letterSpacing="1"
+          >
+            <TextPath href="#textPath" startOffset="50%">
+              {label}
+            </TextPath>
+          </Text>
+        </Svg>
+      )}
       
       <TouchableOpacity
         style={[
