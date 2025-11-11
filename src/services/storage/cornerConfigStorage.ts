@@ -27,11 +27,11 @@ export async function getColumnVisibility(): Promise<ColumnVisibilityConfig | nu
     if (data) {
       return JSON.parse(data);
     }
-    // Default: show distance, hide par (if it exists)
-    return { distance: true, par: false };
+    // Default: show distance and g-stats, hide par (if it exists)
+    return { distance: true, par: false, gStats: true };
   } catch (error) {
     console.error('Error loading column visibility:', error);
-    return { distance: true, par: false };
+    return { distance: true, par: false, gStats: true };
   }
 }
 

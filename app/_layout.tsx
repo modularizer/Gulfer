@@ -46,6 +46,25 @@ export default function RootLayout() {
   // Inject PWA manifest and favicon links on web
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      // Prevent scrolling beyond viewport by constraining html and body
+      const html = document.documentElement;
+      const body = document.body;
+      const root = document.getElementById('root');
+      
+      // Set styles to prevent overflow
+      html.style.height = '100%';
+      html.style.overflow = 'hidden';
+      body.style.height = '100%';
+      body.style.overflow = 'hidden';
+      body.style.margin = '0';
+      body.style.padding = '0';
+      
+      // Ensure root container is also constrained (but allow children to scroll)
+      if (root) {
+        root.style.height = '100%';
+        root.style.position = 'relative';
+      }
+      
       // Get base path from Expo config
       const basePath = Constants.expoConfig?.experiments?.baseUrl || '';
       const normalizedBase = basePath && basePath !== '/' 

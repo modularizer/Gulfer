@@ -350,27 +350,30 @@ const PhotoGallery = forwardRef<PhotoGalleryHandle, PhotoGalleryProps>(function 
             <Text>Choose how you want to add a photo</Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button
-              onPress={handleTakePhoto}
-              icon="camera"
-              mode="contained"
-              style={styles.photoDialogButton}
-            >
-              Take Photo
-            </Button>
-            <Button
-              onPress={handlePickPhotos}
-              icon="image-multiple"
-              mode="contained"
-              style={styles.photoDialogButton}
-            >
-              Select from Gallery
-            </Button>
-            <Button
-              onPress={() => setPhotoMenuVisible(false)}
-            >
-              Cancel
-            </Button>
+            <View style={styles.photoDialogActions}>
+              <Button
+                onPress={handleTakePhoto}
+                icon="camera"
+                mode="contained"
+                style={styles.photoDialogButton}
+              >
+                Take Photo
+              </Button>
+              <Button
+                onPress={handlePickPhotos}
+                icon="image-multiple"
+                mode="contained"
+                style={styles.photoDialogButton}
+              >
+                Select from Gallery
+              </Button>
+              <Button
+                onPress={() => setPhotoMenuVisible(false)}
+                style={styles.photoDialogButton}
+              >
+                Cancel
+              </Button>
+            </View>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -475,8 +478,14 @@ const styles = StyleSheet.create({
   removePhotoButton: {
     margin: 0,
   },
+  photoDialogActions: {
+    flexDirection: 'column',
+    width: '100%',
+    gap: 8,
+  },
   photoDialogButton: {
-    marginHorizontal: 4,
+    marginHorizontal: 0,
+    width: '100%',
   },
 });
 

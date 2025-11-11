@@ -464,6 +464,50 @@ export default function PlayerDetailScreen() {
               >
                 {isUpdating ? 'Updating...' : 'Update App Now'}
               </Button>
+              <View style={styles.linksContainer}>
+                <View style={styles.linkRow}>
+                  <Button
+                    mode="text"
+                    onPress={() => router.push('/terms')}
+                    textColor={theme.colors.primary}
+                    style={styles.linkButton}
+                    compact
+                  >
+                    Terms of Service
+                  </Button>
+                  <Text style={[styles.linkSeparator, { color: theme.colors.onSurfaceVariant }]}>•</Text>
+                  <Button
+                    mode="text"
+                    onPress={() => router.push('/privacy')}
+                    textColor={theme.colors.primary}
+                    style={styles.linkButton}
+                    compact
+                  >
+                    Privacy Policy
+                  </Button>
+                </View>
+                <View style={styles.linkRow}>
+                  <Button
+                    mode="text"
+                    onPress={() => router.push('/about')}
+                    textColor={theme.colors.primary}
+                    style={styles.linkButton}
+                    compact
+                  >
+                    About
+                  </Button>
+                  <Text style={[styles.linkSeparator, { color: theme.colors.onSurfaceVariant }]}>•</Text>
+                  <Button
+                    mode="text"
+                    onPress={() => router.push('/contact-us')}
+                    textColor={theme.colors.primary}
+                    style={styles.linkButton}
+                    compact
+                  >
+                    Contact Us
+                  </Button>
+                </View>
+              </View>
             </Card.Content>
           </Card>
         </View>
@@ -560,5 +604,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  linksContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    gap: 8,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  linkButton: {
+    minWidth: 0,
+  },
+  linkSeparator: {
+    fontSize: 14,
+    opacity: 0.6,
   },
 });

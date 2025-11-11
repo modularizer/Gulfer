@@ -41,7 +41,7 @@ export default function CornerStatisticsSettingsDialog({
   const theme = useTheme();
   const [config, setConfig] = useState<CornerStatisticsConfig>(initialConfig || {});
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityConfig>(
-    initialColumnVisibility || { distance: true, par: false }
+    initialColumnVisibility || { distance: true, par: false, gStats: true }
   );
   const [isInitialMount, setIsInitialMount] = useState(true);
   const [configModalVisible, setConfigModalVisible] = useState(false);
@@ -59,7 +59,7 @@ export default function CornerStatisticsSettingsDialog({
   useEffect(() => {
     if (visible && !isInitialMount) {
       const configChanged = JSON.stringify(config) !== JSON.stringify(initialConfig || {});
-      const visibilityChanged = JSON.stringify(columnVisibility) !== JSON.stringify(initialColumnVisibility || { distance: true, par: false });
+      const visibilityChanged = JSON.stringify(columnVisibility) !== JSON.stringify(initialColumnVisibility || { distance: true, par: false, gStats: true });
       
       if (configChanged || visibilityChanged) {
         onSave(config);
