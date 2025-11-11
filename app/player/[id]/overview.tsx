@@ -336,7 +336,7 @@ export default function PlayerDetailScreen() {
       headerAction={
         player
           ? {
-              icon: copySuccess ? 'check' : 'content-copy',
+              icon: copySuccess ? 'check' : 'share-variant',
               iconColor: copySuccess ? theme.colors.primary : undefined,
               onPress: handleExport,
             }

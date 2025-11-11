@@ -13,7 +13,8 @@ import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdFor
 import { getAllCourses } from '@/services/storage/courseStorage';
 import { exportRound } from '@/services/roundExport';
 import { router, useLocalSearchParams, usePathname, useFocusEffect } from 'expo-router';
-import { Platform, Share, Alert, Clipboard } from 'react-native';
+import { Platform } from 'react-native';
+import { useExport } from '@/hooks/useExport';
 
 // Conditional DateTimePicker import for native platforms
 let DateTimePicker: any;
@@ -45,6 +46,7 @@ export default function RoundOverviewScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const photoGalleryRef = useRef<PhotoGalleryHandle>(null);
+  const { exportToClipboard } = useExport();
 
   // Track if initial load is complete - don't save during initial load or reload
   const initialLoadCompleteRef = useRef(false);
@@ -476,22 +478,7 @@ export default function RoundOverviewScreen() {
     
     try {
       const exportedText = await exportRound(round.id);
-      
-      if (Platform.OS === 'web') {
-        if (navigator.clipboard) {
-          await navigator.clipboard.writeText(exportedText);
-        } else {
-          const textArea = document.createElement('textarea');
-          textArea.value = exportedText;
-          document.body.appendChild(textArea);
-          textArea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textArea);
-        }
-      } else {
-        Clipboard.setString(exportedText);
-      }
-      
+      await exportToClipboard(exportedText, round.title || 'Round');
       setCopySuccess(true);
       setTimeout(() => {
         setCopySuccess(false);
@@ -499,8 +486,9 @@ export default function RoundOverviewScreen() {
     } catch (error) {
       console.error('Error exporting round:', error);
       setErrorDialog({ visible: true, title: 'Export Error', message: error instanceof Error ? error.message : 'Failed to export round' });
+      setCopySuccess(false);
     }
-  }, [round]);
+  }, [round, exportToClipboard]);
 
 
   const handlePhotosChange = useCallback((newPhotos: string[]) => {
@@ -576,7 +564,7 @@ export default function RoundOverviewScreen() {
             style={styles.backButton}
           />
         <IconButton
-          icon={copySuccess ? "check" : "content-copy"}
+          icon={copySuccess ? "check" : "share-variant"}
           size={24}
           iconColor={copySuccess ? theme.colors.primary : theme.colors.onSurface}
           onPress={handleExportRound}

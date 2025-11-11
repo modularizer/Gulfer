@@ -198,7 +198,7 @@ export default function CourseDetailScreen() {
       loading={loading}
       onBack={() => router.replace('/course/list')}
       headerAction={{
-        icon: copySuccess ? 'check' : 'content-copy',
+        icon: copySuccess ? 'check' : 'share-variant',
         iconColor: copySuccess ? theme.colors.primary : undefined,
         onPress: handleExportWithFeedback,
       }}
