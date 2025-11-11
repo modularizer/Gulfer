@@ -168,7 +168,7 @@ export default function PlayerCard({
                     icon="map-marker"
                     compact
                   >
-                    {coursesCount} {coursesCount === 1 ? 'course' : 'courses'}
+                    {coursesCount}
                   </Chip>
                 )}
                 {roundsCount !== undefined && roundsCount > 0 && (
@@ -268,7 +268,7 @@ export default function PlayerCard({
                     icon="map-marker"
                     compact
                   >
-                    {coursesCount} {coursesCount === 1 ? 'course' : 'courses'}
+                    {coursesCount}
                   </Chip>
                 )}
                 {roundsCount !== undefined && roundsCount > 0 && (
@@ -388,7 +388,7 @@ export default function PlayerCard({
                   icon="map-marker"
                   compact
                 >
-                  {coursesCount} {coursesCount === 1 ? 'course' : 'courses'}
+                  {coursesCount}
                 </Chip>
               )}
               {roundsCount !== undefined && roundsCount > 0 && (
