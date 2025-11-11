@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PaperProvider } from 'react-native-paper';
 import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
@@ -42,9 +43,33 @@ export default function RootLayout() {
     runMigrations();
   }, []);
 
-  // Preload and cache favicons on web
+  // Inject PWA manifest and favicon links on web
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      // Get base path from Expo config
+      const basePath = Constants.expoConfig?.experiments?.baseUrl || '';
+      const normalizedBase = basePath && basePath !== '/' 
+        ? (basePath.startsWith('/') ? basePath : `/${basePath}`).replace(/\/$/, '')
+        : '';
+      
+      // Add manifest link (required for PWA installation)
+      const existingManifest = document.querySelector('link[rel="manifest"]');
+      if (!existingManifest) {
+        const manifestLink = document.createElement('link');
+        manifestLink.rel = 'manifest';
+        manifestLink.href = `${normalizedBase}/manifest.json`;
+        document.head.appendChild(manifestLink);
+      }
+      
+      // Add theme-color meta tag (if not already present)
+      const existingThemeColor = document.querySelector('meta[name="theme-color"]');
+      if (!existingThemeColor) {
+        const themeColor = document.createElement('meta');
+        themeColor.name = 'theme-color';
+        themeColor.content = '#ffffff';
+        document.head.appendChild(themeColor);
+      }
+      
       // Check if preload links already exist
       const existingPng = document.querySelector('link[rel="preload"][href="/favicon.png"]');
       const existingSvg = document.querySelector('link[rel="preload"][href="/favicon.svg"]');
@@ -53,7 +78,7 @@ export default function RootLayout() {
         const linkPng = document.createElement('link');
         linkPng.rel = 'preload';
         linkPng.as = 'image';
-        linkPng.href = '/favicon.png';
+        linkPng.href = `${normalizedBase}/favicon.png`;
         linkPng.type = 'image/png';
         document.head.appendChild(linkPng);
       }
@@ -62,7 +87,7 @@ export default function RootLayout() {
         const linkSvg = document.createElement('link');
         linkSvg.rel = 'preload';
         linkSvg.as = 'image';
-        linkSvg.href = '/favicon.svg';
+        linkSvg.href = `${normalizedBase}/favicon.svg`;
         linkSvg.type = 'image/svg+xml';
         document.head.appendChild(linkSvg);
       }
@@ -74,7 +99,7 @@ export default function RootLayout() {
       if (!existingIconPng) {
         const iconPng = document.createElement('link');
         iconPng.rel = 'icon';
-        iconPng.href = '/favicon.png';
+        iconPng.href = `${normalizedBase}/favicon.png`;
         iconPng.type = 'image/png';
         document.head.appendChild(iconPng);
       }
@@ -82,7 +107,7 @@ export default function RootLayout() {
       if (!existingIconSvg) {
         const iconSvg = document.createElement('link');
         iconSvg.rel = 'icon';
-        iconSvg.href = '/favicon.svg';
+        iconSvg.href = `${normalizedBase}/favicon.svg`;
         iconSvg.type = 'image/svg+xml';
         document.head.appendChild(iconSvg);
       }
