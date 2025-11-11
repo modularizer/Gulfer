@@ -92,18 +92,36 @@ export default function RootLayout() {
         document.head.appendChild(linkSvg);
       }
       
-      // Also add as icon links for browser compatibility
-      const existingIconPng = document.querySelector('link[rel="icon"][href="/favicon.png"]');
-      const existingIconSvg = document.querySelector('link[rel="icon"][href="/favicon.svg"]');
-      
-      if (!existingIconPng) {
-        const iconPng = document.createElement('link');
-        iconPng.rel = 'icon';
-        iconPng.href = `${normalizedBase}/favicon.png`;
-        iconPng.type = 'image/png';
-        document.head.appendChild(iconPng);
+      // Add high-res icon links for PWA (Chrome uses these for install icon)
+      // Remove any existing low-res favicon.ico links first
+      const existingFaviconIco = document.querySelector('link[rel="shortcut icon"][href*="favicon.ico"]');
+      if (existingFaviconIco) {
+        existingFaviconIco.remove();
       }
       
+      // Add high-res PNG icons with explicit sizes (Chrome prefers these)
+      const iconSizes = [
+        { size: '192x192', rel: 'icon' },
+        { size: '512x512', rel: 'icon' },
+        { size: '512x512', rel: 'apple-touch-icon' }, // iOS/Android
+      ];
+      
+      iconSizes.forEach(({ size, rel }) => {
+        const existing = document.querySelector(`link[rel="${rel}"][sizes="${size}"]`);
+        if (!existing) {
+          const iconLink = document.createElement('link');
+          iconLink.rel = rel;
+          iconLink.href = `${normalizedBase}/favicon.png`;
+          iconLink.type = 'image/png';
+          if (size) {
+            iconLink.setAttribute('sizes', size);
+          }
+          document.head.appendChild(iconLink);
+        }
+      });
+      
+      // Also add SVG as fallback
+      const existingIconSvg = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
       if (!existingIconSvg) {
         const iconSvg = document.createElement('link');
         iconSvg.rel = 'icon';
