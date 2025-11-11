@@ -5,6 +5,7 @@ import { CornerStatisticsConfig, CornerConfig } from '@/services/cornerStatistic
 import { ColumnVisibilityConfig } from '@/services/storage/cornerConfigStorage';
 import CornerStatisticConfigModal from './CornerStatisticConfigModal';
 import { Player } from '@/types';
+import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 interface CornerStatisticsSettingsDialogProps {
   visible: boolean;
@@ -39,6 +40,7 @@ export default function CornerStatisticsSettingsDialog({
   currentRoundDate,
 }: CornerStatisticsSettingsDialogProps) {
   const theme = useTheme();
+  const dialogStyle = useDialogStyle();
   const [config, setConfig] = useState<CornerStatisticsConfig>(initialConfig || {});
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityConfig>(
     initialColumnVisibility || { distance: true, par: false, gStats: true }
@@ -203,7 +205,7 @@ export default function CornerStatisticsSettingsDialog({
 
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
+      <Dialog visible={visible} onDismiss={onDismiss} style={[styles.dialog, dialogStyle]}>
         <Dialog.ScrollArea style={styles.scrollArea}>
           <ScrollView>
             <Dialog.Content style={styles.content}>

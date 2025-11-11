@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Platform } from 'react-native';
-import { useTheme, Text, Card, Chip, Button } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Platform, Alert } from 'react-native';
+import { useTheme, Text, Card, Chip, Button, Dialog, Portal } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
 import { getAllUsers, getUserById, getUserByName, User, saveUser } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
@@ -25,6 +25,10 @@ import { encodeNameForUrl } from '@/utils/urlEncoding';
 import { detailPageStyles } from '@/styles/detailPageStyles';
 import { loadPhotosByStorageKey, savePhotosByStorageKey } from '@/utils/photoStorage';
 import { getCachedCardMode, loadCardMode, saveCardMode } from '@/services/storage/cardModeStorage';
+import { exportAllDataAsJson, importAllData, parseExportJson } from '@/services/bulkExport';
+import { clear } from '@/services/storage/storageAdapter';
+import * as FileSystem from 'expo-file-system';
+import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 interface CourseScore {
   course: Course;
@@ -36,6 +40,7 @@ interface CourseScore {
 export default function PlayerDetailScreen() {
   const { id: playerNameParam } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
+  const dialogStyle = useDialogStyle();
   const [player, setPlayer] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
@@ -52,6 +57,13 @@ export default function PlayerDetailScreen() {
   const [appVersion, setAppVersion] = useState<string>('Loading...');
   const [copySuccess, setCopySuccess] = useState(false);
   const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const fileInputRef = useRef<any>(null);
+  const [importDialogVisible, setImportDialogVisible] = useState(false);
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [pendingImportData, setPendingImportData] = useState<any>(null);
 
   const handleExport = useCallback(async () => {
     if (!player) return;
@@ -220,6 +232,9 @@ export default function PlayerDetailScreen() {
       if (Platform.OS === 'web') {
         const version = await getAppVersion();
         setAppVersion(version);
+      } else {
+        // On mobile, show a placeholder or get from native
+        setAppVersion('Mobile App');
       }
     };
     loadAppVersion();
@@ -303,6 +318,200 @@ export default function PlayerDetailScreen() {
       });
       return mode;
     });
+  }, []);
+
+  const handleExportAllData = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const jsonData = await exportAllDataAsJson();
+      
+      if (Platform.OS === 'web') {
+        // Create a blob and download it
+        const blob = new Blob([jsonData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `gulfer-export-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        Alert.alert('Success', 'All data exported successfully');
+      } else {
+        // On mobile, use share API
+        const { Share } = require('react-native');
+        await Share.share({
+          message: jsonData,
+          title: 'Gulfer Data Export',
+        });
+      }
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      setErrorDialog({
+        visible: true,
+        title: 'Export Error',
+        message: error instanceof Error ? error.message : 'Failed to export data',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, []);
+
+  const handleImportAllData = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      // Trigger file input
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+    } else {
+      // On mobile, we'd need to use a file picker
+      Alert.alert('Import', 'File import on mobile is not yet supported. Please use the web version.');
+    }
+  }, []);
+
+  const handleFileSelected = useCallback(async (event: any) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      console.log('[Import] Reading file...');
+      const text = await file.text();
+      console.log('[Import] File read, parsing JSON...');
+      const exportData = parseExportJson(text);
+      console.log('[Import] JSON parsed successfully');
+      
+      // Store the data and show confirmation dialog
+      setPendingImportData(exportData);
+      setImportDialogVisible(true);
+    } catch (error) {
+      console.error('[Import] Error reading file:', error);
+      setErrorDialog({
+        visible: true,
+        title: 'Import Error',
+        message: error instanceof Error ? error.message : 'Failed to read import file',
+      });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, []);
+
+  const handleConfirmImport = useCallback(async () => {
+    if (!pendingImportData) return;
+    
+    console.log('[Import] User confirmed import, starting process...');
+    setImportDialogVisible(false);
+    setIsImporting(true);
+    
+    try {
+      console.log('[Import] Starting import process...');
+      console.log('[Import] Calling importAllData...');
+      const summary = await importAllData(pendingImportData, {
+        overwriteExisting: false,
+        skipDuplicates: true,
+      });
+      console.log('[Import] Import complete:', summary);
+      
+      const summaryText = [
+        `Rounds: ${summary.rounds.imported} imported, ${summary.rounds.skipped} skipped`,
+        `Players: ${summary.players.imported} imported, ${summary.players.skipped} skipped`,
+        `Courses: ${summary.courses.imported} imported, ${summary.courses.skipped} skipped`,
+        `Photos: ${summary.photos.imported} imported, ${summary.photos.skipped} skipped`,
+        `Images: ${summary.images.imported} imported, ${summary.images.skipped} skipped`,
+      ].join('\n');
+      
+      setIsImporting(false);
+      setPendingImportData(null);
+      
+      console.log('[Import] Import successful, reloading page...');
+      
+      // Reload the page immediately to show the imported data
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('[Import] Error importing data:', error);
+      console.error('[Import] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      setIsImporting(false);
+      setPendingImportData(null);
+      setErrorDialog({
+        visible: true,
+        title: 'Import Error',
+        message: error instanceof Error ? error.message : 'Failed to import data',
+      });
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [pendingImportData]);
+
+  const handleCancelImport = useCallback(() => {
+    console.log('[Import] User cancelled import');
+    setImportDialogVisible(false);
+    setPendingImportData(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleDeleteAllData = useCallback(() => {
+    setDeleteDialogVisible(true);
+  }, []);
+
+  const handleConfirmDeleteAllData = useCallback(async () => {
+    setDeleteDialogVisible(false);
+    setIsDeleting(true);
+    
+    try {
+      console.log('[Delete] Starting delete all data...');
+      
+      // Clear all storage (this will delete rounds, players, courses, photos, images from storage)
+      await clear();
+      
+      // On mobile, also delete image files from file system
+      if (Platform.OS !== 'web') {
+        try {
+          const IMAGE_DIR = `${FileSystem.documentDirectory}images/`;
+          const dirInfo = await FileSystem.getInfoAsync(IMAGE_DIR);
+          if (dirInfo.exists) {
+            await FileSystem.deleteAsync(IMAGE_DIR, { idempotent: true });
+            console.log('[Delete] Deleted image directory');
+          }
+        } catch (error) {
+          console.error('[Delete] Error deleting image directory:', error);
+          // Continue even if image directory deletion fails
+        }
+      }
+      
+      console.log('[Delete] All data deleted successfully');
+      
+      // Show success message and reload
+      Alert.alert('Success', 'All data has been deleted. The app will reload.', [
+        {
+          text: 'OK',
+          onPress: () => {
+            // Reload the page
+            if (Platform.OS === 'web' && typeof window !== 'undefined') {
+              window.location.reload();
+            }
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error('[Delete] Error deleting all data:', error);
+      setErrorDialog({
+        visible: true,
+        title: 'Delete Error',
+        message: error instanceof Error ? error.message : 'Failed to delete all data',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  }, []);
+
+  const handleCancelDelete = useCallback(() => {
+    setDeleteDialogVisible(false);
   }, []);
 
   return (
@@ -439,31 +648,104 @@ export default function PlayerDetailScreen() {
         </View>
       )}
 
-      {/* Update App Section - Only show for current user on web */}
-      {player && player.isCurrentUser && Platform.OS === 'web' && (
+      {/* Update App Section - Show for current user */}
+      {player && player.isCurrentUser && (
         <View style={detailPageStyles.section}>
           <SectionTitle>App Settings</SectionTitle>
+          
+          {/* Data Export/Import Card */}
+          <Card style={[styles.updateCard, { backgroundColor: theme.colors.surface }, getShadowStyle(2)]}>
+            <Card.Content>
+              <Text style={[styles.updateTitle, { color: theme.colors.onSurface }]}>
+                Data Export & Import
+              </Text>
+              <Text style={[styles.updateDescription, { color: theme.colors.onSurfaceVariant }]}>
+                Export all your data (rounds, players, courses, and photos) to a file, or import data from a previous export.
+              </Text>
+              <Button
+                mode="contained"
+                icon="download"
+                onPress={handleExportAllData}
+                loading={isExporting}
+                disabled={isExporting || isImporting || isDeleting}
+                style={styles.dataButton}
+              >
+                {isExporting ? 'Exporting...' : 'Export All Data'}
+              </Button>
+              <Button
+                mode="outlined"
+                icon="upload"
+                onPress={handleImportAllData}
+                loading={isImporting}
+                disabled={isExporting || isImporting || isDeleting}
+                style={styles.dataButton}
+              >
+                {isImporting ? 'Importing...' : 'Import Data'}
+              </Button>
+              <Button
+                mode="outlined"
+                icon="delete"
+                onPress={handleDeleteAllData}
+                loading={isDeleting}
+                disabled={isExporting || isImporting || isDeleting}
+                style={[styles.deleteButton, { borderColor: theme.colors.error }]}
+                textColor={theme.colors.error}
+                labelStyle={{ color: theme.colors.error }}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete All Data'}
+              </Button>
+              {Platform.OS === 'web' && (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleFileSelected}
+                />
+              )}
+            </Card.Content>
+          </Card>
+
+          {/* Update App Card */}
           <Card style={[styles.updateCard, { backgroundColor: theme.colors.surface }, getShadowStyle(2)]}>
             <Card.Content>
               <Text style={[styles.updateTitle, { color: theme.colors.onSurface }]}>
                 Update App
               </Text>
-              <Text style={[styles.updateDescription, { color: theme.colors.onSurfaceVariant }]}>
-                If you're not seeing the latest version of the app, tap this button to clear the cache and reload the latest version.
-              </Text>
-              <Text style={[styles.versionText, { color: theme.colors.onSurfaceVariant }]}>
-                App Version: {appVersion}
-              </Text>
-              <Button
-                mode="contained"
-                icon="refresh"
-                onPress={handleUpdateApp}
-                loading={isUpdating}
-                disabled={isUpdating}
-                style={styles.updateButton}
-              >
-                {isUpdating ? 'Updating...' : 'Update App Now'}
-              </Button>
+              {Platform.OS === 'web' ? (
+                <>
+                  <Text style={[styles.updateDescription, { color: theme.colors.onSurfaceVariant }]}>
+                    If you're not seeing the latest version of the app, tap this button to clear the cache and reload the latest version.
+                  </Text>
+                  <Text style={[styles.versionText, { color: theme.colors.onSurfaceVariant }]}>
+                    App Version: {appVersion}
+                  </Text>
+                  <Button
+                    mode="contained"
+                    icon="refresh"
+                    onPress={handleUpdateApp}
+                    loading={isUpdating}
+                    disabled={isUpdating}
+                    style={styles.updateButton}
+                  >
+                    {isUpdating ? 'Updating...' : 'Update App Now'}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.updateDescription, { color: theme.colors.onSurfaceVariant }]}>
+                    App updates are handled automatically through the app store. To get the latest version, check for updates in your device's app store.
+                  </Text>
+                  <Button
+                    mode="contained"
+                    icon="refresh"
+                    disabled={true}
+                    style={styles.updateButton}
+                  >
+                    Update via App Store
+                  </Button>
+                </>
+              )}
               <View style={styles.linksContainer}>
                 <View style={styles.linkRow}>
                   <Button
@@ -512,6 +794,70 @@ export default function PlayerDetailScreen() {
           </Card>
         </View>
       )}
+
+      {/* Import Confirmation Dialog */}
+      <Portal>
+        <Dialog visible={importDialogVisible} onDismiss={handleCancelImport} style={dialogStyle}>
+          <Dialog.Title>Import Data</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 16 }}>
+              This will import:
+            </Text>
+            {pendingImportData && (
+              <>
+                <Text>• {pendingImportData.rounds?.length || 0} rounds</Text>
+                <Text>• {pendingImportData.players?.length || 0} players</Text>
+                <Text>• {pendingImportData.courses?.length || 0} courses</Text>
+                <Text>• {Object.keys(pendingImportData.photos || {}).length} photo collections</Text>
+                <Text>• {Object.keys(pendingImportData.images || {}).length} images</Text>
+              </>
+            )}
+            <Text style={{ marginTop: 16 }}>
+              Existing data with the same IDs will be skipped unless you choose to overwrite.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleCancelImport}>Cancel</Button>
+            <Button mode="contained" onPress={handleConfirmImport}>
+              Import
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Delete All Data Confirmation Dialog */}
+      <Portal>
+        <Dialog visible={deleteDialogVisible} onDismiss={handleCancelDelete} style={dialogStyle}>
+          <Dialog.Title>Delete All Data</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 16, color: theme.colors.error, fontWeight: '600' }}>
+              Warning: This action cannot be undone!
+            </Text>
+            <Text style={{ marginBottom: 16 }}>
+              This will permanently delete:
+            </Text>
+            <Text>• All rounds</Text>
+            <Text>• All players</Text>
+            <Text>• All courses</Text>
+            <Text>• All photos</Text>
+            <Text>• All images</Text>
+            <Text style={{ marginTop: 16, fontWeight: '600' }}>
+              Make sure you have exported your data if you want to keep a backup.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={handleCancelDelete}>Cancel</Button>
+            <Button
+              mode="contained"
+              onPress={handleConfirmDeleteAllData}
+              buttonColor={theme.colors.error}
+              textColor="#fff"
+            >
+              Delete All Data
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </DetailPageLayout>
   );
 }
@@ -531,7 +877,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   currentUserChip: {
-    height: 28,
+    height: 32, // Increased height to prevent text clipping
+    justifyContent: 'center', // Center text vertically
+    alignItems: 'center', // Center text horizontally
   },
   coursesSection: {
     paddingHorizontal: 24,
@@ -624,5 +972,13 @@ const styles = StyleSheet.create({
   linkSeparator: {
     fontSize: 14,
     opacity: 0.6,
+  },
+  dataButton: {
+    marginTop: 12,
+    width: '100%',
+  },
+  deleteButton: {
+    marginTop: 12,
+    width: '100%',
   },
 });

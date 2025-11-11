@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Dialog, Portal, TextInput, Button, Text, useTheme } from 'react-native-paper';
+import { useDialogStyle } from '../../hooks/useDialogStyle';
 interface NameUsernameDialogProps {
   visible: boolean;
   title: string;
@@ -23,6 +24,7 @@ export default function NameUsernameDialog({
   onSave,
 }: NameUsernameDialogProps) {
   const theme = useTheme();
+  const dialogStyle = useDialogStyle();
   const [name, setName] = useState('');
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export default function NameUsernameDialog({
         visible={visible}
         onDismiss={onDismiss || undefined}
         dismissable={onDismiss !== null}
-        style={styles.dialog}
+        style={[styles.dialog, dialogStyle]}
       >
         <Dialog.Title>{title}</Dialog.Title>
         <Dialog.Content>

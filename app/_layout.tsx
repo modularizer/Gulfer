@@ -22,10 +22,12 @@ function RootLayoutNav() {
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: theme.colors.background },
+            animation: 'fade', // Use fade instead of slide to prevent flash
+            animationDuration: 150, // Faster animation
           }}
           />
       </AppLayout>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <StatusBar style={Platform.OS === 'web' ? (isDark ? 'light' : 'dark') : 'auto'} />
     </PaperProvider>
   );
 }

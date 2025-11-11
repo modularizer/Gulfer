@@ -25,6 +25,7 @@ import { Round } from '../types';
 import { getRoundById, deleteRound } from '../services/storage/roundStorage';
 import { formatDate } from '../utils';
 import { Scorecard } from '../components/Scorecard';
+import { useDialogStyle } from '../hooks/useDialogStyle';
 
 type RoundDetailScreenRouteProp = RouteProp<RootStackParamList, 'RoundDetail'>;
 type RoundDetailScreenNavigationProp = StackNavigationProp<
@@ -39,6 +40,7 @@ interface Props {
 
 export default function RoundDetailScreen({ route, navigation }: Props) {
   const { roundId } = route.params;
+  const dialogStyle = useDialogStyle();
   const [round, setRound] = useState<Round | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -173,7 +175,7 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
 
       {/* Delete Confirmation Dialog */}
       <Portal>
-        <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)}>
+        <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)} style={dialogStyle}>
           <Dialog.Title>Delete Round</Dialog.Title>
           <Dialog.Content>
             <Paragraph>

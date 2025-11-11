@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { TextInput, Dialog, Portal, IconButton } from 'react-native-paper';
+import { useDialogStyle } from '../../hooks/useDialogStyle';
 
 interface NumberModalProps {
   visible: boolean;
@@ -21,6 +22,7 @@ export default function NumberModal({
   min = 0,
   max = 20,
 }: NumberModalProps) {
+  const dialogStyle = useDialogStyle();
   const [editValue, setEditValue] = useState(defaultValue.toString());
 
   // Update value when defaultValue changes (e.g., when modal opens with new value)
@@ -50,7 +52,7 @@ export default function NumberModal({
 
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={handleClose}>
+      <Dialog visible={visible} onDismiss={handleClose} style={dialogStyle}>
         <View style={styles.modalHeader}>
           <Dialog.Title style={styles.modalTitle}>{title}</Dialog.Title>
           <IconButton

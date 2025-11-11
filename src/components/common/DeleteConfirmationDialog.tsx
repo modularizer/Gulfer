@@ -1,5 +1,6 @@
 import React from 'react';
 import { Dialog, Button, Text, useTheme, Portal } from 'react-native-paper';
+import { useDialogStyle } from '../../hooks/useDialogStyle';
 
 interface DeleteConfirmationDialogProps {
   visible: boolean;
@@ -17,11 +18,12 @@ export default function DeleteConfirmationDialog({
   onConfirm,
 }: DeleteConfirmationDialogProps) {
   const theme = useTheme();
+  const dialogStyle = useDialogStyle();
   const itemTypePlural = count !== 1 ? `${itemType}s` : itemType;
 
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss}>
+      <Dialog visible={visible} onDismiss={onDismiss} style={dialogStyle}>
         <Dialog.Title>Delete {itemTypePlural.charAt(0).toUpperCase() + itemTypePlural.slice(1)}</Dialog.Title>
         <Dialog.Content>
           <Text>

@@ -112,6 +112,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     gap: 12,
     minWidth: 0, // Allow flex shrinking
+    alignSelf: 'stretch', // Ensure full height alignment
   },
   headerSpacer: {
     flex: 1,

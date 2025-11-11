@@ -8,6 +8,7 @@ import { getAllRounds } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
 import { Round, Player } from '@/types';
 import { selectRoundsByCriteria, filterRoundsByUser } from '@/services/cornerStatistics';
+import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 // Helper functions for checking round completion (duplicated from cornerStatistics.ts for preview)
 function getExpectedHoleCount(rounds: Round[]): number {
@@ -367,6 +368,7 @@ export default function CornerStatisticConfigModal({
   currentRoundDate,
 }: CornerStatisticConfigModalProps) {
   const theme = useTheme();
+  const dialogStyle = useDialogStyle();
   const [config, setConfig] = useState<CornerConfig>(
     initialConfig || (() => {
       const personalBestPreset = PRESETS.find(p => p.name === 'Personal Best on Hole');
@@ -1435,7 +1437,7 @@ export default function CornerStatisticConfigModal({
 
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
+      <Dialog visible={visible} onDismiss={onDismiss} style={[styles.dialog, dialogStyle]}>
         <View style={styles.dialogHeader}>
           <Text style={[styles.dialogTitle, { color: theme.colors.onSurface }]}>
             {cornerPosition 
@@ -2004,7 +2006,7 @@ export default function CornerStatisticConfigModal({
               {/* Date picker modals */}
               {Platform.OS !== 'web' && showSinceDatePicker && (
                 <Portal>
-                  <Dialog visible={showSinceDatePicker} onDismiss={() => setShowSinceDatePicker(false)}>
+                  <Dialog visible={showSinceDatePicker} onDismiss={() => setShowSinceDatePicker(false)} style={dialogStyle}>
                     <Dialog.Title>Select Since Date</Dialog.Title>
                     <Dialog.Content>
                       <DateTimePicker
@@ -2032,7 +2034,7 @@ export default function CornerStatisticConfigModal({
 
               {Platform.OS !== 'web' && showUntilDatePicker && (
                 <Portal>
-                  <Dialog visible={showUntilDatePicker} onDismiss={() => setShowUntilDatePicker(false)}>
+                  <Dialog visible={showUntilDatePicker} onDismiss={() => setShowUntilDatePicker(false)} style={dialogStyle}>
                     <Dialog.Title>{TEXT_SELECT_UNTIL_DATE}</Dialog.Title>
                     <Dialog.Content>
                       <DateTimePicker
@@ -2375,7 +2377,7 @@ export default function CornerStatisticConfigModal({
       </Dialog>
 
       {/* Round Picker Modal */}
-      <Dialog visible={roundPickerVisible} onDismiss={handleCloseRoundPicker} style={styles.dialog}>
+      <Dialog visible={roundPickerVisible} onDismiss={handleCloseRoundPicker} style={[styles.dialog, dialogStyle]}>
         <View style={styles.dialogHeader}>
           <Text style={[styles.dialogTitle, { color: theme.colors.onSurface }]}>{TEXT_SELECT_ROUNDS}</Text>
           <IconButton

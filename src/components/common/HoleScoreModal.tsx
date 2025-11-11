@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, TextInput, Dialog, Portal, IconButton, Button } from 'react-native-paper';
 import { Player } from '../../types';
+import { useDialogStyle } from '../../hooks/useDialogStyle';
 
 interface HoleScoreModalProps {
   visible: boolean;
@@ -272,6 +273,7 @@ export default function HoleScoreModal({
   };
 
   // Calculate responsive cell width
+  const dialogStyle = useDialogStyle();
   const screenWidth = Dimensions.get('window').width;
   const dialogMargin = 32; // 16px on each side
   const contentPadding = 48; // Approximate padding from Dialog.Content
@@ -290,7 +292,7 @@ export default function HoleScoreModal({
 
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={handleClose} style={styles.dialog}>
+      <Dialog visible={visible} onDismiss={handleClose} style={[styles.dialog, dialogStyle]}>
         <View style={styles.modalHeader}>
           <Dialog.Title style={styles.modalTitle}>Hole #{holeNumber}</Dialog.Title>
           <IconButton

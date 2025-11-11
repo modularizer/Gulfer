@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Dimensions, Platform } from 'react-native';
 import { IconButton, useTheme as usePaperTheme } from 'react-native-paper';
 import { useTheme } from '../../../theme/ThemeContext';
 import HillShape from './HillShape';
@@ -8,7 +8,7 @@ import { TOTAL_HEIGHT } from './hillPaths';
 
 // Visualization constants
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BUTTON_SIZE = 110;
+const BUTTON_SIZE = 110; // Same size on all platforms
 const BUTTON_OFFSET = 12;
 
 interface HillFooterProps {
@@ -26,15 +26,28 @@ export default function HillFooter({
 }: HillFooterProps) {
   const paperTheme = usePaperTheme();
   const { isDark } = useTheme();
+  const [containerWidth, setContainerWidth] = useState(SCREEN_WIDTH);
 
   const primaryColor = paperTheme.colors.primary;
   const lighterGreen = isDark ? '#006d35' : '#006d35';
   const darkerGreen = isDark ? '#002d12' : '#002d12';
   const backgroundColor = paperTheme.colors.background;
+  
+  // Use container width on web, screen width on native
+  const hillWidth = Platform.OS === 'web' ? containerWidth : SCREEN_WIDTH;
+  
   return (
-    <View style={[styles.container, { backgroundColor }]}>
+    <View 
+      style={[styles.container, { backgroundColor }]}
+      onLayout={(event) => {
+        const { width } = event.nativeEvent.layout;
+        if (width > 0) {
+          setContainerWidth(width);
+        }
+      }}
+    >
       <HillShape
-        width={SCREEN_WIDTH}
+        width={hillWidth}
         primaryColor={primaryColor}
         lighterGreen={lighterGreen}
         darkerGreen={darkerGreen}
@@ -92,6 +105,7 @@ const styles = StyleSheet.create({
     height: TOTAL_HEIGHT,
     zIndex: 10,
     backgroundColor: 'transparent',
+    position: 'relative', // Ensure absolute positioning works correctly
   },
   leftButtonContainer: {
     flex: 1,

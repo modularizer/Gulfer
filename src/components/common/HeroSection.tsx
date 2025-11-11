@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import PhotoGallery, { PhotoGalleryHandle } from './PhotoGallery';
 
@@ -37,11 +37,13 @@ export default function HeroSection({
           onPress={handlePlaceholderPress}
           disabled={!isEditable}
         >
-          <Image 
-            source={require('../../../assets/favicon.png')} 
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
+          <View style={styles.logoWrapper}>
+            <Image 
+              source={require('../../../assets/favicon.png')} 
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
         </TouchableOpacity>
       )}
       <PhotoGallery
@@ -69,6 +71,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f0f0',
+  },
+  logoWrapper: {
+    padding: Platform.OS === 'web' ? 0 : 12, // Add padding on mobile to prevent cutoff
   },
   logoImage: {
     width: 80,

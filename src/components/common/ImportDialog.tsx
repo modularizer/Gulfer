@@ -5,8 +5,9 @@
 
 import React from 'react';
 import { Dialog, Portal, Button, Text, TextInput, useTheme } from 'react-native-paper';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { normalizeExportText } from '../../utils';
+import { useDialogStyle } from '../../hooks/useDialogStyle';
 
 interface ImportDialogProps {
   visible: boolean;
@@ -30,13 +31,14 @@ export default function ImportDialog({
   disabled = false,
 }: ImportDialogProps) {
   const theme = useTheme();
+  const dialogStyle = useDialogStyle();
 
   return (
     <Portal>
       <Dialog
         visible={visible}
         onDismiss={onDismiss}
-        style={styles.dialog}
+        style={[styles.dialog, dialogStyle]}
       >
         <Dialog.Title>{title}</Dialog.Title>
         <Dialog.Content>

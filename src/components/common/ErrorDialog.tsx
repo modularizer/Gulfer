@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { Dialog, Portal, Button, Text } from 'react-native-paper';
+import { useDialogStyle } from '../../hooks/useDialogStyle';
 
 interface ErrorDialogProps {
   visible: boolean;
@@ -19,9 +20,10 @@ export default function ErrorDialog({
   message,
   onDismiss,
 }: ErrorDialogProps) {
+  const dialogStyle = useDialogStyle();
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={onDismiss}>
+      <Dialog visible={visible} onDismiss={onDismiss} style={dialogStyle}>
         <Dialog.Title>{title}</Dialog.Title>
         <Dialog.Content>
           <Text>{message}</Text>

@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Text, Platform } from 'react-native';
-import { FAB } from 'react-native-paper';
+import { View, StyleSheet, Image, Platform, TouchableOpacity, Text, Dimensions } from 'react-native';
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
 
 interface CenterButtonProps {
@@ -32,12 +31,14 @@ const styles = StyleSheet.create({
     padding: 0,
     backgroundColor: 'transparent',
   },
-  arrowEmoji: {
-    fontSize: 44,
-    fontWeight: '900',
-    textAlign: 'center',
-    lineHeight: 48,
-    includeFontPadding: false,
+  faviconImage: {
+    width: 108, // 1.5x the width (72 * 1.5)
+    height: 52, // 1.25x the height (42 * 1.25)
+    resizeMode: 'contain',
+    transform: [
+      { translateY: 4 }, // Move down
+      { rotate: '8deg' }, // Tilt right (clockwise)
+    ],
   },
 });
 
@@ -53,6 +54,10 @@ export default function CenterButton({
   const containerHeight = buttonSize * 0.7 + 20;
   const buttonWidth = buttonSize * 1.4;
   const buttonHeight = buttonSize * 0.7;
+  
+  // Calculate center position based on screen width for reliable mobile centering
+  const screenWidth = Dimensions.get('window').width;
+  const centerPosition = (screenWidth / 2) - (containerWidth / 2);
 
   return (
     <View
@@ -60,8 +65,7 @@ export default function CenterButton({
         styles.container,
         {
           top: -((buttonSize * 0.7) / 2) + buttonOffset,
-          left: '50%',
-          marginLeft: -(containerWidth / 2),
+          left: centerPosition,
           width: containerWidth,
           height: containerHeight,
         },
@@ -113,7 +117,7 @@ export default function CenterButton({
         />
       </Svg>
       
-      <FAB
+      <TouchableOpacity
         style={[
           styles.fabBase,
           Platform.OS === 'web' 
@@ -131,12 +135,13 @@ export default function CenterButton({
           },
         ]}
         onPress={onPress}
-        color={primaryColor}
-        size="large"
-        icon={() => (
-          <Text style={[styles.arrowEmoji, { color: primaryColor }]}>↗</Text>
-        )}
-      />
+        activeOpacity={0.7}
+      >
+        <Image 
+          source={require('../../../../assets/favicon.png')}
+          style={styles.faviconImage}
+        />
+      </TouchableOpacity>
     </View>
   );
 }

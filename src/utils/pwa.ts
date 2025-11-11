@@ -311,6 +311,11 @@ export function usePWARouteCache() {
   const hasRestoredRef = useRef(false);
 
   useEffect(() => {
+    // Only run on web platform
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return;
+    }
+
     // Register service worker on mount
     registerServiceWorker();
 
@@ -332,6 +337,11 @@ export function usePWARouteCache() {
   }, []);
 
   useEffect(() => {
+    // Only run on web platform
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return;
+    }
+
     // Cache current page whenever route changes
     if (pathname) {
       const fullUrl = window.location.href;

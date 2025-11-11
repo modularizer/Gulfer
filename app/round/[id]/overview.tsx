@@ -585,12 +585,14 @@ export default function RoundOverviewScreen() {
               activeOpacity={0.7}
               onPress={handlePlaceholderPress}
             >
-              <Image 
-                source={require('../../../assets/favicon.png')}
-                style={styles.logoImage}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-              />
+              <View style={styles.logoWrapper}>
+                <Image 
+                  source={require('../../../assets/favicon.png')}
+                  style={styles.logoImage}
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
+                />
+              </View>
             </TouchableOpacity>
           )}
           <PhotoGallery
@@ -992,6 +994,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f0f0f0',
+  },
+  logoWrapper: {
+    padding: Platform.OS === 'web' ? 0 : 12, // Add padding on mobile to prevent cutoff
   },
   logoImage: {
     width: 80,

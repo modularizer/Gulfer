@@ -8,6 +8,7 @@ import Footer from '../components/common/Footer';
 import { Player, Score, Round } from '../types';
 import { saveRound, generateRoundId } from '../services/storage/roundStorage';
 import { takePhoto, pickPhoto } from '../services/photos/photoService';
+import { useDialogStyle } from '../hooks/useDialogStyle';
 
 type ScorecardScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -158,6 +159,7 @@ export default function ScorecardScreen({ navigation }: Props) {
   }, []);
 
   const theme = useTheme();
+  const dialogStyle = useDialogStyle();
 
   // Landing Page
   if (isLandingPage) {
@@ -343,7 +345,7 @@ export default function ScorecardScreen({ navigation }: Props) {
 
       {/* Save Dialog */}
       <Portal>
-        <Dialog visible={showSaveDialog} onDismiss={() => setShowSaveDialog(false)}>
+        <Dialog visible={showSaveDialog} onDismiss={() => setShowSaveDialog(false)} style={dialogStyle}>
           <Dialog.Title>Save Round</Dialog.Title>
           <Dialog.Content>
             <TextInput
