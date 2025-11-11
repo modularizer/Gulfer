@@ -295,6 +295,7 @@ export default function ScorecardPlayScreen() {
         currentUserId={currentUserId}
         onSettingsPress={() => setSettingsDialogVisible(true)}
         columnVisibility={columnVisibility || undefined}
+        currentRoundDate={round.date}  // Exclude rounds that started at the same time or after
       />
 
       {/* Corner Statistics Settings Dialog */}

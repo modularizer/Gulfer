@@ -42,6 +42,7 @@ interface ScorecardProps {
     par?: boolean;
     [key: string]: boolean | undefined;
   };
+  currentRoundDate?: number; // Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
 }
 
 export default function Scorecard({
@@ -62,6 +63,7 @@ export default function Scorecard({
   currentUserId,
   onSettingsPress,
   columnVisibility,
+  currentRoundDate,
 }: ScorecardProps) {
   const theme = useTheme();
   const [editModal, setEditModal] = useState<{
@@ -73,12 +75,12 @@ export default function Scorecard({
   const [distanceUnit, setDistanceUnit] = useState<'yd' | 'm' | 'ft'>('ft');
   const [courseHoles, setCourseHoles] = useState<Hole[]>([]);
   const [resolvedCurrentUserId, setResolvedCurrentUserId] = useState<string | undefined>(currentUserId);
-  const [totalCornerValues, setTotalCornerValues] = useState<{
+  const [totalCornerValues, setTotalCornerValues] = useState<Map<string, {
     topLeft: { value: string | number; visible: boolean };
     topRight: { value: string | number; visible: boolean };
     bottomLeft: { value: string | number; visible: boolean };
     bottomRight: { value: string | number; visible: boolean };
-  } | null>(null);
+  }>>(new Map());
   const [cellCornerValues, setCellCornerValues] = useState<Map<string, {
     topLeft: { value: string | number; visible: boolean };
     topRight: { value: string | number; visible: boolean };
@@ -159,6 +161,7 @@ export default function Scorecard({
         }>();
         
         // Compute values for all player/hole combinations
+        // Each player's column is computed independently using their own player ID
         for (const hole of holes) {
           for (const player of players) {
             const key = `${player.id}-${hole}`;
@@ -167,7 +170,9 @@ export default function Scorecard({
                 cornerStatisticsConfig,
                 courseName,
                 hole,
-                resolvedCurrentUserId
+                player.id,  // Use the player's ID, not the current user's ID
+                undefined,  // todaysPlayerIds
+                currentRoundDate  // Exclude rounds that started at the same time or after
               );
               newValues.set(key, values);
             } catch (error) {
@@ -231,29 +236,41 @@ export default function Scorecard({
     computeCellValues();
   }, [getCornerData, cornerStatisticsConfig, resolvedCurrentUserId, courseName, holes, players]);
 
-  // Compute total corner values
+  // Compute total corner values per player
   useEffect(() => {
     const computeTotals = async () => {
-      if (cornerStatisticsConfig && resolvedCurrentUserId && courseName) {
-        try {
-          const totals = await computeTotalCornerValues(
-            cornerStatisticsConfig,
-            courseName,
-            holes,
-            scores,
-            resolvedCurrentUserId
-          );
-          setTotalCornerValues(totals);
-        } catch (error) {
-          console.error('Error computing total corner values:', error);
-          setTotalCornerValues(null);
+      if (cornerStatisticsConfig && courseName) {
+        const newTotals = new Map<string, {
+          topLeft: { value: string | number; visible: boolean };
+          topRight: { value: string | number; visible: boolean };
+          bottomLeft: { value: string | number; visible: boolean };
+          bottomRight: { value: string | number; visible: boolean };
+        }>();
+        
+        // Compute totals for each player independently
+        for (const player of players) {
+          try {
+            const totals = await computeTotalCornerValues(
+              cornerStatisticsConfig,
+              courseName,
+              holes,
+              scores,
+              player.id,  // Use the player's ID, not the current user's ID
+              undefined,  // todaysPlayerIds
+              currentRoundDate  // Exclude rounds that started at the same time or after
+            );
+            newTotals.set(player.id, totals);
+          } catch (error) {
+            console.error(`Error computing total corner values for player ${player.id}:`, error);
+          }
         }
+        setTotalCornerValues(newTotals);
       } else {
-        setTotalCornerValues(null);
+        setTotalCornerValues(new Map());
       }
     };
     computeTotals();
-  }, [cornerStatisticsConfig, resolvedCurrentUserId, courseName, holes, scores]);
+  }, [cornerStatisticsConfig, courseName, holes, scores, players]);
 
   const getScore = (playerId: number, holeNumber: number): number => {
     const score = scores.find(
@@ -506,44 +523,47 @@ export default function Scorecard({
               <View style={[styles.cell, styles.totalRowCell, styles.parHeaderCell]}>
               </View>
             )}
-            {players.map((player) => (
-              <View key={`total-${player.id}`} style={[styles.cell, styles.totalCell]}>
-                <View style={styles.scoreCellContainer}>
-                  {totalCornerValues && (() => {
-                    return (
-                      <>
-                        {/* Corner numbers - top left */}
-                        {totalCornerValues.topLeft.visible && (
-                          <Text style={styles.cornerTextTopLeft}>
-                            {totalCornerValues.topLeft.value}
-                          </Text>
-                        )}
-                        {/* Corner numbers - top right */}
-                        {totalCornerValues.topRight.visible && (
-                          <Text style={styles.cornerTextTopRight}>
-                            {totalCornerValues.topRight.value}
-                          </Text>
-                        )}
-                        {/* Corner numbers - bottom left */}
-                        {totalCornerValues.bottomLeft.visible && (
-                          <Text style={styles.cornerTextBottomLeft}>
-                            {totalCornerValues.bottomLeft.value}
-                          </Text>
-                        )}
-                        {/* Corner numbers - bottom right */}
-                        {totalCornerValues.bottomRight.visible && (
-                          <Text style={styles.cornerTextBottomRight}>
-                            {totalCornerValues.bottomRight.value}
-                          </Text>
-                        )}
-                      </>
-                    );
-                  })()}
-                  {/* Main total - centered */}
-                  <Text style={styles.totalText}>{getTotal(player.id)}</Text>
+            {players.map((player) => {
+              const playerTotals = totalCornerValues.get(player.id);
+              return (
+                <View key={`total-${player.id}`} style={[styles.cell, styles.totalCell]}>
+                  <View style={styles.scoreCellContainer}>
+                    {playerTotals && (() => {
+                      return (
+                        <>
+                          {/* Corner numbers - top left */}
+                          {playerTotals.topLeft.visible && (
+                            <Text style={styles.cornerTextTopLeft}>
+                              {playerTotals.topLeft.value}
+                            </Text>
+                          )}
+                          {/* Corner numbers - top right */}
+                          {playerTotals.topRight.visible && (
+                            <Text style={styles.cornerTextTopRight}>
+                              {playerTotals.topRight.value}
+                            </Text>
+                          )}
+                          {/* Corner numbers - bottom left */}
+                          {playerTotals.bottomLeft.visible && (
+                            <Text style={styles.cornerTextBottomLeft}>
+                              {playerTotals.bottomLeft.value}
+                            </Text>
+                          )}
+                          {/* Corner numbers - bottom right */}
+                          {playerTotals.bottomRight.visible && (
+                            <Text style={styles.cornerTextBottomRight}>
+                              {playerTotals.bottomRight.value}
+                            </Text>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {/* Main total - centered */}
+                    <Text style={styles.totalText}>{getTotal(player.id)}</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         </ScrollView>
       </View>

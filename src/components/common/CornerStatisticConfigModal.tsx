@@ -169,8 +169,12 @@ const ACCUMULATION_MODE_LABELS: Record<AccumulationModeEnum, string> = {
 
 // User filter mode display labels
 const USER_FILTER_MODE_LABELS: Record<UserFilterModeEnum, string> = {
-  [UserFilterModeEnum.Or]: 'together or independently',
-  [UserFilterModeEnum.And]: 'together',
+  [UserFilterModeEnum.Or]: '**',
+  [UserFilterModeEnum.And]: 'when playing together',
+};
+const USER_FILTER_MODE_OPRIONS: Record<UserFilterModeEnum, string> = {
+    [UserFilterModeEnum.Or]: '**together or independently',
+    [UserFilterModeEnum.And]: 'when playing together',
 };
 
 // Round selection type constant
@@ -215,6 +219,7 @@ const TEXT_PRESET_LABEL = 'Preset:';
 const TEXT_CONFIGURE = 'Configure';
 const TEXT_CORNER_STATISTIC = 'Corner Statistic';
 const TEXT_CANCEL = 'Cancel';
+const TEXT_CLEAR = 'Clear Corner';
 const TEXT_SELECTED_DATE = 'selected date';
 const TEXT_INITIAL_PERCENTILE = '50';
 
@@ -250,19 +255,41 @@ const PRESETS: Preset[] = [
   {
     name: 'Latest Round Together',
     config: {
-      scoreUserFilter: UserFilterEnum.Everyone,
-      roundUserFilter: UserFilterEnum.Everyone,
+      scoreUserFilter: UserFilterEnum.EachUser,
+      roundUserFilter: UserFilterEnum.TodaysPlayers,
       accumulationMode: AccumulationModeEnum.Relevant,
       scope: ScopeEnum.Round,
       roundSelection: RoundSelectionEnum.Latest,
-      userFilterMode: UserFilterModeEnum.Or,
+      userFilterMode: UserFilterModeEnum.And,
     },
   },
+{
+    name: 'Personal Best on Hole from Games Together',
+    config: {
+        scoreUserFilter: UserFilterEnum.EachUser,
+        roundUserFilter: UserFilterEnum.TodaysPlayers,
+        accumulationMode: AccumulationModeEnum.Best,
+        scope: ScopeEnum.Hole,
+        roundSelection: RoundSelectionEnum.All,
+        userFilterMode: UserFilterModeEnum.And,
+    },
+},
+    {
+        name: 'Personal Best Round from Games Together',
+        config: {
+            scoreUserFilter: UserFilterEnum.EachUser,
+            roundUserFilter: UserFilterEnum.TodaysPlayers,
+            accumulationMode: AccumulationModeEnum.Best,
+            scope: ScopeEnum.Round,
+            roundSelection: RoundSelectionEnum.All,
+            userFilterMode: UserFilterModeEnum.And,
+        },
+    },
   {
     name: 'Personal Average on Hole',
     config: {
       scoreUserFilter: UserFilterEnum.EachUser,
-      roundUserFilter: UserFilterEnum.Everyone,
+      roundUserFilter: UserFilterEnum.TodaysPlayers,
       accumulationMode: AccumulationModeEnum.Average,
       scope: ScopeEnum.Hole,
       roundSelection: RoundSelectionEnum.All,
@@ -273,7 +300,7 @@ const PRESETS: Preset[] = [
     name: 'Personal Avg of Last 3 Rounds',
     config: {
       scoreUserFilter: UserFilterEnum.EachUser,
-      roundUserFilter: UserFilterEnum.Everyone,
+      roundUserFilter: UserFilterEnum.TodaysPlayers,
       accumulationMode: AccumulationModeEnum.Average,
       scope: ScopeEnum.Round,
       roundSelection: RoundSelectionEnum.Latest3,
@@ -284,7 +311,7 @@ const PRESETS: Preset[] = [
     name: 'Personal Best on Hole of Last 3 Rounds',
     config: {
       scoreUserFilter: UserFilterEnum.EachUser,
-      roundUserFilter: UserFilterEnum.Everyone,
+      roundUserFilter: UserFilterEnum.TodaysPlayers,
       accumulationMode: AccumulationModeEnum.Best,
       scope: ScopeEnum.Hole,
       roundSelection: RoundSelectionEnum.Latest3,
@@ -295,7 +322,7 @@ const PRESETS: Preset[] = [
     name: 'Personal Best of Last 3 Rounds',
     config: {
       scoreUserFilter: UserFilterEnum.EachUser,
-      roundUserFilter: UserFilterEnum.Everyone,
+      roundUserFilter: UserFilterEnum.TodaysPlayers,
       accumulationMode: AccumulationModeEnum.Best,
       scope: ScopeEnum.Round,
       roundSelection: RoundSelectionEnum.Latest3,
@@ -303,7 +330,7 @@ const PRESETS: Preset[] = [
     },
   },
   {
-    name: 'Avg of Everyone Alltime',
+    name: 'All Time Avg of Everyone',
     config: {
       scoreUserFilter: UserFilterEnum.Everyone,
       roundUserFilter: UserFilterEnum.Everyone,
@@ -318,7 +345,7 @@ const PRESETS: Preset[] = [
 interface CornerStatisticConfigModalProps {
   visible: boolean;
   onDismiss: () => void;
-  onSave: (config: CornerConfig) => void;
+  onSave: (config: CornerConfig | null) => void;
   initialConfig: CornerConfig | null;
   courseName?: string;
   cornerPosition?: CornerPosition;
@@ -439,8 +466,13 @@ export default function CornerStatisticConfigModal({
           setPercentileInput(initialConfig.percentile.toString());
         }
         // Initialize preset based on initial config
-        const matchingPreset = findMatchingPreset(initialConfig);
-        setSelectedPreset(matchingPreset);
+        // If presetName is stored, use it; otherwise try to match
+        if (initialConfig.presetName) {
+          setSelectedPreset(initialConfig.presetName);
+        } else {
+          const matchingPreset = findMatchingPreset(initialConfig);
+          setSelectedPreset(matchingPreset);
+        }
         // Initialize date inputs from config
         if (initialConfig.sinceDate && typeof initialConfig.sinceDate === 'object' && initialConfig.sinceDate.type === DATE_OPTION_CUSTOM) {
           const date = new Date(initialConfig.sinceDate.timestamp);
@@ -456,14 +488,22 @@ export default function CornerStatisticConfigModal({
   }, [visible, initialConfig]);
 
   // Auto-save config changes (excluding round selection from round picker)
+  // Include presetName in the saved config
   useEffect(() => {
     if (visible && !isInitialMount.current && !roundPickerVisible) {
-      onSave(config);
+      const configToSave = selectedPreset !== PRESET_CUSTOM 
+        ? { ...config, presetName: selectedPreset }
+        : (() => {
+            // Clear presetName if switching to custom
+            const { presetName: _, ...rest } = config;
+            return rest;
+          })();
+      onSave(configToSave);
     }
     if (visible) {
       isInitialMount.current = false;
     }
-  }, [config, visible, roundPickerVisible]);
+  }, [config, visible, roundPickerVisible, selectedPreset]);
 
   // Auto-save round selection changes from round picker
   useEffect(() => {
@@ -472,7 +512,11 @@ export default function CornerStatisticConfigModal({
         ? { type: 'specific' as const, roundIds: tempSelectedRoundIds }
         : 'all';
       setConfig(prev => {
-        const updatedConfig: CornerConfig = { ...prev, roundSelection: newRoundSelection };
+        const updatedConfig: CornerConfig = { 
+          ...prev, 
+          roundSelection: newRoundSelection,
+          presetName: selectedPreset !== PRESET_CUSTOM ? selectedPreset : prev.presetName
+        };
         onSave(updatedConfig);
         return updatedConfig;
       });
@@ -480,7 +524,7 @@ export default function CornerStatisticConfigModal({
     if (roundPickerVisible) {
       isInitialRoundPickerMount.current = false;
     }
-  }, [tempSelectedRoundIds, roundPickerVisible]);
+  }, [tempSelectedRoundIds, roundPickerVisible, selectedPreset]);
 
   const loadUsers = async () => {
     try {
@@ -509,22 +553,52 @@ export default function CornerStatisticConfigModal({
   const isMenuVisible = (key: string) => menuStates[key] || false;
 
   const updateConfig = (updates: Partial<CornerConfig>) => {
-    setConfig(prev => ({ ...prev, ...updates }));
+    setConfig(prev => {
+      // If updating config manually (not from preset), preserve presetName only if it still matches
+      const updated = { ...prev, ...updates };
+      // Don't clear presetName here - let the useEffect handle it
+      return updated;
+    });
   };
 
-  // Update selected preset when config changes
+  // Update selected preset when config changes (but preserve presetName if it exists)
   useEffect(() => {
-    const matchingPreset = findMatchingPreset(config);
-    setSelectedPreset(matchingPreset);
+    if (config.presetName) {
+      // If presetName is set, keep it and verify it still matches
+      const matchingPreset = findMatchingPreset(config);
+      if (matchingPreset === config.presetName) {
+        // Still matches, keep it
+        setSelectedPreset(config.presetName);
+      } else {
+        // No longer matches, clear presetName
+        setConfig(prev => {
+          const { presetName: _, ...rest } = prev;
+          return rest;
+        });
+        setSelectedPreset(matchingPreset);
+      }
+    } else {
+      // Otherwise try to match
+      const matchingPreset = findMatchingPreset(config);
+      setSelectedPreset(matchingPreset);
+    }
   }, [config]);
 
   // Apply a preset
   const applyPreset = (presetName: string) => {
-    if (presetName === PRESET_CUSTOM) return;
+    if (presetName === PRESET_CUSTOM) {
+      // Clear preset name when switching to custom
+      setConfig(prev => {
+        const { presetName: _, ...rest } = prev;
+        return rest;
+      });
+      setSelectedPreset(PRESET_CUSTOM);
+      return;
+    }
     
     const preset = PRESETS.find(p => p.name === presetName);
     if (preset) {
-      setConfig(preset.config);
+      setConfig({ ...preset.config, presetName });
       setSelectedPreset(presetName);
     }
   };
@@ -624,7 +698,9 @@ export default function CornerStatisticConfigModal({
 
   const handleRoundUserFilterToggle = (userId: string) => {
     const currentFilter = config.roundUserFilter;
-    if (currentFilter === UserFilterEnum.Everyone || currentFilter === UserFilterEnum.EachUser) {
+    if (currentFilter === UserFilterEnum.Everyone || 
+        currentFilter === UserFilterEnum.EachUser || 
+        currentFilter === UserFilterEnum.TodaysPlayers) {
       updateConfig({ roundUserFilter: [userId] });
     } else if (Array.isArray(currentFilter)) {
       if (currentFilter.includes(userId)) {
@@ -1466,7 +1542,7 @@ export default function CornerStatisticConfigModal({
                         >
                           <View style={styles.dropdownContainer}>
                             <Text selectable style={[styles.inlineLink, { color: theme.colors.onSurface }]}>
-                              {config.userFilterMode === UserFilterModeEnum.And ? USER_FILTER_MODE_LABELS[UserFilterModeEnum.And] : USER_FILTER_MODE_LABELS[UserFilterModeEnum.Or]}
+                              {config.userFilterMode === UserFilterModeEnum.And ? USER_FILTER_MODE_OPRIONS[UserFilterModeEnum.And] : USER_FILTER_MODE_OPRIONS[UserFilterModeEnum.Or]}
                             </Text>
                             <Icon source="chevron-down" size={14} color={theme.colors.onSurfaceVariant} />
                           </View>
@@ -1634,7 +1710,7 @@ export default function CornerStatisticConfigModal({
                         />
                       </Menu>
                       {config.userFilterMode === UserFilterModeEnum.And && (
-                        <Text selectable style={[styles.sentenceText, { color: theme.colors.onSurface }]}>{TEXT_WHEN_PLAYING_TOGETHER}</Text>
+                        <Text selectable style={[styles.sentenceText, { color: theme.colors.onSurface }]}> in the same round</Text>
                       )}
                     </>
                   ) : null;
@@ -2077,6 +2153,19 @@ export default function CornerStatisticConfigModal({
             </Dialog.Content>
           </ScrollView>
         </Dialog.ScrollArea>
+        {initialConfig && (
+          <Dialog.Actions>
+            <Button 
+              onPress={() => {
+                onSave(null);
+                onDismiss();
+              }}
+              textColor={theme.colors.error}
+            >
+              {TEXT_CLEAR}
+            </Button>
+          </Dialog.Actions>
+        )}
       </Dialog>
 
       {/* User Rounds Modal */}

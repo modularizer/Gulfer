@@ -77,18 +77,34 @@ export default function CornerStatisticsSettingsDialog({
     setConfigModalVisible(true);
   };
 
-  const handleSaveConfig = (newConfig: CornerConfig) => {
+  const handleSaveConfig = (newConfig: CornerConfig | null) => {
     if (configModalPosition) {
-      setConfig(prev => ({
-        ...prev,
-        [configModalPosition]: newConfig,
-      }));
+      if (newConfig === null) {
+        // Clear the corner
+        setConfig(prev => {
+          const updated = { ...prev };
+          delete updated[configModalPosition];
+          return updated;
+        });
+      } else {
+        // Set the corner config
+        setConfig(prev => ({
+          ...prev,
+          [configModalPosition]: newConfig,
+        }));
+      }
     }
   };
 
   const formatConfigLabel = (cornerConfig: CornerConfig | null): string => {
     if (!cornerConfig) return 'Empty';
-    // Generate a short label based on the config
+    
+    // If preset name is stored, show it
+    if (cornerConfig.presetName) {
+      return cornerConfig.presetName;
+    }
+    
+    // Otherwise generate a short label based on the config
     let userText = 'Unknown';
     if (cornerConfig.scoreUserFilter === 'everyone') {
       userText = 'All';
