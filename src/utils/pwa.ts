@@ -8,6 +8,7 @@ import { useEffect, useRef } from 'react';
  */
 
 const LAST_PAGE_STORAGE_KEY = 'gulfer-last-page';
+const LEGACY_CLEANUP_RELOAD_KEY = 'gulfer-sw-legacy-cleanup-reload';
 
 const normalizeBasePath = (basePath?: string | null): string => {
   if (!basePath || basePath === '/') {
@@ -89,6 +90,63 @@ const stripBasePath = (pathname: string, basePath: string): string => {
   return stripped.startsWith('/') ? stripped : `/${stripped}`;
 };
 
+const getServiceWorkerScriptUrls = (registration: ServiceWorkerRegistration): string[] => {
+  const urls = [
+    registration.active?.scriptURL,
+    registration.waiting?.scriptURL,
+    registration.installing?.scriptURL,
+  ];
+
+  return urls.filter((url): url is string => typeof url === 'string');
+};
+
+const cleanupLegacyServiceWorkers = async (desiredScope: string, basePath: string): Promise<boolean> => {
+  if (!('serviceWorker' in navigator) || !navigator.serviceWorker.getRegistrations) {
+    return false;
+  }
+
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    if (!registrations.length) {
+      return false;
+    }
+
+    const originScope = new URL('/', window.location.origin).href;
+    const desiredScopeUrl = new URL(desiredScope, window.location.origin).href;
+
+    let removedLegacy = false;
+
+    await Promise.all(
+      registrations.map(async (registration) => {
+        const scriptUrls = getServiceWorkerScriptUrls(registration);
+        const targetsGulferWorker = scriptUrls.some((url) => url.includes('/sw.js'));
+        if (!targetsGulferWorker) {
+          return;
+        }
+
+        // Already correct scope
+        if (registration.scope === desiredScopeUrl) {
+          return;
+        }
+
+        // If we now have a base path, remove the legacy root-scoped worker
+        if (basePath && registration.scope === originScope) {
+          console.log('Unregistering legacy Gulfer service worker with scope', registration.scope);
+          const didUnregister = await registration.unregister();
+          if (didUnregister) {
+            removedLegacy = true;
+          }
+        }
+      })
+    );
+
+    return removedLegacy;
+  } catch (error) {
+    console.log('Error cleaning up legacy service workers:', error);
+    return false;
+  }
+};
+
 // Register service worker on web platform
 export function registerServiceWorker() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') {
@@ -101,31 +159,63 @@ export function registerServiceWorker() {
       const scope = basePath ? `${basePath}/` : '/';
       const swPath = `${basePath || ''}/sw.js`;
 
-      navigator.serviceWorker
-        .register(swPath, { updateViaCache: 'none', scope })
-        .then((registration) => {
-          console.log('Service Worker registered:', registration.scope);
-          
-          // Check for updates immediately and force activation
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  // New service worker available, force activation
-                  newWorker.postMessage({ type: 'SKIP_WAITING' });
-                  // Reload to use new service worker
-                  window.location.reload();
-                }
-              });
+      cleanupLegacyServiceWorkers(scope, basePath).then((removedLegacy) => {
+        if (removedLegacy) {
+          try {
+            if (typeof sessionStorage !== 'undefined') {
+              const hasReloaded = sessionStorage.getItem(LEGACY_CLEANUP_RELOAD_KEY) === '1';
+              if (hasReloaded) {
+                sessionStorage.removeItem(LEGACY_CLEANUP_RELOAD_KEY);
+              } else {
+                sessionStorage.setItem(LEGACY_CLEANUP_RELOAD_KEY, '1');
+                window.location.reload();
+                return;
+              }
+            } else {
+              window.location.reload();
+              return;
             }
+          } catch (error) {
+            console.log('Error handling legacy service worker reload:', error);
+            window.location.reload();
+            return;
+          }
+        } else {
+          try {
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.removeItem(LEGACY_CLEANUP_RELOAD_KEY);
+            }
+          } catch (error) {
+            console.log('Error clearing legacy service worker reload flag:', error);
+          }
+        }
+
+        navigator.serviceWorker
+          .register(swPath, { updateViaCache: 'none', scope })
+          .then((registration) => {
+            console.log('Service Worker registered:', registration.scope);
+            
+            // Check for updates immediately and force activation
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New service worker available, force activation
+                    newWorker.postMessage({ type: 'SKIP_WAITING' });
+                    // Reload to use new service worker
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+            
+            // Check for updates on every page load
+            registration.update();
+          })
+          .catch((error) => {
+            console.log('Service Worker registration failed:', error);
           });
-          
-          // Check for updates on every page load
-          registration.update();
-        })
-        .catch((error) => {
-          console.log('Service Worker registration failed:', error);
         });
     });
   }
