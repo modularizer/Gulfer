@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
 import { Course, Round, Player } from '@/types';
@@ -15,11 +15,14 @@ import {
   PlayerChip,
   ErrorDialog,
   NotesSection,
+  CardModeToggle,
+  CardMode,
 } from '@/components/common';
 import { useExport } from '@/hooks/useExport';
 import { detailPageStyles } from '@/styles/detailPageStyles';
 import { listPageStyles } from '@/styles/listPageStyles';
 import { loadPhotosByStorageKey, savePhotosByStorageKey } from '@/utils/photoStorage';
+import { getCachedCardMode, loadCardMode, saveCardMode } from '@/services/storage/cardModeStorage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -33,6 +36,9 @@ export default function CourseDetailScreen() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [bestScores, setBestScores] = useState<Map<string, { player: Player; score: number }>>(new Map());
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
+  const [roundCardMode, setRoundCardMode] = useState<CardMode>(() => getCachedCardMode('course_overview_rounds'));
+  const [copySuccess, setCopySuccess] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const { exportToClipboard } = useExport();
 
@@ -100,6 +106,30 @@ export default function CourseDetailScreen() {
     }
   }, [encodedNameParam]);
 
+  useEffect(() => {
+    let isMounted = true;
+    loadCardMode('course_overview_rounds').then((storedMode) => {
+      if (isMounted) {
+        setRoundCardMode((prev) => (prev === storedMode ? prev : storedMode));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleRoundCardModeChange = useCallback((mode: CardMode) => {
+    setRoundCardMode((prev) => {
+      if (prev === mode) {
+        return prev;
+      }
+      saveCardMode('course_overview_rounds', mode).catch((error) => {
+        console.error('Error saving course overview round card mode:', error);
+      });
+      return mode;
+    });
+  }, []);
+
   const handlePhotosChange = useCallback(async (newPhotos: string[]) => {
     setPhotos(newPhotos);
     if (course) {
@@ -136,6 +166,27 @@ export default function CourseDetailScreen() {
     }
   }, [course, exportToClipboard]);
 
+  const handleExportWithFeedback = useCallback(async () => {
+    try {
+      await handleExport();
+      setCopySuccess(true);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopySuccess(false), 1500);
+    } catch (error) {
+      setCopySuccess(false);
+    }
+  }, [handleExport]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
   if (!course) {
     return null;
   }
@@ -146,13 +197,11 @@ export default function CourseDetailScreen() {
     <DetailPageLayout
       loading={loading}
       onBack={() => router.replace('/course/list')}
-      headerMenuItems={[
-        {
-          title: 'Export Course',
-          icon: 'export',
-          onPress: handleExport,
-        },
-      ]}
+      headerAction={{
+        icon: copySuccess ? 'check' : 'content-copy',
+        iconColor: copySuccess ? theme.colors.primary : undefined,
+        onPress: handleExportWithFeedback,
+      }}
       errorDialog={{
         visible: errorDialog.visible,
         title: errorDialog.title,
@@ -210,7 +259,10 @@ export default function CourseDetailScreen() {
 
       {rounds.length > 0 && (
         <View style={detailPageStyles.section}>
-          <SectionTitle>Rounds ({rounds.length})</SectionTitle>
+          <View style={styles.sectionHeaderRow}>
+            <SectionTitle>Rounds ({rounds.length})</SectionTitle>
+            <CardModeToggle mode={roundCardMode} onModeChange={handleRoundCardModeChange} />
+          </View>
           <View style={detailPageStyles.roundsList}>
             {rounds
               .sort((a, b) => b.date - a.date)
@@ -219,6 +271,8 @@ export default function CourseDetailScreen() {
                   key={round.id}
                   round={round}
                   showCourse={false}
+                  showPhotos={roundCardMode !== 'list' && roundCardMode !== 'small'}
+                  mode={roundCardMode}
                 />
               ))}
           </View>
@@ -227,5 +281,15 @@ export default function CourseDetailScreen() {
     </DetailPageLayout>
   );
 }
+
+
+const styles = StyleSheet.create({
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+});
 
 

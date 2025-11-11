@@ -18,6 +18,12 @@ interface DetailPageLayoutProps {
     icon?: string;
     onPress: () => void;
   }>;
+  headerAction?: {
+    icon: string;
+    onPress: () => void;
+    iconColor?: string;
+    disabled?: boolean;
+  };
   headerContent?: ReactNode;
   errorDialog?: {
     visible: boolean;
@@ -32,6 +38,7 @@ export default function DetailPageLayout({
   loading = false,
   onBack,
   headerMenuItems,
+  headerAction,
   headerContent,
   errorDialog,
   children,
@@ -46,6 +53,7 @@ export default function DetailPageLayout({
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <DetailPageHeader
         onBack={onBack}
+        action={headerAction}
         menuItems={headerMenuItems}
       >
         {headerContent}

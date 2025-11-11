@@ -9,10 +9,12 @@ import {
   ListPageLayout,
   NameUsernameDialog,
   PlayerCard,
+  CardMode,
 } from '@/components/common';
 import { useSelection } from '@/hooks/useSelection';
 import { useListPage } from '@/hooks/useListPage';
 import { listPageStyles } from '@/styles/listPageStyles';
+import { getCachedCardMode, loadCardMode, saveCardMode } from '@/services/storage/cardModeStorage';
 
 export default function PlayersScreen() {
   const [players, setPlayers] = useState<User[]>([]);
@@ -23,6 +25,7 @@ export default function PlayersScreen() {
   const [playerHolesCount, setPlayerHolesCount] = useState<Map<string, number>>(new Map());
   const [photosByPlayer, setPhotosByPlayer] = useState<Map<string, string[]>>(new Map());
   const [newPlayerDialogVisible, setNewPlayerDialogVisible] = useState(false);
+  const [cardMode, setCardMode] = useState<CardMode>(() => getCachedCardMode('players'));
   
   const loadPlayers = useCallback(async () => {
     try {
@@ -93,6 +96,30 @@ export default function PlayersScreen() {
     } catch (error) {
       console.error('Error loading players:', error);
     }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    loadCardMode('players').then((storedMode) => {
+      if (isMounted) {
+        setCardMode((prev) => (prev === storedMode ? prev : storedMode));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleCardModeChange = useCallback((mode: CardMode) => {
+    setCardMode((prev) => {
+      if (prev === mode) {
+        return prev;
+      }
+      saveCardMode('players', mode).catch((error) => {
+        console.error('Error saving player card mode:', error);
+      });
+      return mode;
+    });
   }, []);
 
   const selection = useSelection<string>();
@@ -171,7 +198,8 @@ export default function PlayersScreen() {
         <PlayerCard
           player={item}
           photos={photos}
-          showPhotos={true}
+          showPhotos={cardMode !== 'list' && cardMode !== 'small'}
+          mode={cardMode}
           isSelected={isSelected}
           roundsCount={roundsCount}
           coursesCount={coursesCount}
@@ -183,7 +211,7 @@ export default function PlayersScreen() {
         />
       );
     },
-    [handlePlayerPress, handlePlayerLongPress, selection, playerRoundsCount, playerCoursesCount, playerWinsCount, playerTotalThrows, playerHolesCount, photosByPlayer]
+    [handlePlayerPress, handlePlayerLongPress, selection, playerRoundsCount, playerCoursesCount, playerWinsCount, playerTotalThrows, playerHolesCount, photosByPlayer, cardMode]
   );
 
   return (
@@ -206,6 +234,8 @@ export default function PlayersScreen() {
       onRefresh={listPage.handleRefresh}
       errorDialog={listPage.errorDialog}
       onDismissError={listPage.hideError}
+      cardMode={cardMode}
+      onCardModeChange={handleCardModeChange}
     >
       <NameUsernameDialog
         visible={newPlayerDialogVisible}

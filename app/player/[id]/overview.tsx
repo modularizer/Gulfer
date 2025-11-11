@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Platform } from 'react-native';
 import { useTheme, Text, Card, Chip, Button } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
 import { getAllUsers, getUserById, getUserByName, User, saveUser } from '@/services/storage/userStorage';
@@ -14,13 +14,17 @@ import {
   HeroSection,
   SectionTitle,
   RoundCard,
+  CourseCard,
   ErrorDialog,
   NotesSection,
+  CardModeToggle,
+  CardMode,
 } from '@/components/common';
 import { useExport } from '@/hooks/useExport';
 import { encodeNameForUrl } from '@/utils/urlEncoding';
 import { detailPageStyles } from '@/styles/detailPageStyles';
 import { loadPhotosByStorageKey, savePhotosByStorageKey } from '@/utils/photoStorage';
+import { getCachedCardMode, loadCardMode, saveCardMode } from '@/services/storage/cardModeStorage';
 
 interface CourseScore {
   course: Course;
@@ -40,19 +44,29 @@ export default function PlayerDetailScreen() {
   const [playerRounds, setPlayerRounds] = useState<Round[]>([]);
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
+  const [courseCardMode, setCourseCardMode] = useState<CardMode>(() => getCachedCardMode('player_overview_courses'));
+  const [roundCardMode, setRoundCardMode] = useState<CardMode>(() => getCachedCardMode('player_overview_rounds'));
   
   const { exportToClipboard } = useExport();
   const [isUpdating, setIsUpdating] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('Loading...');
+  const [copySuccess, setCopySuccess] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleExport = useCallback(async () => {
     if (!player) return;
     try {
       const exportText = await exportPlayer(player.id);
       await exportToClipboard(exportText, player.name);
+      setCopySuccess(true);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => setCopySuccess(false), 1500);
     } catch (error) {
       console.error('Error exporting player:', error);
       setErrorDialog({ visible: true, title: 'Error', message: 'Failed to export player' });
+      setCopySuccess(false);
     }
   }, [player, exportToClipboard]);
 
@@ -211,6 +225,14 @@ export default function PlayerDetailScreen() {
     loadAppVersion();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handlePhotosChange = useCallback(async (newPhotos: string[]) => {
     setPhotos(newPhotos);
     if (player) {
@@ -234,6 +256,54 @@ export default function PlayerDetailScreen() {
       }
     }
   }, [player]);
+
+  useEffect(() => {
+    let isMounted = true;
+    loadCardMode('player_overview_courses').then((storedMode) => {
+      if (isMounted) {
+        setCourseCardMode((prev) => (prev === storedMode ? prev : storedMode));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    loadCardMode('player_overview_rounds').then((storedMode) => {
+      if (isMounted) {
+        setRoundCardMode((prev) => (prev === storedMode ? prev : storedMode));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleCourseCardModeChange = useCallback((mode: CardMode) => {
+    setCourseCardMode((prev) => {
+      if (prev === mode) {
+        return prev;
+      }
+      saveCardMode('player_overview_courses', mode).catch((error) => {
+        console.error('Error saving player overview course card mode:', error);
+      });
+      return mode;
+    });
+  }, []);
+
+  const handleRoundCardModeChange = useCallback((mode: CardMode) => {
+    setRoundCardMode((prev) => {
+      if (prev === mode) {
+        return prev;
+      }
+      saveCardMode('player_overview_rounds', mode).catch((error) => {
+        console.error('Error saving player overview round card mode:', error);
+      });
+      return mode;
+    });
+  }, []);
 
   return (
     <DetailPageLayout
@@ -263,24 +333,13 @@ export default function PlayerDetailScreen() {
           </>
         ) : null
       }
-      headerMenuItems={
+      headerAction={
         player
-          ? [
-              {
-                title: 'Export Player',
-                icon: 'export',
-                onPress: handleExport,
-              },
-              ...(player.isCurrentUser && Platform.OS === 'web'
-                ? [
-                    {
-                      title: 'Update App',
-                      icon: 'refresh',
-                      onPress: handleUpdateApp,
-                    },
-                  ]
-                : []),
-            ]
+          ? {
+              icon: copySuccess ? 'check' : 'content-copy',
+              iconColor: copySuccess ? theme.colors.primary : undefined,
+              onPress: handleExport,
+            }
           : undefined
       }
       errorDialog={{
@@ -310,51 +369,32 @@ export default function PlayerDetailScreen() {
 
       {player && courseScores.length > 0 ? (
         <View style={detailPageStyles.section}>
-          <SectionTitle>Courses ({courseScores.length})</SectionTitle>
+          <View style={styles.sectionHeaderRow}>
+            <SectionTitle>Courses ({courseScores.length})</SectionTitle>
+            <CardModeToggle mode={courseCardMode} onModeChange={handleCourseCardModeChange} />
+          </View>
           <View style={styles.coursesList}>
-            {courseScores.map(({ course, bestScore, roundCount, bestRoundId }) => {
-              const holeCount = Array.isArray(course.holes) 
-                ? course.holes.length 
-                : (course.holes as unknown as number || 0);
-              
+            {courseScores.map(({ course, bestScore, roundCount }) => {
+              const summary = `Best: ${bestScore} • ${roundCount} ${roundCount === 1 ? 'round' : 'rounds'}`;
+              const notes = course.notes ? `${course.notes}\n${summary}` : summary;
+              const displayCourse: Course = {
+                ...course,
+                notes,
+              };
+              const bestScores = player
+                ? [{ player: { id: player.id, name: player.name }, score: bestScore }]
+                : [];
+
               return (
-                <TouchableOpacity
+                <CourseCard
                   key={course.id}
-                  onPress={() => {
-                    router.push(`/course/${encodeNameForUrl(course.name)}/overview`);
-                  }}
-                >
-                  <Card style={[styles.courseCard, { backgroundColor: theme.colors.surface }, getShadowStyle(2)]}>
-                    <Card.Content>
-                      <View style={styles.courseHeader}>
-                        <Text style={[styles.courseName, { color: theme.colors.onSurface }]}>
-                          {course.name}
-                        </Text>
-                        <Chip style={styles.holeChip} icon="flag">
-                          {holeCount} {holeCount === 1 ? 'hole' : 'holes'}
-                        </Chip>
-                      </View>
-                      <View style={styles.courseStats}>
-                        <TouchableOpacity
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            router.push(`/round/${bestRoundId}/holes`);
-                          }}
-                        >
-                          <Chip 
-                            style={styles.scoreChip} 
-                            icon="trophy"
-                          >
-                            Best: {bestScore}
-                          </Chip>
-                        </TouchableOpacity>
-                        <Chip style={styles.roundChip}>
-                          {roundCount} {roundCount === 1 ? 'round' : 'rounds'}
-                        </Chip>
-                      </View>
-                    </Card.Content>
-                  </Card>
-                </TouchableOpacity>
+                  course={displayCourse}
+                  photos={[]}
+                  showPhotos={courseCardMode !== 'list' && courseCardMode !== 'small'}
+                  bestScores={bestScores}
+                  mode={courseCardMode}
+                  onPress={() => router.push(`/course/${encodeNameForUrl(course.name)}/overview`)}
+                />
               );
             })}
           </View>
@@ -369,7 +409,10 @@ export default function PlayerDetailScreen() {
 
       {player && playerRounds.length > 0 && (
         <View style={detailPageStyles.section}>
-          <SectionTitle>Rounds ({playerRounds.length})</SectionTitle>
+          <View style={styles.sectionHeaderRow}>
+            <SectionTitle>Rounds ({playerRounds.length})</SectionTitle>
+            <CardModeToggle mode={roundCardMode} onModeChange={handleRoundCardModeChange} />
+          </View>
           <View style={detailPageStyles.roundsList}>
             {playerRounds.map((round) => {
               let holesCount = 0;
@@ -387,6 +430,8 @@ export default function PlayerDetailScreen() {
                   key={round.id}
                   round={round}
                   courseHoleCount={holesCount}
+                  showPhotos={roundCardMode !== 'list' && roundCardMode !== 'small'}
+                  mode={roundCardMode}
                 />
               );
             })}
@@ -509,5 +554,11 @@ const styles = StyleSheet.create({
   },
   updateButton: {
     marginTop: 8,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
 });

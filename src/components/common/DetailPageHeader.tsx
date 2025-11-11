@@ -14,12 +14,19 @@ interface DetailPageHeaderProps {
     icon?: string;
     onPress: () => void;
   }>;
+  action?: {
+    icon: string;
+    onPress: () => void;
+    iconColor?: string;
+    disabled?: boolean;
+  };
   children?: ReactNode; // Optional content between back button and menu
 }
 
 export default function DetailPageHeader({
   onBack,
   menuItems,
+  action,
   children,
 }: DetailPageHeaderProps) {
   const theme = useTheme();
@@ -34,14 +41,25 @@ export default function DetailPageHeader({
         onPress={onBack}
         style={styles.backButton}
       />
-      {children && (
+      {children ? (
         <View style={styles.headerContent}>
           {children}
         </View>
+      ) : (
+        <View style={styles.headerSpacer} />
       )}
-      {menuItems && menuItems.length > 0 && (
+      {action ? (
+        <View style={styles.actionContainer}>
+          <IconButton
+            icon={action.icon}
+            size={24}
+            iconColor={action.iconColor ?? theme.colors.onSurface}
+            onPress={action.onPress}
+            disabled={action.disabled}
+          />
+        </View>
+      ) : menuItems && menuItems.length > 0 ? (
         <>
-          <View style={styles.headerSpacer} />
           <Menu
             visible={menuVisible}
             onDismiss={() => setMenuVisible(false)}
@@ -67,7 +85,7 @@ export default function DetailPageHeader({
             ))}
           </Menu>
         </>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -96,7 +114,10 @@ const styles = StyleSheet.create({
     minWidth: 0, // Allow flex shrinking
   },
   headerSpacer: {
-    width: 8, // Small fixed spacer instead of flex: 1
+    flex: 1,
+  },
+  actionContainer: {
+    marginLeft: 8,
   },
 });
 

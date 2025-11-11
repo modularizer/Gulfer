@@ -7,6 +7,7 @@ import EmptyState from './EmptyState';
 import SelectionActionBar from './SelectionActionBar';
 import DeleteConfirmationDialog from './DeleteConfirmationDialog';
 import ErrorDialog from './ErrorDialog';
+import { CardMode } from './CardModeToggle';
 
 interface ListPageLayoutProps<T> {
   currentValue: 'rounds' | 'courses' | 'players';
@@ -33,6 +34,8 @@ interface ListPageLayoutProps<T> {
     message: string;
   };
   onDismissError: () => void;
+  cardMode?: CardMode;
+  onCardModeChange?: (mode: CardMode) => void;
   children?: ReactNode; // For additional dialogs/components
 }
 
@@ -57,6 +60,8 @@ export default function ListPageLayout<T>({
   onRefresh,
   errorDialog,
   onDismissError,
+  cardMode,
+  onCardModeChange,
   children,
 }: ListPageLayoutProps<T>) {
   const theme = useTheme();
@@ -70,6 +75,8 @@ export default function ListPageLayout<T>({
         onAdd={onAdd}
         importLabel={importLabel}
         onImport={onImport}
+        cardMode={cardMode}
+        onCardModeChange={onCardModeChange}
       />
 
       {items.length === 0 ? (

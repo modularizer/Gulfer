@@ -25,4 +25,5 @@ export { default as GStatsCell } from './GStatsCell';
 export { default as NotesSection } from './NotesSection';
 export { default as CourseCard } from './CourseCard';
 export { default as PlayerCard } from './PlayerCard';
+export { default as CardModeToggle, type CardMode } from './CardModeToggle';
 

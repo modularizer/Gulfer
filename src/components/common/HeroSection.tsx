@@ -3,10 +3,10 @@
  * Photo gallery section with fallback logo
  */
 
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useRef, useCallback } from 'react';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
-import PhotoGallery from './PhotoGallery';
+import PhotoGallery, { PhotoGalleryHandle } from './PhotoGallery';
 
 interface HeroSectionProps {
   photos: string[];
@@ -21,18 +21,31 @@ export default function HeroSection({
   storageKey,
   isEditable = false,
 }: HeroSectionProps) {
+  const galleryRef = useRef<PhotoGalleryHandle>(null);
+
+  const handlePlaceholderPress = useCallback(() => {
+    if (!isEditable) return;
+    galleryRef.current?.openAddPhotoMenu();
+  }, [isEditable]);
+
   return (
     <View style={styles.container}>
       {photos.length === 0 && (
-        <View style={styles.logoContainer}>
+        <TouchableOpacity
+          style={styles.logoContainer}
+          activeOpacity={isEditable ? 0.7 : 1}
+          onPress={handlePlaceholderPress}
+          disabled={!isEditable}
+        >
           <Image 
             source={require('../../../assets/favicon.png')} 
             style={styles.logoImage}
             resizeMode="contain"
           />
-        </View>
+        </TouchableOpacity>
       )}
       <PhotoGallery
+        ref={galleryRef}
         images={photos}
         isEditable={isEditable}
         onImagesChange={onPhotosChange}

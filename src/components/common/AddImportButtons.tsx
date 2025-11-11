@@ -6,12 +6,15 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Button } from 'react-native-paper';
+import CardModeToggle, { CardMode } from './CardModeToggle';
 
 interface AddImportButtonsProps {
   addLabel: string;
   onAdd: () => void;
   importLabel?: string;
   onImport?: () => void;
+  cardMode?: CardMode;
+  onCardModeChange?: (mode: CardMode) => void;
 }
 
 export default function AddImportButtons({
@@ -19,26 +22,33 @@ export default function AddImportButtons({
   onAdd,
   importLabel,
   onImport,
+  cardMode,
+  onCardModeChange,
 }: AddImportButtonsProps) {
   return (
     <View style={styles.container}>
-      <Button
-        mode="contained"
-        icon="plus"
-        onPress={onAdd}
-        style={styles.addButton}
-      >
-        {addLabel}
-      </Button>
-      {importLabel && onImport && (
+      <View style={styles.leftSection}>
         <Button
-          mode="outlined"
-          icon="import"
-          onPress={onImport}
-          style={styles.importButton}
+          mode="contained"
+          icon="plus"
+          onPress={onAdd}
+          style={styles.addButton}
         >
-          {importLabel}
+          {addLabel}
         </Button>
+        {importLabel && onImport && (
+          <Button
+            mode="outlined"
+            icon="import"
+            onPress={onImport}
+            style={styles.importButton}
+          >
+            {importLabel}
+          </Button>
+        )}
+      </View>
+      {cardMode !== undefined && onCardModeChange && (
+        <CardModeToggle mode={cardMode} onModeChange={onCardModeChange} />
       )}
     </View>
   );
@@ -51,10 +61,16 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
     flexDirection: 'row',
     gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  leftSection: {
+    flexDirection: 'row',
+    gap: 8,
+    flex: 1,
   },
   addButton: {
     alignSelf: 'flex-start',
-    marginRight: 8,
   },
   importButton: {
     alignSelf: 'flex-start',

@@ -9,10 +9,12 @@ import { loadPhotosByStorageKey } from '@/utils/photoStorage';
 import {
   ListPageLayout,
   CourseCard,
+  CardMode,
 } from '@/components/common';
 import { useSelection } from '@/hooks/useSelection';
 import { useListPage } from '@/hooks/useListPage';
 import { listPageStyles } from '@/styles/listPageStyles';
+import { getCachedCardMode, loadCardMode, saveCardMode } from '@/services/storage/cardModeStorage';
 
 export default function CoursesScreen() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -20,6 +22,7 @@ export default function CoursesScreen() {
   const [newCourseDialog, setNewCourseDialog] = useState({ visible: false, name: '', holes: '9' });
   const [bestScoresByCourse, setBestScoresByCourse] = useState<Map<string, Map<string, { player: Player; score: number }>>>(new Map());
   const [photosByCourse, setPhotosByCourse] = useState<Map<string, string[]>>(new Map());
+  const [cardMode, setCardMode] = useState<CardMode>(() => getCachedCardMode('courses'));
   
   const loadCourses = useCallback(async () => {
     try {
@@ -72,6 +75,30 @@ export default function CoursesScreen() {
     } catch (error) {
       console.error('Error loading courses:', error);
     }
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    loadCardMode('courses').then((storedMode) => {
+      if (isMounted) {
+        setCardMode((prev) => (prev === storedMode ? prev : storedMode));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleCardModeChange = useCallback((mode: CardMode) => {
+    setCardMode((prev) => {
+      if (prev === mode) {
+        return prev;
+      }
+      saveCardMode('courses', mode).catch((error) => {
+        console.error('Error saving course card mode:', error);
+      });
+      return mode;
+    });
   }, []);
 
   const selection = useSelection<string>();
@@ -161,7 +188,8 @@ export default function CoursesScreen() {
         <CourseCard
           course={item}
           photos={photos}
-          showPhotos={true}
+          showPhotos={cardMode !== 'list' && cardMode !== 'small'}
+          mode={cardMode}
           isSelected={isSelected}
           bestScores={bestScoresArray}
           onPress={() => handleCoursePress(item.id, item.name)}
@@ -169,7 +197,7 @@ export default function CoursesScreen() {
         />
       );
     },
-    [handleCoursePress, handleCourseLongPress, selection, bestScoresByCourse, photosByCourse]
+    [handleCoursePress, handleCourseLongPress, selection, bestScoresByCourse, photosByCourse, cardMode]
   );
 
   return (
@@ -192,6 +220,8 @@ export default function CoursesScreen() {
       onRefresh={listPage.handleRefresh}
       errorDialog={listPage.errorDialog}
       onDismissError={listPage.hideError}
+      cardMode={cardMode}
+      onCardModeChange={handleCardModeChange}
     >
       {/* Add New Course Dialog */}
       <Portal>

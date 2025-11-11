@@ -7,20 +7,47 @@ import { router, useFocusEffect } from 'expo-router';
 import {
   ListPageLayout,
   RoundCard,
+  CardMode,
 } from '@/components/common';
 import { useSelection } from '@/hooks/useSelection';
 import { useListPage } from '@/hooks/useListPage';
+import { getCachedCardMode, loadCardMode, saveCardMode } from '@/services/storage/cardModeStorage';
 
 export default function RoundHistoryScreen() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [filteredRounds, setFilteredRounds] = useState<Round[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [cardMode, setCardMode] = useState<CardMode>(() => getCachedCardMode('rounds'));
   const roundsRef = useRef<Round[]>([]);
   
   // Keep ref in sync with state
   useEffect(() => {
     roundsRef.current = rounds;
   }, [rounds]);
+
+  useEffect(() => {
+    let isMounted = true;
+    loadCardMode('rounds').then((storedMode) => {
+      if (isMounted) {
+        setCardMode((prev) => (prev === storedMode ? prev : storedMode));
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleCardModeChange = useCallback((mode: CardMode) => {
+    setCardMode((prev) => {
+      if (prev === mode) {
+        return prev;
+      }
+      saveCardMode('rounds', mode).catch((error) => {
+        console.error('Error saving round card mode:', error);
+      });
+      return mode;
+    });
+  }, []);
 
   const loadRounds = useCallback(async () => {
     try {
@@ -123,14 +150,15 @@ export default function RoundHistoryScreen() {
         <RoundCard
           round={item}
           courseHoleCount={expectedHoles}
-          showPhotos={true}
+          showPhotos={cardMode !== 'list' && cardMode !== 'small'}
+          mode={cardMode}
           isSelected={isSelected}
           onPress={() => handleRoundPress(item.id)}
           onLongPress={() => handleRoundLongPress(item.id)}
         />
       );
     },
-    [handleRoundPress, handleRoundLongPress, selection, courses]
+    [handleRoundPress, handleRoundLongPress, selection, courses, cardMode]
   );
 
   return (
@@ -153,6 +181,8 @@ export default function RoundHistoryScreen() {
       onRefresh={listPage.handleRefresh}
       errorDialog={listPage.errorDialog}
       onDismissError={listPage.hideError}
+      cardMode={cardMode}
+      onCardModeChange={handleCardModeChange}
     />
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { IconButton, Surface, useTheme, Dialog, Portal, Button, Text } from 'react-native-paper';
 import HashedImage from './HashedImage';
@@ -7,6 +7,10 @@ import { getShadowStyle } from '../../utils';
 
 const { width, height } = Dimensions.get('window');
 
+export interface PhotoGalleryHandle {
+  openAddPhotoMenu: () => void;
+}
+
 interface PhotoGalleryProps {
   images: string[]; // Array of image hashes
   isEditable?: boolean; // Whether to show camera and edit icons
@@ -14,12 +18,12 @@ interface PhotoGalleryProps {
   storageKey?: string; // Optional storage key for saving state
 }
 
-export default function PhotoGallery({
+const PhotoGallery = forwardRef<PhotoGalleryHandle, PhotoGalleryProps>(function PhotoGallery({
   images,
   isEditable = false,
   onImagesChange,
   storageKey,
-}: PhotoGalleryProps) {
+}: PhotoGalleryProps, ref) {
   const theme = useTheme();
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [photoEditMode, setPhotoEditMode] = useState(false);
@@ -51,8 +55,9 @@ export default function PhotoGallery({
   }, [images.length]);
 
   const handleAddPhoto = useCallback(() => {
+    if (!isEditable) return;
     setPhotoMenuVisible(true);
-  }, []);
+  }, [isEditable]);
 
   const handleTakePhoto = useCallback(async () => {
     setPhotoMenuVisible(false);
@@ -104,6 +109,10 @@ export default function PhotoGallery({
     isInitialized.current = false;
     scrollPosition.current = 0;
   }, [images]);
+
+  useImperativeHandle(ref, () => ({
+    openAddPhotoMenu: handleAddPhoto,
+  }), [handleAddPhoto]);
 
   return (
     <View style={styles.container}>
@@ -385,7 +394,9 @@ export default function PhotoGallery({
       </Portal>
     </View>
   );
-}
+});
+
+export default PhotoGallery;
 
 const styles = StyleSheet.create({
   container: {

@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator, TouchableO
 import { Image } from 'expo-image';
 import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text, Menu } from 'react-native-paper';
 import { Player, Round } from '@/types';
-import PhotoGallery from '@/components/common/PhotoGallery';
+import PhotoGallery, { PhotoGalleryHandle } from '@/components/common/PhotoGallery';
 import CourseSelector from '@/components/common/CourseSelector';
 import PlayerChip from '@/components/common/PlayerChip';
 import NameUsernameDialog from '@/components/common/NameUsernameDialog';
@@ -44,6 +44,7 @@ export default function RoundOverviewScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const photoGalleryRef = useRef<PhotoGalleryHandle>(null);
 
   // Track if initial load is complete - don't save during initial load or reload
   const initialLoadCompleteRef = useRef(false);
@@ -543,6 +544,12 @@ export default function RoundOverviewScreen() {
     }
   };
 
+  const handlePlaceholderPress = useCallback(() => {
+    if (round?.id) {
+      photoGalleryRef.current?.openAddPhotoMenu();
+    }
+  }, [round]);
+
   const theme = useTheme();
 
   if (loading) {
@@ -585,16 +592,21 @@ export default function RoundOverviewScreen() {
         {/* Hero Image Section with Logo */}
         <View style={styles.heroSection}>
           {photos.length === 0 && (
-            <View style={styles.logoContainer}>
+            <TouchableOpacity
+              style={styles.logoContainer}
+              activeOpacity={0.7}
+              onPress={handlePlaceholderPress}
+            >
               <Image 
                 source={require('../../../assets/favicon.png')}
                 style={styles.logoImage}
                 contentFit="contain"
                 cachePolicy="memory-disk"
               />
-            </View>
+            </TouchableOpacity>
           )}
           <PhotoGallery
+            ref={photoGalleryRef}
             images={photos}
             isEditable={true}
             onImagesChange={handlePhotosChange}
