@@ -1,3 +1,19 @@
+// Load gradle.properties.local if it exists (for sensitive keystore credentials)
+// This must be done early, before pluginManagement
+def localPropertiesFile = new File(rootProject.projectDir, "gradle.properties.local")
+if (localPropertiesFile.exists()) {
+    def localProps = new Properties()
+    localPropertiesFile.withInputStream { stream ->
+        localProps.load(stream)
+    }
+    // Set properties so they're available via project.hasProperty() in build.gradle
+    localProps.each { key, value ->
+        gradle.ext.set(key, value)
+        // Also set as system property as fallback
+        System.setProperty(key, value)
+    }
+}
+
 pluginManagement {
   def version = providers.exec {
     commandLine("node", "-e", "console.log(require('react-native/package.json').version);")
