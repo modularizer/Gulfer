@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { router, usePathname, useSegments, useFocusEffect } from 'expo-router';
+import { Linking, Platform } from 'react-native';
 import { getAllUsers } from '../../services/storage/userStorage';
 import { encodeNameForUrl } from '../../utils/urlEncoding';
 import { getRoundById } from '../../services/storage/roundStorage';
@@ -81,6 +82,22 @@ export default function Footer({}: FooterProps) {
 
   const handleCenterPress = useCallback(() => {
     console.log('[CenterButton] Pressed - pathname:', pathname, 'segments:', segments);
+    
+    // Check if we're on the about page - open GitHub
+    if (pathname === '/about' || pathname?.includes('/about')) {
+      const githubUrl = 'https://github.com/modularizer/Gulfer/';
+      if (Platform.OS === 'web') {
+        // Use window.open for web to open in new tab
+        if (typeof window !== 'undefined') {
+          window.open(githubUrl, '_blank', 'noopener,noreferrer');
+        }
+      } else {
+        Linking.openURL(githubUrl).catch((err) => {
+          console.error('Error opening GitHub:', err);
+        });
+      }
+      return;
+    }
     
     // Use segments for more reliable route parsing
     // Segments format: ['round', 'id', 'overview'] or ['course', 'name', 'overview']
@@ -217,6 +234,11 @@ export default function Footer({}: FooterProps) {
 
   // Determine the button label based on current route and round state
   const getButtonLabel = useCallback(async () => {
+    // Check if we're on the about page
+    if (pathname === '/about' || pathname?.includes('/about')) {
+      return 'View on GitHub';
+    }
+    
     const pathSegments = segments?.filter(s => s && s !== 'index' && s !== '') || [];
     
     // Check if we're on a round overview page
