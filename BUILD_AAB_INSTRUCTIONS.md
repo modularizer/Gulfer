@@ -144,8 +144,40 @@ If you want to test the exact AAB you'll upload:
 3. Go to **Production** (or **Testing** → **Internal testing** for testing)
 4. Click **Create new release**
 5. Upload the `app-release.aab` file
-6. Fill in release notes and other required information
-7. Review and roll out
+6. **Upload the deobfuscation mapping file** (see Step 4.5 below)
+7. Fill in release notes and other required information
+8. Review and roll out
+
+## Step 4.5: Upload Deobfuscation Mapping File
+
+R8/ProGuard code shrinking and obfuscation is enabled in release builds (configured in `android/gradle.properties`). This makes your code smaller but also obfuscates it. To help debug crashes and ANRs, you should upload the mapping file to Google Play Console.
+
+### Where to Find the Mapping File
+
+After building your AAB with `./gradlew bundleRelease`, the mapping file is automatically generated at:
+```
+android/app/build/outputs/mapping/release/mapping.txt
+```
+
+**Note**: If the mapping file doesn't exist, make sure:
+1. You've enabled ProGuard by setting `android.enableProguardInReleaseBuilds=true` in `android/gradle.properties` (already configured)
+2. You've built the release AAB using `./gradlew bundleRelease` (not just `assembleRelease`)
+3. The build completed successfully
+
+### How to Upload to Play Console
+
+1. After uploading your AAB file in Step 4, you'll see a section for "Deobfuscation file"
+2. Click **Upload** and select the `mapping.txt` file from the path above
+3. The mapping file must match the exact version of the AAB you uploaded
+
+**Important**: 
+- Keep a copy of each `mapping.txt` file for each release version
+- The mapping file is unique to each build - you cannot use an old mapping file with a new AAB
+- Without the mapping file, crash reports will show obfuscated class/method names, making debugging much harder
+
+### Alternative: Automatic Upload (Advanced)
+
+If you want to automate this, you can configure your build to automatically upload the mapping file, but manual upload through Play Console is the standard approach.
 
 ## Troubleshooting
 
@@ -166,6 +198,17 @@ If you want to test the exact AAB you'll upload:
 
 ### Build succeeds but AAB is not signed
 - Check that `signingConfig signingConfigs.release` is set in the `release` buildType (already configured)
+
+### Warning: "There is no deobfuscation file associated with this App Bundle"
+- This is a warning, not an error - your AAB will still work
+- R8/ProGuard must be enabled to generate the mapping file
+- ProGuard is enabled by default (see `android/gradle.properties`)
+- After building with `./gradlew bundleRelease`, find the mapping file at: `android/app/build/outputs/mapping/release/mapping.txt`
+- Upload it in Play Console when uploading your AAB (see Step 4.5 above)
+- If the mapping file doesn't exist:
+  - Verify `android.enableProguardInReleaseBuilds=true` is set in `android/gradle.properties`
+  - Rebuild your AAB: `cd android && ./gradlew clean bundleRelease`
+  - Check that the build completed successfully without errors
 
 ## Important Notes
 
