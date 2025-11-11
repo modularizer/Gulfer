@@ -53,6 +53,34 @@ export default function PlayerCard({
     }
   };
 
+  const renderCoursesChipContent = () => {
+    if (mode === 'large') {
+      return `${coursesCount} ${coursesCount === 1 ? 'course' : 'courses'}`;
+    }
+    return coursesCount;
+  };
+
+  const renderRoundsChipContent = () => {
+    if (mode === 'large') {
+      return `${roundsCount} ${roundsCount === 1 ? 'round' : 'rounds'}`;
+    }
+    return roundsCount;
+  };
+
+  const renderThrowsChipContent = () => {
+    if (mode === 'large') {
+      return `${totalThrows} throws`;
+    }
+    return totalThrows;
+  };
+
+  const renderHolesChipContent = () => {
+    if (mode === 'large') {
+      return `${holesCount} holes`;
+    }
+    return holesCount;
+  };
+
   // List mode: just name in single row
   if (mode === 'list') {
     return (
@@ -168,7 +196,7 @@ export default function PlayerCard({
                     icon="map-marker"
                     compact
                   >
-                    {coursesCount}
+                    {renderCoursesChipContent()}
                   </Chip>
                 )}
                 {roundsCount !== undefined && roundsCount > 0 && (
@@ -178,7 +206,7 @@ export default function PlayerCard({
                     icon="golf"
                     compact
                   >
-                    {roundsCount}
+                    {renderRoundsChipContent()}
                   </Chip>
                 )}
                 {holesCount !== undefined && holesCount > 0 && (
@@ -188,7 +216,7 @@ export default function PlayerCard({
                     icon="golf-tee"
                     compact
                   >
-                    {holesCount}
+                    {renderHolesChipContent()}
                   </Chip>
                 )}
                 {totalThrows !== undefined && totalThrows > 0 && (
@@ -198,7 +226,7 @@ export default function PlayerCard({
                     icon="target"
                     compact
                   >
-                    {totalThrows}
+                    {renderThrowsChipContent()}
                   </Chip>
                 )}
               </View>
@@ -268,7 +296,7 @@ export default function PlayerCard({
                     icon="map-marker"
                     compact
                   >
-                    {coursesCount}
+                    {renderCoursesChipContent()}
                   </Chip>
                 )}
                 {roundsCount !== undefined && roundsCount > 0 && (
@@ -278,7 +306,7 @@ export default function PlayerCard({
                     icon="golf"
                     compact
                   >
-                    {roundsCount}
+                    {renderRoundsChipContent()}
                   </Chip>
                 )}
                 {holesCount !== undefined && holesCount > 0 && (
@@ -288,7 +316,7 @@ export default function PlayerCard({
                     icon="golf-tee"
                     compact
                   >
-                    {holesCount}
+                    {renderHolesChipContent()}
                   </Chip>
                 )}
                 {totalThrows !== undefined && totalThrows > 0 && (
@@ -298,7 +326,7 @@ export default function PlayerCard({
                     icon="target"
                     compact
                   >
-                    {totalThrows}
+                    {renderThrowsChipContent()}
                   </Chip>
                 )}
               </View>
@@ -388,7 +416,7 @@ export default function PlayerCard({
                   icon="map-marker"
                   compact
                 >
-                  {coursesCount}
+                  {renderCoursesChipContent()}
                 </Chip>
               )}
               {roundsCount !== undefined && roundsCount > 0 && (
@@ -398,7 +426,7 @@ export default function PlayerCard({
                   icon="golf"
                   compact
                 >
-                  {roundsCount}
+                  {renderRoundsChipContent()}
                 </Chip>
               )}
               {holesCount !== undefined && holesCount > 0 && (
@@ -408,7 +436,7 @@ export default function PlayerCard({
                   icon="golf-tee"
                   compact
                 >
-                  {holesCount}
+                  {renderHolesChipContent()}
                 </Chip>
               )}
               {totalThrows !== undefined && totalThrows > 0 && (
@@ -418,7 +446,7 @@ export default function PlayerCard({
                   icon="target"
                   compact
                 >
-                  {totalThrows}
+                  {renderThrowsChipContent()}
                 </Chip>
               )}
             </View>
