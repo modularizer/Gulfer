@@ -72,6 +72,7 @@ export default function HillFooter({
             lighterGreen={lighterGreen}
             buttonSize={BUTTON_SIZE}
             buttonOffset={BUTTON_OFFSET}
+            containerWidth={containerWidth}
           />
         )}
 

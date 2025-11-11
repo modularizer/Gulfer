@@ -125,9 +125,9 @@ android {
             keyPassword 'android'
         }
         release {
-            def storeFile = project.findProperty('MYAPP_RELEASE_STORE_FILE') ?: System.getProperty('MYAPP_RELEASE_STORE_FILE')
-            if (storeFile) {
-                storeFile file(storeFile)
+            def storeFileProp = project.findProperty('MYAPP_RELEASE_STORE_FILE') ?: System.getProperty('MYAPP_RELEASE_STORE_FILE')
+            if (storeFileProp) {
+                storeFile file(storeFileProp)
                 storePassword project.findProperty('MYAPP_RELEASE_STORE_PASSWORD') ?: System.getProperty('MYAPP_RELEASE_STORE_PASSWORD')
                 keyAlias project.findProperty('MYAPP_RELEASE_KEY_ALIAS') ?: System.getProperty('MYAPP_RELEASE_KEY_ALIAS')
                 keyPassword project.findProperty('MYAPP_RELEASE_KEY_PASSWORD') ?: System.getProperty('MYAPP_RELEASE_KEY_PASSWORD')

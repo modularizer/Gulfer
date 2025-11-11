@@ -1,0 +1,8 @@
+# Copy this file to gradle.properties.local and fill in your actual values
+# This file is gitignored and will not be committed to the repository
+
+MYAPP_RELEASE_STORE_FILE=gulfer-release-key.keystore
+MYAPP_RELEASE_KEY_ALIAS=gulfer-key-alias
+MYAPP_RELEASE_STORE_PASSWORD=your-keystore-password-here
+MYAPP_RELEASE_KEY_PASSWORD=your-key-password-here
+

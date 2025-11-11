@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Image, Platform, TouchableOpacity, Text, Dimensions } from 'react-native';
+import { View, StyleSheet, Image, Platform, TouchableOpacity, Dimensions } from 'react-native';
 import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
 
 interface CenterButtonProps {
@@ -9,6 +9,7 @@ interface CenterButtonProps {
   lighterGreen: string;
   buttonSize: number;
   buttonOffset: number;
+  containerWidth?: number;
 }
 
 const styles = StyleSheet.create({
@@ -49,15 +50,17 @@ export default function CenterButton({
   lighterGreen,
   buttonSize,
   buttonOffset,
+  containerWidth: footerContainerWidth,
 }: CenterButtonProps) {
   const containerWidth = buttonSize * 1.4 + 20;
   const containerHeight = buttonSize * 0.7 + 20;
   const buttonWidth = buttonSize * 1.4;
   const buttonHeight = buttonSize * 0.7;
   
-  // Calculate center position based on screen width for reliable mobile centering
-  const screenWidth = Dimensions.get('window').width;
-  const centerPosition = (screenWidth / 2) - (containerWidth / 2);
+  // Calculate center position based on footer container width (or screen width as fallback)
+  // This ensures proper centering on large desktop screens where the app container is constrained
+  const widthForCentering = footerContainerWidth ?? Dimensions.get('window').width;
+  const centerPosition = (widthForCentering / 2) - (containerWidth / 2);
 
   return (
     <View
