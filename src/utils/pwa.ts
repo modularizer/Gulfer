@@ -100,7 +100,7 @@ const getServiceWorkerScriptUrls = (registration: ServiceWorkerRegistration): st
   return urls.filter((url): url is string => typeof url === 'string');
 };
 
-const cleanupLegacyServiceWorkers = async (desiredScope: string, basePath: string): Promise<boolean> => {
+const cleanupLegacyServiceWorkers = async (desiredScope: string, basePath: string, swPath: string): Promise<boolean> => {
   if (!('serviceWorker' in navigator) || !navigator.serviceWorker.getRegistrations) {
     return false;
   }
@@ -113,6 +113,7 @@ const cleanupLegacyServiceWorkers = async (desiredScope: string, basePath: strin
 
     const originScope = new URL('/', window.location.origin).href;
     const desiredScopeUrl = new URL(desiredScope, window.location.origin).href;
+    const expectedScriptUrl = new URL(swPath, window.location.origin).href;
 
     let removedLegacy = false;
 
@@ -124,14 +125,26 @@ const cleanupLegacyServiceWorkers = async (desiredScope: string, basePath: strin
           return;
         }
 
-        // Already correct scope
-        if (registration.scope === desiredScopeUrl) {
+        // Already correct scope and script
+        const hasDesiredScope = registration.scope === desiredScopeUrl;
+        const hasExpectedScript = scriptUrls.includes(expectedScriptUrl);
+
+        if (hasDesiredScope && hasExpectedScript) {
           return;
         }
 
         // If we now have a base path, remove the legacy root-scoped worker
         if (basePath && registration.scope === originScope) {
           console.log('Unregistering legacy Gulfer service worker with scope', registration.scope);
+          const didUnregister = await registration.unregister();
+          if (didUnregister) {
+            removedLegacy = true;
+          }
+        }
+
+        // Remove workers that share the desired scope but are still pointing at the old script path
+        if (hasDesiredScope && !hasExpectedScript) {
+          console.log('Unregistering legacy Gulfer service worker with outdated script', scriptUrls);
           const didUnregister = await registration.unregister();
           if (didUnregister) {
             removedLegacy = true;
@@ -159,7 +172,7 @@ export function registerServiceWorker() {
       const scope = basePath ? `${basePath}/` : '/';
       const swPath = `${basePath || ''}/sw.js`;
 
-      cleanupLegacyServiceWorkers(scope, basePath).then((removedLegacy) => {
+      cleanupLegacyServiceWorkers(scope, basePath, swPath).then((removedLegacy) => {
         if (removedLegacy) {
           try {
             if (typeof sessionStorage !== 'undefined') {
