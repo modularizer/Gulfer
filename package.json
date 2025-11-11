@@ -8,7 +8,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:web": "expo export -p web --output-dir dist",
+    "build:web": "expo export -p web --output-dir dist && cp assets/favicon.ico dist/favicon.ico",
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit"
   },
