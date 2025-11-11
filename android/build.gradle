@@ -1,5 +1,17 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
+// Load gradle.properties.local if it exists (for sensitive keystore credentials)
+def localPropertiesFile = new File(rootProject.projectDir, "gradle.properties.local")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { stream ->
+        Properties props = new Properties()
+        props.load(stream)
+        props.each { prop ->
+            project.ext.set(prop.key, prop.value)
+        }
+    }
+}
+
 buildscript {
     ext {
         buildToolsVersion = findProperty('android.buildToolsVersion') ?: '34.0.0'

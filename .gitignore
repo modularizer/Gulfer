@@ -31,6 +31,12 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+# Android release artifacts
+*.aab
+android/app/build/outputs/
+# Local gradle properties (for sensitive keystore passwords)
+gradle.properties.local
+android/gradle.properties.local
 
 # node.js
 node_modules/
