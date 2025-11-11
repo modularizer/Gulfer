@@ -8,6 +8,7 @@ import { getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, getUserB
 import { saveRound, generateRoundId, getRoundById } from './storage/roundStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
 import { getStorageId } from './storage/storageId';
+import { normalizeExportText } from '../utils';
 
 /**
  * Parse exported text into structured data
@@ -28,7 +29,9 @@ interface ParsedExportData {
 }
 
 export function parseExportText(exportText: string): ParsedExportData {
-  const lines = exportText.split('\n');
+  // Normalize the text to replace non-breaking spaces with newlines
+  const normalizedText = normalizeExportText(exportText);
+  const lines = normalizedText.split('\n');
   
   // Extract basic info
   let title = '';
@@ -321,15 +324,18 @@ export async function exportRound(roundId: string): Promise<string> {
     text += `\nNotes: ${round.notes}\n`;
   }
 
+  // Normalize the exported text to ensure it uses regular newlines
+  const normalizedText = normalizeExportText(text);
+
   // Validate that the exported text can be parsed
   try {
-    validateExportText(text);
+    validateExportText(normalizedText);
   } catch (error) {
     console.error('Export validation failed:', error);
     throw new Error(`Export validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
-  return text;
+  return normalizedText;
 }
 
 /**

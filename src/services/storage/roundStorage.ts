@@ -6,30 +6,57 @@
 import { getItem, setItem } from './storageAdapter';
 import { Round } from '../../types';
 import { generateUniqueUUID } from '../../utils/uuid';
+import { getAllCourses, getCourseByName } from './courseStorage';
 
 const ROUNDS_STORAGE_KEY = '@gulfer_rounds';
+const ROUNDS_MIGRATION_VERSION_KEY = '@gulfer_rounds_migration_version';
+const CURRENT_MIGRATION_VERSION = 1; // Increment when adding new migrations
+
+/**
+ * Auto-populate courseId from courseName if missing
+ */
+async function populateCourseId(round: Round): Promise<Round> {
+  // If courseId is already set, no need to populate
+  if (round.courseId) {
+    return round;
+  }
+  
+  // If courseName is set but courseId is missing, look it up
+  if (round.courseName) {
+    const course = await getCourseByName(round.courseName);
+    if (course) {
+      return { ...round, courseId: course.id };
+    }
+  }
+  
+  return round;
+}
 
 /**
  * Save a round to local storage
  * Note: This function will NOT restore a round that was deleted. If a round doesn't exist,
  * it will only add it if it's a new round (not a deleted one being restored).
+ * Automatically populates courseId from courseName if missing.
  */
 export async function saveRound(round: Round, allowRestore: boolean = false): Promise<void> {
   try {
+    // Auto-populate courseId if missing
+    const roundWithCourseId = await populateCourseId(round);
+    
     const rounds = await getAllRounds();
-    const existingIndex = rounds.findIndex((r) => r.id === round.id);
+    const existingIndex = rounds.findIndex((r) => r.id === roundWithCourseId.id);
     
     if (existingIndex >= 0) {
       // Round exists, update it
-      rounds[existingIndex] = round;
+      rounds[existingIndex] = roundWithCourseId;
     } else {
       // Round doesn't exist - only add it if explicitly allowed (for new rounds)
       // This prevents auto-save from restoring deleted rounds
       if (allowRestore) {
-        rounds.push(round);
+        rounds.push(roundWithCourseId);
       } else {
         // Round was deleted or doesn't exist - don't restore it
-        console.warn(`Attempted to save round "${round.id}" that doesn't exist. This may be a deleted round being restored by auto-save. Skipping save.`);
+        console.warn(`Attempted to save round "${roundWithCourseId.id}" that doesn't exist. This may be a deleted round being restored by auto-save. Skipping save.`);
         return;
       }
     }
@@ -259,6 +286,7 @@ export async function createNewRound(initialData: {
   notes?: string;
   photos?: string[];
   courseName?: string;
+  courseId?: string;
   date?: number; // Optional custom date (Unix timestamp)
 }): Promise<Round> {
   const date = initialData.date || Date.now();
@@ -274,9 +302,87 @@ export async function createNewRound(initialData: {
     notes: initialData.notes,
     photos: initialData.photos,
     courseName: initialData.courseName,
+    courseId: initialData.courseId,
   };
 
   await saveRound(newRound, true); // allowRestore=true for new rounds
   return newRound;
+}
+
+/**
+ * Migration: Backfill courseId for all existing rounds
+ * This should be run once to migrate existing data
+ */
+export async function migrateRoundsCourseId(): Promise<{ migrated: number; failed: number }> {
+  try {
+    // Check if migration has already been run
+    const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
+    if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
+      console.log('[Migration] Rounds courseId migration already completed');
+      return { migrated: 0, failed: 0 };
+    }
+    
+    console.log('[Migration] Starting rounds courseId migration...');
+    const rounds = await getAllRounds();
+    const courses = await getAllCourses();
+    const courseNameToId = new Map<string, string>();
+    
+    // Build a map of course name to course ID
+    for (const course of courses) {
+      courseNameToId.set(course.name.trim().toLowerCase(), course.id);
+    }
+    
+    let migrated = 0;
+    let failed = 0;
+    let needsSave = false;
+    
+    for (const round of rounds) {
+      // Skip if courseId is already set
+      if (round.courseId) {
+        continue;
+      }
+      
+      // Try to find courseId from courseName
+      if (round.courseName) {
+        const normalizedName = round.courseName.trim().toLowerCase();
+        const courseId = courseNameToId.get(normalizedName);
+        
+        if (courseId) {
+          round.courseId = courseId;
+          migrated++;
+          needsSave = true;
+        } else {
+          // Course not found - try direct lookup as fallback
+          const course = await getCourseByName(round.courseName);
+          if (course) {
+            round.courseId = course.id;
+            migrated++;
+            needsSave = true;
+          } else {
+            console.warn(`[Migration] Could not find course for round ${round.id} with courseName: ${round.courseName}`);
+            failed++;
+          }
+        }
+      } else {
+        // No courseName, can't migrate
+        failed++;
+      }
+    }
+    
+    // Save all migrated rounds
+    if (needsSave) {
+      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
+      console.log(`[Migration] Saved ${migrated} migrated rounds`);
+    }
+    
+    // Mark migration as complete
+    await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+    
+    console.log(`[Migration] Rounds courseId migration complete: ${migrated} migrated, ${failed} failed`);
+    return { migrated, failed };
+  } catch (error) {
+    console.error('[Migration] Error migrating rounds courseId:', error);
+    throw error;
+  }
 }
 

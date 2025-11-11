@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
 import AppLayout from '@/components/common/AppLayout';
 import { usePWARouteCache } from '@/utils/pwa';
 import '@/utils/suppressWarnings';
+import { migrateRoundsCourseId } from '@/services/storage/roundStorage';
 
 function RootLayoutNav() {
   const { theme, isDark } = useTheme();
@@ -29,6 +30,18 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  // Run migrations on app startup
+  useEffect(() => {
+    const runMigrations = async () => {
+      try {
+        await migrateRoundsCourseId();
+      } catch (error) {
+        console.error('Error running migrations:', error);
+      }
+    };
+    runMigrations();
+  }, []);
+
   // Preload and cache favicons on web
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {

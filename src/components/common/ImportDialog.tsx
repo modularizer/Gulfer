@@ -6,6 +6,7 @@
 import React from 'react';
 import { Dialog, Portal, Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { Platform, StyleSheet } from 'react-native';
+import { normalizeExportText } from '../../utils';
 
 interface ImportDialogProps {
   visible: boolean;
@@ -39,13 +40,19 @@ export default function ImportDialog({
       >
         <Dialog.Title>{title}</Dialog.Title>
         <Dialog.Content>
-          <Text style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
-            {helpText}
-          </Text>
+          <View style={styles.helpTextContainer}>
+            <Text style={[styles.helpText, { color: theme.colors.onSurfaceVariant }]}>
+              {helpText}
+            </Text>
+          </View>
           <TextInput
             mode="outlined"
             value={importText}
-            onChangeText={onImportTextChange}
+            onChangeText={(text) => {
+              // Normalize text immediately when pasted/typed to replace non-breaking spaces
+              const normalized = normalizeExportText(text);
+              onImportTextChange(normalized);
+            }}
             multiline
             numberOfLines={20}
             style={styles.textInput}
@@ -72,8 +79,12 @@ const styles = StyleSheet.create({
   dialog: {
     maxHeight: '80%',
   },
-  helpText: {
+  helpTextContainer: {
     marginBottom: 12,
+    marginHorizontal: -10,
+    paddingHorizontal: 10,
+  },
+  helpText: {
     fontSize: 14,
   },
   textInput: {

@@ -4,6 +4,7 @@
 
 import { Round, Score } from '../types';
 import { getAllRounds } from './storage/roundStorage';
+import { getCourseById } from './storage/courseStorage';
 
 export type UserFilter = 
   | 'everyone'  // Include all rounds from everyone
@@ -47,6 +48,8 @@ export interface CornerConfig {
   sinceDate?: SinceDateOption; // Optional: filter rounds to those on or after this date
   untilDate?: UntilDateOption; // Optional: filter rounds to those on or before this date
   presetName?: string; // Optional: name of the preset that was used to create this config
+  autoColor?: boolean; // Optional: if true, automatically color the corner based on comparison with cell value (red if corner < cell, yellow/orange if equal, green if corner > cell)
+  customColor?: string; // Optional: custom hex color for the corner (only used if autoColor is not true)
 }
 
 export interface CornerStatisticsConfig {
@@ -57,11 +60,14 @@ export interface CornerStatisticsConfig {
 }
 
 /**
- * Get all rounds for a specific course
+ * Get all rounds for a specific course by courseId
  */
-async function getRoundsForCourse(courseName: string): Promise<Round[]> {
+async function getRoundsForCourse(courseId: string | undefined): Promise<Round[]> {
+  if (!courseId) {
+    return [];
+  }
   const allRounds = await getAllRounds();
-  return allRounds.filter(r => r.courseName === courseName);
+  return allRounds.filter(r => r.courseId === courseId);
 }
 
 /**
@@ -441,73 +447,89 @@ function collectScoresFromUserRounds(
  */
 export async function computeCornerValue(
   config: CornerConfig | null | undefined,
-  courseName: string | undefined,
+  courseId: string | undefined,
   holeNumber: number,
   playerId: string,
   todaysPlayerIds?: string[],
   currentRoundDate?: number
 ): Promise<{ value: string | number; visible: boolean }> {
   // If no config or empty, return invisible
-  if (!config || !courseName) {
+  if (!config || !courseId) {
     return { value: '', visible: false };
   }
 
     try {
     // Get all rounds for this course
-    let courseRounds = await getRoundsForCourse(courseName);
+    const allRounds = await getRoundsForCourse(courseId);
     
-    // Get expected hole count for completion checking
+    // Step 1: Filter by course AND all date constraints together (since, until, currentRoundDate)
+    // This is the first and most important filter - get rounds in the correct time window on the correct course
+    let courseRounds = allRounds.filter(round => {
+      // Must be the correct course (already filtered by getRoundsForCourse, but double-check)
+      if (round.courseId !== courseId) return false;
+      
+      // Apply sinceDate filter
+      let sinceTimestamp: number | undefined;
+      if (config.sinceDate) {
+        if (config.sinceDate === 'beginning') {
+          sinceTimestamp = 0; // Beginning of time
+        } else if (config.sinceDate === 'yearAgo') {
+          const yearAgo = new Date();
+          yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+          yearAgo.setHours(0, 0, 0, 0); // Start of day in local timezone
+          sinceTimestamp = yearAgo.getTime();
+        } else if (config.sinceDate === 'monthAgo') {
+          const monthAgo = new Date();
+          monthAgo.setMonth(monthAgo.getMonth() - 1);
+          monthAgo.setHours(0, 0, 0, 0); // Start of day in local timezone
+          sinceTimestamp = monthAgo.getTime();
+        } else {
+          // Custom date - timestamp should already be set to start of day (00:00:00.000) in local timezone
+          sinceTimestamp = config.sinceDate.timestamp;
+        }
+        // Filter: round.date >= sinceTimestamp (inclusive from start of since date)
+        if (round.date < sinceTimestamp) {
+          return false;
+        }
+      }
+      
+      // Apply untilDate filter
+      let untilTimestamp: number | undefined;
+      if (config.untilDate) {
+        if (config.untilDate === 'today') {
+          const today = new Date();
+          today.setHours(23, 59, 59, 999); // End of today in local timezone
+          untilTimestamp = today.getTime();
+        } else if (config.untilDate === 'yesterday') {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          yesterday.setHours(23, 59, 59, 999); // End of yesterday in local timezone
+          untilTimestamp = yesterday.getTime();
+        } else {
+          // Custom date - timestamp should already be set to end of day (23:59:59.999) in local timezone
+          untilTimestamp = config.untilDate.timestamp;
+        }
+        // Filter: round.date <= untilTimestamp (inclusive until end of until date)
+        if (round.date > untilTimestamp) {
+          return false;
+        }
+      }
+      
+      // CRITICAL: Always exclude rounds that started at the same time or after the current round
+      // This ensures we only consider historical data, not future or concurrent rounds
+      if (currentRoundDate !== undefined) {
+        // Exclude rounds where round.date >= currentRoundDate
+        // We want rounds.date < currentRoundDate (strictly before)
+        if (round.date >= currentRoundDate) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+    
+    // Get expected hole count for completion checking (after we have the filtered rounds)
     const expectedHoleCount = getExpectedHoleCount(courseRounds);
-    
-    // Step 0: Filter rounds by date (since/until) - applied first
-    // Note: round.date is a timestamp. We need to compare dates in local timezone.
-    if (config.sinceDate) {
-      let sinceTimestamp: number;
-      if (config.sinceDate === 'beginning') {
-        sinceTimestamp = 0; // Beginning of time
-      } else if (config.sinceDate === 'yearAgo') {
-        const yearAgo = new Date();
-        yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-        yearAgo.setHours(0, 0, 0, 0); // Start of day in local timezone
-        sinceTimestamp = yearAgo.getTime();
-      } else if (config.sinceDate === 'monthAgo') {
-        const monthAgo = new Date();
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        monthAgo.setHours(0, 0, 0, 0); // Start of day in local timezone
-        sinceTimestamp = monthAgo.getTime();
-      } else {
-        // Custom date - timestamp should already be set to start of day (00:00:00.000) in local timezone
-        sinceTimestamp = config.sinceDate.timestamp;
-      }
-      // Filter: round.date >= sinceTimestamp (inclusive from start of since date)
-      courseRounds = courseRounds.filter(round => round.date >= sinceTimestamp);
-    }
-    if (config.untilDate) {
-      let untilTimestamp: number;
-      if (config.untilDate === 'today') {
-        const today = new Date();
-        today.setHours(23, 59, 59, 999); // End of today in local timezone
-        untilTimestamp = today.getTime();
-      } else if (config.untilDate === 'yesterday') {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        yesterday.setHours(23, 59, 59, 999); // End of yesterday in local timezone
-        untilTimestamp = yesterday.getTime();
-      } else {
-        // Custom date - timestamp should already be set to end of day (23:59:59.999) in local timezone
-        untilTimestamp = config.untilDate.timestamp;
-      }
-      // Filter: round.date <= untilTimestamp (inclusive until end of until date)
-      courseRounds = courseRounds.filter(round => round.date <= untilTimestamp);
-    }
-    
-    // CRITICAL: Always exclude rounds that started at the same time or after the current round
-    // This ensures we only consider historical data, not future or concurrent rounds
-    if (currentRoundDate !== undefined) {
-      // Exclude rounds where round.date >= currentRoundDate
-      // We want rounds.date < currentRoundDate (strictly before)
-      courseRounds = courseRounds.filter(round => round.date < currentRoundDate);
-    }
     
     // Step 0.5: VERY IMPORTANT - Filter to only include completed rounds (every hole has nonzero score)
     // This must be done early, before any other filtering
@@ -581,7 +603,7 @@ export async function computeCornerValue(
 
     // Step 3: Collect scores using the shared logic (matches preview computation)
     // This computes userRounds and scores independently for this player's column
-    const { scores } = collectScoresFromUserRounds(
+    const { scores, userRounds } = collectScoresFromUserRounds(
       config,
       selectedRounds,
       playerId,
@@ -649,7 +671,7 @@ export async function computeCornerValue(
  */
 export async function computeCellCornerValues(
   config: CornerStatisticsConfig,
-  courseName: string | undefined,
+  courseId: string | undefined,
   holeNumber: number,
   playerId: string,
   todaysPlayerIds?: string[],
@@ -661,11 +683,25 @@ export async function computeCellCornerValues(
   bottomRight: { value: string | number; visible: boolean };
 }> {
   const [topLeft, topRight, bottomLeft, bottomRight] = await Promise.all([
-    computeCornerValue(config.topLeft, courseName, holeNumber, playerId, todaysPlayerIds, currentRoundDate),
-    computeCornerValue(config.topRight, courseName, holeNumber, playerId, todaysPlayerIds, currentRoundDate),
-    computeCornerValue(config.bottomLeft, courseName, holeNumber, playerId, todaysPlayerIds, currentRoundDate),
-    computeCornerValue(config.bottomRight, courseName, holeNumber, playerId, todaysPlayerIds, currentRoundDate),
+    computeCornerValue(config.topLeft, courseId, holeNumber, playerId, todaysPlayerIds, currentRoundDate),
+    computeCornerValue(config.topRight, courseId, holeNumber, playerId, todaysPlayerIds, currentRoundDate),
+    computeCornerValue(config.bottomLeft, courseId, holeNumber, playerId, todaysPlayerIds, currentRoundDate),
+    computeCornerValue(config.bottomRight, courseId, holeNumber, playerId, todaysPlayerIds, currentRoundDate),
   ]);
+
+  // Log once per corner/user combination (not per hole)
+  const cornerResults = {
+    topLeft: { value: topLeft.value, visible: topLeft.visible },
+    topRight: { value: topRight.value, visible: topRight.visible },
+    bottomLeft: { value: bottomLeft.value, visible: bottomLeft.visible },
+    bottomRight: { value: bottomRight.value, visible: bottomRight.visible },
+  };
+  
+  // Only log if at least one corner is visible (to reduce noise)
+  const hasVisibleCorner = Object.values(cornerResults).some(c => c.visible);
+  if (hasVisibleCorner) {
+    console.log(`[CornerStats] Player ${playerId}, Hole ${holeNumber}:`, cornerResults);
+  }
 
   return { topLeft, topRight, bottomLeft, bottomRight };
 }
@@ -677,7 +713,7 @@ export async function computeCellCornerValues(
  */
 export async function computeTotalCornerValues(
   config: CornerStatisticsConfig,
-  courseName: string | undefined,
+  courseId: string | undefined,
   holes: number[],
   scores: Score[],
   playerId: string,
@@ -711,7 +747,7 @@ export async function computeTotalCornerValues(
   };
 
   for (const holeNumber of Array.from(completedHoles)) {
-    const cellValues = await computeCellCornerValues(config, courseName, holeNumber, playerId, todaysPlayerIds, currentRoundDate);
+    const cellValues = await computeCellCornerValues(config, courseId, holeNumber, playerId, todaysPlayerIds, currentRoundDate);
     
     if (cellValues.topLeft.visible && typeof cellValues.topLeft.value === 'number') {
       cornerValues.topLeft.push(cellValues.topLeft.value);

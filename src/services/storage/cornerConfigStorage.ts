@@ -11,6 +11,7 @@ const COLUMN_VISIBILITY_STORAGE_KEY = '@gulfer_column_visibility';
 export interface ColumnVisibilityConfig {
   distance?: boolean;
   par?: boolean;
+  gStats?: boolean;    // G-Stats column (worst/25th/50th/75th/best)
   [key: string]: boolean | undefined; // Allow for future columns
 }
 

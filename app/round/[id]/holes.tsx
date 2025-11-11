@@ -21,6 +21,7 @@ export default function ScorecardPlayScreen() {
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
   const [courseHoles, setCourseHoles] = useState<number | undefined>(undefined);
+  const [courseId, setCourseId] = useState<string | undefined>(undefined);
   const [settingsDialogVisible, setSettingsDialogVisible] = useState(false);
   const [cornerConfig, setCornerConfig] = useState<CornerStatisticsConfig | null>(null);
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityConfig | null>(null);
@@ -92,6 +93,7 @@ export default function ScorecardPlayScreen() {
           if (course) {
             const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
             setCourseHoles(holeCount);
+            setCourseId(course.id);
             const holeNumbers = Array.from({ length: holeCount }, (_, i) => i + 1);
             setHoles(holeNumbers);
           }
@@ -287,6 +289,7 @@ export default function ScorecardPlayScreen() {
         onRemovePlayer={() => {}}
         allowAddPlayer={false}
         courseName={round.courseName}
+        courseId={courseId}
         onBack={() => {
           if (!round) return;
           router.push(`/round/${round.id}/overview`);
@@ -308,6 +311,7 @@ export default function ScorecardPlayScreen() {
         initialColumnVisibility={columnVisibility}
         courseName={round.courseName}
         currentRoundPlayers={players}
+        currentRoundDate={round.date}
       />
 
       {/* Error Dialog */}

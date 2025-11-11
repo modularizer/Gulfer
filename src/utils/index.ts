@@ -55,3 +55,26 @@ export function getShadowStyle(elevation: number): ViewStyle {
   }
 }
 
+/**
+ * Normalize text by replacing non-breaking spaces and other problematic characters
+ * Replaces non-breaking spaces (U+00A0) with newlines (U+000A) or regular spaces
+ * Also normalizes various line break characters to regular newlines
+ */
+export function normalizeExportText(text: string): string {
+  // Replace non-breaking spaces (U+00A0) with regular newlines (U+000A)
+  // This handles cases where non-breaking spaces appear where newlines should be
+  let normalized = text.replace(/\u00A0/g, '\n');
+  
+  // Normalize various line break characters to regular newlines (U+000A)
+  // Carriage return + Line feed (Windows) -> Line feed
+  normalized = normalized.replace(/\r\n/g, '\n');
+  // Carriage return only (old Mac) -> Line feed
+  normalized = normalized.replace(/\r/g, '\n');
+  // Line separator (U+2028) -> Line feed
+  normalized = normalized.replace(/\u2028/g, '\n');
+  // Paragraph separator (U+2029) -> Line feed
+  normalized = normalized.replace(/\u2029/g, '\n');
+  
+  return normalized;
+}
+

@@ -11,10 +11,11 @@ if (Platform.OS !== 'web') {
 import { createNewRound } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getUserIdForPlayerName } from '@/services/storage/userStorage';
 import { getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
-import { importRound } from '@/services/roundExport';
+import { importRound, parseExportText } from '@/services/roundExport';
 import { getImportMappingInfo, createManualMappings } from '@/services/importMapping';
 import { Player } from '@/types';
 import ImportMappingDialog from '@/components/common/ImportMappingDialog';
+import { normalizeExportText } from '@/utils';
 
 type RoundType = 'play-now' | 'past' | 'future' | null;
 
@@ -26,6 +27,8 @@ export default function NewRoundScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [importDialogVisible, setImportDialogVisible] = useState(false);
   const [importText, setImportText] = useState('');
+  const [importTextValid, setImportTextValid] = useState<boolean | null>(null);
+  const [importTextError, setImportTextError] = useState<string | null>(null);
   const [mappingDialogVisible, setMappingDialogVisible] = useState(false);
   const [importMappingInfo, setImportMappingInfo] = useState<{
     foreignStorageId?: string;
@@ -91,10 +94,12 @@ export default function NewRoundScreen() {
       // Get default course (last used or latest added)
       const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
       const courseName = defaultCourse ? defaultCourse.name : undefined;
+      const courseId = defaultCourse ? defaultCourse.id : undefined;
       
       const newRound = await createNewRound({
         players: [defaultPlayer],
         courseName,
+        courseId,
         date,
       });
       
@@ -127,6 +132,24 @@ export default function NewRoundScreen() {
     setRoundType(null);
   };
 
+  // Validate import text whenever it changes
+  useEffect(() => {
+    if (!importText.trim()) {
+      setImportTextValid(null);
+      setImportTextError(null);
+      return;
+    }
+
+    try {
+      parseExportText(importText);
+      setImportTextValid(true);
+      setImportTextError(null);
+    } catch (error) {
+      setImportTextValid(false);
+      setImportTextError(error instanceof Error ? error.message : 'Invalid export format');
+    }
+  }, [importText]);
+
   const handleImportRound = useCallback(async () => {
     if (!importText.trim()) {
       Alert.alert('Error', 'Please paste the round export text');
@@ -152,6 +175,8 @@ export default function NewRoundScreen() {
         // No mapping needed (all already mapped or no local entities exist), import directly
         const newRoundId = await importRound(importText);
         setImportText('');
+        setImportTextValid(null);
+        setImportTextError(null);
         setImportDialogVisible(false);
         router.replace(`/round/${newRoundId}/overview`);
       }
@@ -186,7 +211,7 @@ export default function NewRoundScreen() {
       setImportText('');
       setMappingDialogVisible(false);
       setImportMappingInfo(null);
-      router.replace(`/${newRoundId}/overview`);
+      router.replace(`/round/${newRoundId}/overview`);
     } catch (error) {
       console.error('Error importing round:', error);
       Alert.alert('Import Error', error instanceof Error ? error.message : 'Failed to import round');
@@ -266,36 +291,68 @@ export default function NewRoundScreen() {
             onDismiss={() => {
               setImportDialogVisible(false);
               setImportText('');
+              setImportTextValid(null);
+              setImportTextError(null);
             }}
             style={styles.importDialog}
           >
             <Dialog.Title>Import Round</Dialog.Title>
             <Dialog.Content>
-              <Text style={[styles.importHelpText, { color: theme.colors.onSurfaceVariant }]}>
-                Paste the round export text below. You'll be able to map imported entities to your local entities.
-              </Text>
-              <TextInput
-                mode="outlined"
-                value={importText}
-                onChangeText={setImportText}
-                multiline
-                numberOfLines={20}
-                style={styles.importTextInput}
-                contentStyle={styles.importTextContent}
-                placeholder="Paste round export text here..."
-              />
+              <View style={styles.importHelpTextContainer}>
+                <Text style={[styles.importHelpText, { color: theme.colors.onSurfaceVariant }]}>
+                  Paste the round export text below. You'll be able to map imported entities to your local entities.
+                </Text>
+              </View>
+              <View style={styles.importTextInputContainer}>
+                <TextInput
+                  mode="outlined"
+                  value={importText}
+                  onChangeText={(text) => {
+                    // Normalize text immediately when pasted/typed to replace non-breaking spaces
+                    const normalized = normalizeExportText(text);
+                    setImportText(normalized);
+                  }}
+                  multiline
+                  numberOfLines={30}
+                  style={styles.importTextInput}
+                  contentStyle={styles.importTextContent}
+                  placeholder="Paste round export text here..."
+                  error={importTextValid === false}
+                />
+              </View>
+              {importText.trim() && (
+                <View style={styles.validationContainer}>
+                  {importTextValid === true ? (
+                    <View style={styles.validationRow}>
+                      <IconButton icon="check-circle" size={20} iconColor={theme.colors.primary} style={styles.validationIcon} />
+                      <Text style={[styles.validationText, { color: theme.colors.primary }]}>
+                        Valid export format
+                      </Text>
+                    </View>
+                  ) : importTextValid === false ? (
+                    <View style={styles.validationRow}>
+                      <IconButton icon="alert-circle" size={20} iconColor={theme.colors.error} style={styles.validationIcon} />
+                      <Text style={[styles.validationText, { color: theme.colors.error }]}>
+                        {importTextError || 'Invalid export format'}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
             </Dialog.Content>
             <Dialog.Actions>
               <Button onPress={() => {
                 setImportDialogVisible(false);
                 setImportText('');
+                setImportTextValid(null);
+                setImportTextError(null);
               }}>
                 Cancel
               </Button>
               <Button
                 mode="contained"
                 onPress={handleImportRound}
-                disabled={!importText.trim()}
+                disabled={!importText.trim() || importTextValid === false}
               >
                 Next
               </Button>
@@ -547,16 +604,40 @@ const styles = StyleSheet.create({
   importDialog: {
     maxHeight: '80%',
   },
-  importHelpText: {
+  importHelpTextContainer: {
     marginBottom: 12,
+    marginHorizontal: -10,
+    paddingHorizontal: 10,
+  },
+  importHelpText: {
     fontSize: 14,
   },
+  importTextInputContainer: {
+    maxHeight: 350,
+    overflow: 'hidden',
+  },
   importTextInput: {
-    maxHeight: 400,
+    maxHeight: 500,
   },
   importTextContent: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     fontSize: 12,
+  },
+  validationContainer: {
+    marginTop: 4,
+    marginBottom: 0,
+  },
+  validationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  validationIcon: {
+    margin: 0,
+    marginRight: 4,
+  },
+  validationText: {
+    fontSize: 12,
+    flex: 1,
   },
 });
 

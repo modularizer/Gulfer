@@ -199,10 +199,12 @@ export default function RoundOverviewScreen() {
     }
 
     let courseName: string | undefined = round.courseName;
+    let courseId: string | undefined = round.courseId;
     if (selectedCourseId) {
       const courses = await getAllCourses();
       const selectedCourse = courses.find((c) => c.id === selectedCourseId);
       courseName = selectedCourse ? selectedCourse.name.trim() : round.courseName;
+      courseId = selectedCourseId;
     }
 
     // Use selectedDate for the round date, or keep existing date
@@ -217,6 +219,7 @@ export default function RoundOverviewScreen() {
       notes: notes.trim() || undefined,
       photos: photos.length > 0 ? photos : undefined,
       courseName: courseName?.trim() || undefined,
+      courseId: courseId,
     };
 
     console.log('[SAVE] Round overview: Saving round', round.id, {

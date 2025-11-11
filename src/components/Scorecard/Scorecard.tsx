@@ -6,6 +6,7 @@ import { getAllCourses } from '../../services/storage/courseStorage';
 import NumberModal from '../common/NumberModal';
 import { CornerStatisticsConfig, computeCellCornerValues, computeTotalCornerValues } from '../../services/cornerStatistics';
 import { getCurrentUserName } from '../../services/storage/userStorage';
+import { computeAllHoleStatistics, computeTotalRoundStatistics, HoleStatistics } from '../../services/holeStatistics';
 
 export interface CornerData {
   value: string | number;
@@ -32,6 +33,7 @@ interface ScorecardProps {
   readOnly?: boolean;
   allowAddPlayer?: boolean;
   courseName?: string;
+  courseId?: string;
   onBack?: () => void;
   getCornerData?: (playerId: string | number, holeNumber: number) => CellCornerData;
   cornerStatisticsConfig?: CornerStatisticsConfig;
@@ -40,6 +42,7 @@ interface ScorecardProps {
   columnVisibility?: {
     distance?: boolean;
     par?: boolean;
+    gStats?: boolean;
     [key: string]: boolean | undefined;
   };
   currentRoundDate?: number; // Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
@@ -57,6 +60,7 @@ export default function Scorecard({
   readOnly = false,
   allowAddPlayer = true,
   courseName,
+  courseId,
   onBack,
   getCornerData,
   cornerStatisticsConfig,
@@ -68,7 +72,7 @@ export default function Scorecard({
   const theme = useTheme();
   const [editModal, setEditModal] = useState<{
     visible: boolean;
-    playerId: number | null;
+    playerId: string | null;
     holeNumber: number | null;
     currentValue: number;
   }>({ visible: false, playerId: null, holeNumber: null, currentValue: 0 });
@@ -87,6 +91,8 @@ export default function Scorecard({
     bottomLeft: { value: string | number; visible: boolean };
     bottomRight: { value: string | number; visible: boolean };
   }>>(new Map());
+  const [holeStatistics, setHoleStatistics] = useState<Map<number, HoleStatistics>>(new Map());
+  const [totalRoundStatistics, setTotalRoundStatistics] = useState<HoleStatistics | null>(null);
   const [headerContentWidth, setHeaderContentWidth] = useState<number>(0);
   const screenWidth = Dimensions.get('window').width;
 
@@ -149,10 +155,46 @@ export default function Scorecard({
     loadCourseData();
   }, [courseName]);
 
+  // Compute hole statistics (G-Stats per hole)
+  useEffect(() => {
+    const computeStats = async () => {
+      if (courseId && holes.length > 0) {
+        try {
+          const stats = await computeAllHoleStatistics(courseId, holes, currentRoundDate);
+          setHoleStatistics(stats);
+        } catch (error) {
+          console.error('Error computing hole statistics:', error);
+          setHoleStatistics(new Map());
+        }
+      } else {
+        setHoleStatistics(new Map());
+      }
+    };
+    computeStats();
+  }, [courseId, holes, currentRoundDate]);
+
+  // Compute total round statistics (G-Stats for cumulative totals)
+  useEffect(() => {
+    const computeTotalStats = async () => {
+      if (courseId && holes.length > 0) {
+        try {
+          const stats = await computeTotalRoundStatistics(courseId, holes, currentRoundDate);
+          setTotalRoundStatistics(stats);
+        } catch (error) {
+          console.error('Error computing total round statistics:', error);
+          setTotalRoundStatistics(null);
+        }
+      } else {
+        setTotalRoundStatistics(null);
+      }
+    };
+    computeTotalStats();
+  }, [courseId, holes, currentRoundDate]);
+
   // Compute cell corner values
   useEffect(() => {
     const computeCellValues = async () => {
-      if (!getCornerData && cornerStatisticsConfig && resolvedCurrentUserId && courseName) {
+      if (!getCornerData && cornerStatisticsConfig && resolvedCurrentUserId && courseId) {
         const newValues = new Map<string, {
           topLeft: { value: string | number; visible: boolean };
           topRight: { value: string | number; visible: boolean };
@@ -168,7 +210,7 @@ export default function Scorecard({
             try {
               const values = await computeCellCornerValues(
                 cornerStatisticsConfig,
-                courseName,
+                courseId,
                 hole,
                 player.id,  // Use the player's ID, not the current user's ID
                 undefined,  // todaysPlayerIds
@@ -177,12 +219,12 @@ export default function Scorecard({
               newValues.set(key, values);
             } catch (error) {
               console.error(`Error computing corner values for ${key}:`, error);
-              // Default values
+              // Default values - hidden until correct values are computed
               newValues.set(key, {
-                topLeft: { value: hole, visible: true },
-                topRight: { value: hole, visible: true },
-                bottomLeft: { value: hole, visible: true },
-                bottomRight: { value: hole, visible: true },
+                topLeft: { value: '', visible: false },
+                topRight: { value: '', visible: false },
+                bottomLeft: { value: '', visible: false },
+                bottomRight: { value: '', visible: false },
               });
             }
           }
@@ -202,10 +244,10 @@ export default function Scorecard({
             const key = `${player.id}-${hole}`;
             const cornerData = getCornerData(player.id, hole);
             newValues.set(key, {
-              topLeft: cornerData.topLeft || { value: hole, visible: true },
-              topRight: cornerData.topRight || { value: hole, visible: true },
-              bottomLeft: cornerData.bottomLeft || { value: hole, visible: true },
-              bottomRight: cornerData.bottomRight || { value: hole, visible: true },
+              topLeft: cornerData.topLeft || { value: '', visible: false },
+              topRight: cornerData.topRight || { value: '', visible: false },
+              bottomLeft: cornerData.bottomLeft || { value: '', visible: false },
+              bottomRight: cornerData.bottomRight || { value: '', visible: false },
             });
           }
         }
@@ -223,10 +265,10 @@ export default function Scorecard({
           for (const player of players) {
             const key = `${player.id}-${hole}`;
             newValues.set(key, {
-              topLeft: { value: hole, visible: true },
-              topRight: { value: hole, visible: true },
-              bottomLeft: { value: hole, visible: true },
-              bottomRight: { value: hole, visible: true },
+              topLeft: { value: '', visible: false },
+              topRight: { value: '', visible: false },
+              bottomLeft: { value: '', visible: false },
+              bottomRight: { value: '', visible: false },
             });
           }
         }
@@ -234,12 +276,12 @@ export default function Scorecard({
       }
     };
     computeCellValues();
-  }, [getCornerData, cornerStatisticsConfig, resolvedCurrentUserId, courseName, holes, players]);
+  }, [getCornerData, cornerStatisticsConfig, resolvedCurrentUserId, courseName, holes, players, currentRoundDate]);
 
   // Compute total corner values per player
   useEffect(() => {
     const computeTotals = async () => {
-      if (cornerStatisticsConfig && courseName) {
+      if (cornerStatisticsConfig && courseId) {
         const newTotals = new Map<string, {
           topLeft: { value: string | number; visible: boolean };
           topRight: { value: string | number; visible: boolean };
@@ -252,7 +294,7 @@ export default function Scorecard({
           try {
             const totals = await computeTotalCornerValues(
               cornerStatisticsConfig,
-              courseName,
+              courseId,
               holes,
               scores,
               player.id,  // Use the player's ID, not the current user's ID
@@ -270,23 +312,23 @@ export default function Scorecard({
       }
     };
     computeTotals();
-  }, [cornerStatisticsConfig, courseName, holes, scores, players]);
+  }, [cornerStatisticsConfig, courseId, holes, scores, players, currentRoundDate]);
 
-  const getScore = (playerId: number, holeNumber: number): number => {
+  const getScore = (playerId: string | number, holeNumber: number): number => {
     const score = scores.find(
-      (s) => s.playerId === playerId && s.holeNumber === holeNumber
+      (s) => String(s.playerId) === String(playerId) && s.holeNumber === holeNumber
     );
     return score?.throws || 0;
   };
 
-  const getTotal = (playerId: number): number => {
+  const getTotal = (playerId: string | number): number => {
     return holes.reduce((sum, hole) => sum + getScore(playerId, hole), 0);
   };
 
-  const openEditModal = (playerId: number, holeNumber: number) => {
+  const openEditModal = (playerId: string | number, holeNumber: number) => {
     if (readOnly) return;
     const currentScore = getScore(playerId, holeNumber);
-    setEditModal({ visible: true, playerId, holeNumber, currentValue: currentScore });
+    setEditModal({ visible: true, playerId: String(playerId), holeNumber, currentValue: currentScore });
   };
 
   const closeEditModal = () => {
@@ -295,7 +337,9 @@ export default function Scorecard({
 
   const handleScoreSave = (value: number) => {
     if (editModal.playerId && editModal.holeNumber !== null) {
-      onScoreChange(editModal.playerId, editModal.holeNumber, value);
+      // Convert string playerId to number for onScoreChange (legacy interface)
+      const numericPlayerId = parseInt(editModal.playerId, 10) || 0;
+      onScoreChange(numericPlayerId, editModal.holeNumber, value);
       // Update the current value in modal state
       setEditModal(prev => ({ ...prev, currentValue: value }));
     }
@@ -367,6 +411,11 @@ export default function Scorecard({
                 <Text style={styles.headerText}>#</Text>
               )}
             </View>
+            {columnVisibility?.gStats === true && (
+              <View style={[styles.cell, styles.headerCell, styles.gStatsHeaderCell]}>
+                <Text style={styles.gStatHeaderText}>G-Stats</Text>
+              </View>
+            )}
             {columnVisibility?.distance !== false && (
               <TouchableOpacity
                 style={[styles.cell, styles.headerCell, styles.distanceHeaderCell]}
@@ -423,6 +472,30 @@ export default function Scorecard({
                 <View style={[styles.cell, styles.holeCell]}>
                   <Text style={styles.holeText}>{hole}</Text>
                 </View>
+                {columnVisibility?.gStats === true && (
+                  <View style={[styles.cell, styles.gStatsCell]}>
+                    {(() => {
+                      const stats = holeStatistics.get(hole);
+                      if (!stats || stats.worst === null || stats.p25 === null || stats.p50 === null || stats.p75 === null || stats.best === null) {
+                        return <Text style={styles.gStatText}>—</Text>;
+                      }
+                      const worst = Math.round(stats.worst);
+                      const p25 = Math.round(stats.p25);
+                      const p50 = Math.round(stats.p50);
+                      const p75 = Math.round(stats.p75);
+                      const best = Math.round(stats.best);
+                      return (
+                        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline' }}>
+                          <Text style={styles.gStatText}>{worst}·</Text>
+                          <Text style={styles.gStatTextInner}>{p25}·</Text>
+                          <Text style={styles.gStatTextMiddle}>{p50}</Text>
+                          <Text style={styles.gStatTextInner}>·{p75}·</Text>
+                          <Text style={styles.gStatText}>{best}</Text>
+                        </View>
+                      );
+                    })()}
+                  </View>
+                )}
                 {columnVisibility?.distance !== false && (
                   <View style={[styles.cell, styles.distanceCell]}>
                     <Text style={styles.distanceText}>{formatDistance(hole)}</Text>
@@ -450,37 +523,79 @@ export default function Scorecard({
                       {(() => {
                         const key = `${player.id}-${hole}`;
                         const cornerValues = cellCornerValues.get(key) || {
-                          topLeft: { value: hole, visible: true },
-                          topRight: { value: hole, visible: true },
-                          bottomLeft: { value: hole, visible: true },
-                          bottomRight: { value: hole, visible: true },
+                          topLeft: { value: '', visible: false },
+                          topRight: { value: '', visible: false },
+                          bottomLeft: { value: '', visible: false },
+                          bottomRight: { value: '', visible: false },
+                        };
+                        const cellScore = getScore(player.id, hole);
+                        const getCornerColor = (cornerValue: { value: string | number; visible: boolean }, cornerPosition: 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'): string | undefined => {
+                          if (!cornerValue.visible) return undefined;
+                          const config = cornerStatisticsConfig?.[cornerPosition];
+                          
+                          // If no config, use default color (undefined = use style default)
+                          if (!config) return undefined;
+                          
+                          // If custom color is set and auto-color is not enabled, use custom color
+                          if (config.customColor && config.autoColor !== true) {
+                            return config.customColor;
+                          }
+                          
+                          // If auto-color is enabled, calculate color based on comparison
+                          if (config.autoColor === true) {
+                            if (cellScore === 0) return undefined; // Don't auto-color if cell is empty
+                            const cornerNum = typeof cornerValue.value === 'number' ? cornerValue.value : parseFloat(String(cornerValue.value));
+                            if (isNaN(cornerNum)) return undefined;
+                            
+                            if (cornerNum < cellScore) {
+                              return '#d32f2f'; // Red shade
+                            } else if (cornerNum === cellScore) {
+                              return '#f57c00'; // Orange/yellow shade
+                            } else {
+                              return '#388e3c'; // Green shade
+                            }
+                          }
+                          
+                          return undefined; // Default color (use style default)
                         };
                         return (
                           <>
                             {/* Corner numbers - top left */}
-                            {cornerValues.topLeft.visible && (
-                              <Text style={styles.cornerTextTopLeft}>
-                                {cornerValues.topLeft.value}
-                              </Text>
-                            )}
+                            {cornerValues.topLeft.visible && (() => {
+                              const color = getCornerColor(cornerValues.topLeft, 'topLeft');
+                              return (
+                                <Text style={[styles.cornerTextTopLeft, color ? { color } : undefined]}>
+                                  {cornerValues.topLeft.value}
+                                </Text>
+                              );
+                            })()}
                             {/* Corner numbers - top right */}
-                            {cornerValues.topRight.visible && (
-                              <Text style={styles.cornerTextTopRight}>
-                                {cornerValues.topRight.value}
-                              </Text>
-                            )}
+                            {cornerValues.topRight.visible && (() => {
+                              const color = getCornerColor(cornerValues.topRight, 'topRight');
+                              return (
+                                <Text style={[styles.cornerTextTopRight, color ? { color } : undefined]}>
+                                  {cornerValues.topRight.value}
+                                </Text>
+                              );
+                            })()}
                             {/* Corner numbers - bottom left */}
-                            {cornerValues.bottomLeft.visible && (
-                              <Text style={styles.cornerTextBottomLeft}>
-                                {cornerValues.bottomLeft.value}
-                              </Text>
-                            )}
+                            {cornerValues.bottomLeft.visible && (() => {
+                              const color = getCornerColor(cornerValues.bottomLeft, 'bottomLeft');
+                              return (
+                                <Text style={[styles.cornerTextBottomLeft, color ? { color } : undefined]}>
+                                  {cornerValues.bottomLeft.value}
+                                </Text>
+                              );
+                            })()}
                             {/* Corner numbers - bottom right */}
-                            {cornerValues.bottomRight.visible && (
-                              <Text style={styles.cornerTextBottomRight}>
-                                {cornerValues.bottomRight.value}
-                              </Text>
-                            )}
+                            {cornerValues.bottomRight.visible && (() => {
+                              const color = getCornerColor(cornerValues.bottomRight, 'bottomRight');
+                              return (
+                                <Text style={[styles.cornerTextBottomRight, color ? { color } : undefined]}>
+                                  {cornerValues.bottomRight.value}
+                                </Text>
+                              );
+                            })()}
                           </>
                         );
                       })()}
@@ -515,51 +630,149 @@ export default function Scorecard({
             <View style={[styles.cell, styles.totalRowCell, styles.holeHeaderCell]}>
               <Text style={styles.totalRowText}>Total</Text>
             </View>
+            {columnVisibility?.gStats === true && (
+              <View style={[styles.cell, styles.totalRowCell, styles.gStatsCell]}>
+                {(() => {
+                  if (!totalRoundStatistics || totalRoundStatistics.worst === null || totalRoundStatistics.p25 === null || totalRoundStatistics.p50 === null || totalRoundStatistics.p75 === null || totalRoundStatistics.best === null) {
+                    return <Text style={styles.gStatText}>—</Text>;
+                  }
+                  const worst = Math.round(totalRoundStatistics.worst);
+                  const p25 = Math.round(totalRoundStatistics.p25);
+                  const p50 = Math.round(totalRoundStatistics.p50);
+                  const p75 = Math.round(totalRoundStatistics.p75);
+                  const best = Math.round(totalRoundStatistics.best);
+                  return (
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline' }}>
+                      <Text style={styles.gStatTextTotal}>{worst}·</Text>
+                      <Text style={styles.gStatTextInnerTotal}>{p25}·</Text>
+                      <Text style={styles.gStatTextMiddleTotal}>{p50}</Text>
+                      <Text style={styles.gStatTextInnerTotal}>·{p75}·</Text>
+                      <Text style={styles.gStatTextTotal}>{best}</Text>
+                    </View>
+                  );
+                })()}
+              </View>
+            )}
             {columnVisibility?.distance !== false && (
-              <View style={[styles.cell, styles.totalRowCell, styles.distanceHeaderCell]}>
+              <View style={[styles.cell, styles.totalRowCell, styles.distanceCell]}>
+                {(() => {
+                  const totalDistance = holes.reduce((sum, hole) => {
+                    const distance = getHoleDistance(hole);
+                    return sum + (distance || 0);
+                  }, 0);
+                  
+                  if (totalDistance === 0) return <Text style={styles.distanceText}>—</Text>;
+                  
+                  if (distanceUnit === 'ft') {
+                    const feet = Math.round(totalDistance * 3.28084);
+                    return <Text style={styles.distanceText}>{feet}ft</Text>;
+                  } else if (distanceUnit === 'yd') {
+                    const yards = Math.round(totalDistance * 1.09361);
+                    return <Text style={styles.distanceText}>{yards}yd</Text>;
+                  } else {
+                    return <Text style={styles.distanceText}>{Math.round(totalDistance)}m</Text>;
+                  }
+                })()}
               </View>
             )}
             {columnVisibility?.par === true && (
-              <View style={[styles.cell, styles.totalRowCell, styles.parHeaderCell]}>
+              <View style={[styles.cell, styles.totalRowCell, styles.parCell]}>
+                {(() => {
+                  const parsWithValues = holes
+                    .map(hole => {
+                      const holeData = courseHoles.find(h => h.number === hole);
+                      return holeData?.par;
+                    })
+                    .filter((par): par is number => par !== undefined);
+                  
+                  if (parsWithValues.length === 0) {
+                    return <Text style={styles.parText}>—</Text>;
+                  }
+                  
+                  const averagePar = parsWithValues.reduce((sum, par) => sum + par, 0) / parsWithValues.length;
+                  return <Text style={styles.parText}>{averagePar.toFixed(1)}</Text>;
+                })()}
               </View>
             )}
             {players.map((player) => {
               const playerTotals = totalCornerValues.get(player.id);
+              const totalScore = getTotal(player.id);
               return (
                 <View key={`total-${player.id}`} style={[styles.cell, styles.totalCell]}>
                   <View style={styles.scoreCellContainer}>
                     {playerTotals && (() => {
+                      const getCornerColor = (cornerValue: { value: string | number; visible: boolean }, cornerPosition: 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'): string | undefined => {
+                        if (!cornerValue.visible) return undefined;
+                        const config = cornerStatisticsConfig?.[cornerPosition];
+                        
+                        // If no config, use default color (undefined = use style default)
+                        if (!config) return undefined;
+                        
+                        // If custom color is set and auto-color is not enabled, use custom color
+                        if (config.customColor && config.autoColor !== true) {
+                          return config.customColor;
+                        }
+                        
+                        // If auto-color is enabled, calculate color based on comparison
+                        if (config.autoColor === true) {
+                          if (totalScore === 0) return undefined; // Don't auto-color if cell is empty
+                          const cornerNum = typeof cornerValue.value === 'number' ? cornerValue.value : parseFloat(String(cornerValue.value));
+                          if (isNaN(cornerNum)) return undefined;
+                          
+                          if (cornerNum < totalScore) {
+                            return '#d32f2f'; // Red shade
+                          } else if (cornerNum === totalScore) {
+                            return '#f57c00'; // Orange/yellow shade
+                          } else {
+                            return '#388e3c'; // Green shade
+                          }
+                        }
+                        
+                        return undefined; // Default color (use style default)
+                      };
                       return (
                         <>
                           {/* Corner numbers - top left */}
-                          {playerTotals.topLeft.visible && (
-                            <Text style={styles.cornerTextTopLeft}>
-                              {playerTotals.topLeft.value}
-                            </Text>
-                          )}
+                          {playerTotals.topLeft.visible && (() => {
+                            const color = getCornerColor(playerTotals.topLeft, 'topLeft');
+                            return (
+                              <Text style={[styles.cornerTextTopLeftTotal, color ? { color } : undefined]}>
+                                {playerTotals.topLeft.value}
+                              </Text>
+                            );
+                          })()}
                           {/* Corner numbers - top right */}
-                          {playerTotals.topRight.visible && (
-                            <Text style={styles.cornerTextTopRight}>
-                              {playerTotals.topRight.value}
-                            </Text>
-                          )}
+                          {playerTotals.topRight.visible && (() => {
+                            const color = getCornerColor(playerTotals.topRight, 'topRight');
+                            return (
+                              <Text style={[styles.cornerTextTopRightTotal, color ? { color } : undefined]}>
+                                {playerTotals.topRight.value}
+                              </Text>
+                            );
+                          })()}
                           {/* Corner numbers - bottom left */}
-                          {playerTotals.bottomLeft.visible && (
-                            <Text style={styles.cornerTextBottomLeft}>
-                              {playerTotals.bottomLeft.value}
-                            </Text>
-                          )}
+                          {playerTotals.bottomLeft.visible && (() => {
+                            const color = getCornerColor(playerTotals.bottomLeft, 'bottomLeft');
+                            return (
+                              <Text style={[styles.cornerTextBottomLeftTotal, color ? { color } : undefined]}>
+                                {playerTotals.bottomLeft.value}
+                              </Text>
+                            );
+                          })()}
                           {/* Corner numbers - bottom right */}
-                          {playerTotals.bottomRight.visible && (
-                            <Text style={styles.cornerTextBottomRight}>
-                              {playerTotals.bottomRight.value}
-                            </Text>
-                          )}
+                          {playerTotals.bottomRight.visible && (() => {
+                            const color = getCornerColor(playerTotals.bottomRight, 'bottomRight');
+                            return (
+                              <Text style={[styles.cornerTextBottomRightTotal, color ? { color } : undefined]}>
+                                {playerTotals.bottomRight.value}
+                              </Text>
+                            );
+                          })()}
                         </>
                       );
                     })()}
                     {/* Main total - centered */}
-                    <Text style={styles.totalText}>{getTotal(player.id)}</Text>
+                    <Text style={styles.totalText}>{totalScore}</Text>
                   </View>
                 </View>
               );
@@ -691,6 +904,10 @@ const styles = StyleSheet.create({
     width: 60,
     minWidth: 60,
   },
+  gStatsHeaderCell: {
+    width: 80,
+    minWidth: 80,
+  },
   distanceCell: {
     backgroundColor: '#f5f5f5',
     width: 60,
@@ -700,6 +917,61 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 12,
     color: '#666',
+  },
+  parCell: {
+    backgroundColor: '#f5f5f5',
+    width: 60,
+    minWidth: 60,
+  },
+  parText: {
+    fontWeight: '500',
+    fontSize: 12,
+    color: '#666',
+  },
+  gStatsCell: {
+    backgroundColor: '#e0e0e0',
+    width: 80,
+    minWidth: 80,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#d0d0d0',
+    marginBottom: -1,
+  },
+  gStatText: {
+    fontWeight: '500',
+    fontSize: 9,
+    color: '#666',
+  },
+  gStatTextMiddle: {
+    fontWeight: '600',
+    fontSize: 18,
+    color: '#333',
+  },
+  gStatTextInner: {
+    fontWeight: '500',
+    fontSize: 13,
+    color: '#666',
+  },
+  gStatTextTotal: {
+    fontWeight: '500',
+    fontSize: 7,
+    color: '#666',
+  },
+  gStatTextMiddleTotal: {
+    fontWeight: '600',
+    fontSize: 14,
+    color: '#333',
+  },
+  gStatTextInnerTotal: {
+    fontWeight: '500',
+    fontSize: 10,
+    color: '#666',
+  },
+  gStatHeaderText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
   holeText: {
     fontWeight: '600',
@@ -756,8 +1028,42 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#666',
   },
+  cornerTextTopLeftTotal: {
+    position: 'absolute',
+    top: 0,
+    left: 5,
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#666',
+  },
+  cornerTextTopRightTotal: {
+    position: 'absolute',
+    top: 0,
+    right: 5,
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#666',
+  },
+  cornerTextBottomLeftTotal: {
+    position: 'absolute',
+    bottom: 0,
+    left: 5,
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#666',
+  },
+  cornerTextBottomRightTotal: {
+    position: 'absolute',
+    bottom: 0,
+    right: 5,
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#666',
+  },
   totalCell: {
     backgroundColor: '#e8f5e9',
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   totalText: {
     fontWeight: 'bold',

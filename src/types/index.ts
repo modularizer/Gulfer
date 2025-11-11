@@ -40,6 +40,7 @@ export interface Round {
   scores: Score[];
   photos?: string[]; // Image hashes (for deduplication)
   courseName?: string; // Locally unique course name
+  courseId?: string; // Course UUID
   notes?: string;
   // Phase 2: GPS data
   gpsPath?: GPSPathPoint[];

@@ -15,6 +15,7 @@ interface CornerStatisticsSettingsDialogProps {
   initialColumnVisibility?: ColumnVisibilityConfig | null;
   courseName?: string;
   currentRoundPlayers?: Player[];
+  currentRoundDate?: number; // Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
 }
 
 type CornerPosition = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
@@ -35,6 +36,7 @@ export default function CornerStatisticsSettingsDialog({
   initialColumnVisibility,
   courseName,
   currentRoundPlayers = [],
+  currentRoundDate,
 }: CornerStatisticsSettingsDialogProps) {
   const theme = useTheme();
   const [config, setConfig] = useState<CornerStatisticsConfig>(initialConfig || {});
@@ -72,7 +74,38 @@ export default function CornerStatisticsSettingsDialog({
     return config[position] || null;
   };
 
+  // Count how many corners are currently set
+  const getSetCornerCount = (): number => {
+    return Object.values(config).filter(c => c !== null && c !== undefined).length;
+  };
+
+  // Get the first set corner (alphabetically) to clear if we need to make room
+  const getFirstSetCorner = (): CornerPosition | null => {
+    const positions: CornerPosition[] = ['bottomLeft', 'bottomRight', 'topLeft', 'topRight'];
+    for (const pos of positions) {
+      if (config[pos] !== null && config[pos] !== undefined) {
+        return pos;
+      }
+    }
+    return null;
+  };
+
   const handleOpenConfigModal = (position: CornerPosition) => {
+    const setCount = getSetCornerCount();
+    const currentCornerIsSet = config[position] !== null && config[position] !== undefined;
+    
+    // If 2 corners are already set and this corner is not one of them, clear the first one
+    if (setCount >= 2 && !currentCornerIsSet) {
+      const firstSetCorner = getFirstSetCorner();
+      if (firstSetCorner) {
+        setConfig(prev => {
+          const updated = { ...prev };
+          delete updated[firstSetCorner];
+          return updated;
+        });
+      }
+    }
+    
     setConfigModalPosition(position);
     setConfigModalVisible(true);
   };
@@ -88,10 +121,24 @@ export default function CornerStatisticsSettingsDialog({
         });
       } else {
         // Set the corner config
-        setConfig(prev => ({
-          ...prev,
-          [configModalPosition]: newConfig,
-        }));
+        // If this would result in 3 corners, clear the first existing one (that's not this one)
+        const setCount = getSetCornerCount();
+        const currentCornerIsSet = config[configModalPosition] !== null && config[configModalPosition] !== undefined;
+        
+        setConfig(prev => {
+          const updated = { ...prev };
+          updated[configModalPosition] = newConfig;
+          
+          // If we're adding a new corner (not updating existing) and we'd have 3, clear the first one
+          if (!currentCornerIsSet && setCount >= 2) {
+            const firstSetCorner = getFirstSetCorner();
+            if (firstSetCorner && firstSetCorner !== configModalPosition) {
+              delete updated[firstSetCorner];
+            }
+          }
+          
+          return updated;
+        });
       }
     }
   };
@@ -130,19 +177,24 @@ export default function CornerStatisticsSettingsDialog({
 
   const renderCornerConfig = (position: CornerPosition) => {
     const cornerConfig = getCornerConfig(position);
+    const setCount = getSetCornerCount();
+    const currentCornerIsSet = cornerConfig !== null;
+    // Disable if 2 corners are already set and this one isn't one of them
+    const disabled = setCount >= 2 && !currentCornerIsSet;
 
     return (
       <View key={position} style={styles.cornerSection}>
         <View style={styles.cornerHeader}>
-          <Text style={[styles.cornerLabel, { color: theme.colors.onSurface }]}>
+          <Text style={[styles.cornerLabel, { color: disabled ? theme.colors.onSurfaceDisabled : theme.colors.onSurface }]}>
             {CORNER_LABELS[position]}
           </Text>
           <Chip
-            onPress={() => cornerConfig ? handleOpenConfigModal(position) : handleOpenConfigModal(position)}
-            style={styles.chip}
+            onPress={() => !disabled && handleOpenConfigModal(position)}
+            style={[styles.chip, disabled && styles.chipDisabled]}
             mode={cornerConfig ? 'flat' : 'outlined'}
+            disabled={disabled}
           >
-            {formatConfigLabel(cornerConfig)}
+            {disabled ? 'Max 2 corners' : formatConfigLabel(cornerConfig)}
           </Chip>
         </View>
       </View>
@@ -181,6 +233,17 @@ export default function CornerStatisticsSettingsDialog({
                     }
                   />
                 </View>
+                <View style={styles.columnVisibilityRow}>
+                  <Text style={[styles.columnLabel, { color: theme.colors.onSurface }]}>
+                    G-Stats
+                  </Text>
+                  <Switch
+                    value={columnVisibility.gStats === true}
+                    onValueChange={(value) => 
+                      setColumnVisibility(prev => ({ ...prev, gStats: value }))
+                    }
+                  />
+                </View>
               </View>
 
               <Text style={[styles.sectionTitle, { color: theme.colors.onSurface, marginTop: 24 }]}>
@@ -208,6 +271,7 @@ export default function CornerStatisticsSettingsDialog({
         courseName={courseName}
         cornerPosition={configModalPosition || undefined}
         currentRoundPlayers={currentRoundPlayers}
+        currentRoundDate={currentRoundDate}
       />
     </Portal>
   );
@@ -266,5 +330,8 @@ const styles = StyleSheet.create({
   chip: {
     minWidth: 100,
     justifyContent: 'center',
+  },
+  chipDisabled: {
+    opacity: 0.5,
   },
 });

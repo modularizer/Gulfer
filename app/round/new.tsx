@@ -30,10 +30,12 @@ export default function NewRoundScreen() {
         // Get default course (last used or latest added)
         const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
         const courseName = defaultCourse ? defaultCourse.name : undefined;
+        const courseId = defaultCourse ? defaultCourse.id : undefined;
         
         const newRound = await createNewRound({
           players: [defaultPlayer],
           courseName,
+          courseId,
           date: Date.now(),
         });
         

@@ -8,6 +8,7 @@ import { User } from './storage/userStorage';
 import { getStorageId } from './storage/storageId';
 import { saveUser, getUserByName, generateUserId, getUserById } from './storage/userStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
+import { normalizeExportText } from '../utils';
 
 /**
  * Export a player to a human-readable text format
@@ -37,7 +38,9 @@ export async function exportPlayer(playerId: string): Promise<string> {
   
   lines.push('=== END EXPORT ===');
   
-  return lines.join('\n');
+  const text = lines.join('\n');
+  // Normalize the exported text to ensure it uses regular newlines
+  return normalizeExportText(text);
 }
 
 /**
@@ -51,7 +54,9 @@ export interface ParsedPlayerExport {
 }
 
 export function parsePlayerExport(exportText: string): ParsedPlayerExport {
-  const lines = exportText.split('\n').map(l => l.trim());
+  // Normalize the text to replace non-breaking spaces with newlines
+  const normalizedText = normalizeExportText(exportText);
+  const lines = normalizedText.split('\n').map(l => l.trim());
   const parsed: ParsedPlayerExport = {};
   
   let i = 0;

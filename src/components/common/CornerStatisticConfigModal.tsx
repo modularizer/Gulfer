@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native';
-import { Dialog, Portal, Text, useTheme, Chip, Menu, Icon, IconButton, Button } from 'react-native-paper';
+import { Dialog, Portal, Text, useTheme, Chip, Menu, Icon, IconButton, Button, Switch } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CornerConfig, UserFilter, AccumulationMode, RoundSelection, SinceDateOption, UntilDateOption } from '@/services/cornerStatistics';
 import { getAllUsers, User } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
+import { getAllCourses } from '@/services/storage/courseStorage';
 import { Round, Player } from '@/types';
 import { selectRoundsByCriteria, filterRoundsByUser } from '@/services/cornerStatistics';
 
@@ -350,6 +351,7 @@ interface CornerStatisticConfigModalProps {
   courseName?: string;
   cornerPosition?: CornerPosition;
   currentRoundPlayers?: Player[]; // Players in the current round for preview
+  currentRoundDate?: number; // Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
 }
 
 export default function CornerStatisticConfigModal({
@@ -360,6 +362,7 @@ export default function CornerStatisticConfigModal({
   courseName,
   cornerPosition,
   currentRoundPlayers = [],
+  currentRoundDate,
 }: CornerStatisticConfigModalProps) {
   const theme = useTheme();
   const [config, setConfig] = useState<CornerConfig>(
@@ -1053,51 +1056,84 @@ export default function CornerStatisticConfigModal({
         return;
       }
 
-      let courseRounds = rounds.filter(r => r.courseName === courseName);
+      // Step 1: Filter by course AND all date constraints together (since, until, currentRoundDate)
+      // This is the first and most important filter - get rounds in the correct time window on the correct course
+      // First, get courseId from courseName if we have it
+      let targetCourseId: string | undefined = undefined;
+      if (courseName) {
+        const courses = await getAllCourses();
+        const course = courses.find(c => c.name === courseName);
+        if (course) {
+          targetCourseId = course.id;
+        }
+      }
       
-      // Get expected hole count for completion checking
+      let courseRounds = rounds.filter(round => {
+        // Must be the correct course - prefer courseId, fallback to courseName
+        if (targetCourseId) {
+          if (round.courseId !== targetCourseId) return false;
+        } else {
+          if (round.courseName !== courseName) return false;
+        }
+        
+        // Apply sinceDate filter
+        if (config.sinceDate) {
+          let sinceTimestamp: number;
+          if (config.sinceDate === DATE_OPTION_BEGINNING) {
+            sinceTimestamp = 0; // Beginning of time
+          } else if (config.sinceDate === DATE_OPTION_YEAR_AGO) {
+            const yearAgo = new Date();
+            yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+            yearAgo.setHours(0, 0, 0, 0); // Start of day in local timezone
+            sinceTimestamp = yearAgo.getTime();
+          } else if (config.sinceDate === DATE_OPTION_MONTH_AGO) {
+            const monthAgo = new Date();
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            monthAgo.setHours(0, 0, 0, 0); // Start of day in local timezone
+            sinceTimestamp = monthAgo.getTime();
+          } else {
+            // Custom date - timestamp should already be set to start of day (00:00:00.000) in local timezone
+            sinceTimestamp = config.sinceDate.timestamp;
+          }
+          // Filter: round.date >= sinceTimestamp (inclusive from start of since date)
+          if (round.date < sinceTimestamp) return false;
+        }
+        
+        // Apply untilDate filter
+        if (config.untilDate) {
+          let untilTimestamp: number;
+          if (config.untilDate === DATE_OPTION_TODAY) {
+            const today = new Date();
+            today.setHours(23, 59, 59, 999); // End of today in local timezone
+            untilTimestamp = today.getTime();
+          } else if (config.untilDate === DATE_OPTION_YESTERDAY) {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            yesterday.setHours(23, 59, 59, 999); // End of yesterday in local timezone
+            untilTimestamp = yesterday.getTime();
+          } else {
+            // Custom date - timestamp should already be set to end of day (23:59:59.999) in local timezone
+            untilTimestamp = config.untilDate.timestamp;
+          }
+          // Filter: round.date <= untilTimestamp (inclusive until end of until date)
+          if (round.date > untilTimestamp) return false;
+        }
+        
+        // CRITICAL: Always exclude rounds that started at the same time or after the current round
+        // This ensures we only consider historical data, not future or concurrent rounds
+        if (currentRoundDate !== undefined) {
+          // Exclude rounds where round.date >= currentRoundDate
+          // We want rounds.date < currentRoundDate (strictly before)
+          if (round.date >= currentRoundDate) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
+      
+      // Get expected hole count for completion checking (after we have the filtered rounds)
       const expectedHoleCount = getExpectedHoleCount(courseRounds);
-      
-      // Step 0: Filter rounds by date (since/until) - applied first
-      if (config.sinceDate) {
-        let sinceTimestamp: number;
-        if (config.sinceDate === DATE_OPTION_BEGINNING) {
-          sinceTimestamp = 0; // Beginning of time
-        } else if (config.sinceDate === DATE_OPTION_YEAR_AGO) {
-          const yearAgo = new Date();
-          yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-          yearAgo.setHours(0, 0, 0, 0); // Start of day in local timezone
-          sinceTimestamp = yearAgo.getTime();
-        } else if (config.sinceDate === DATE_OPTION_MONTH_AGO) {
-          const monthAgo = new Date();
-          monthAgo.setMonth(monthAgo.getMonth() - 1);
-          monthAgo.setHours(0, 0, 0, 0); // Start of day in local timezone
-          sinceTimestamp = monthAgo.getTime();
-        } else {
-          // Custom date - timestamp should already be set to start of day (00:00:00.000) in local timezone
-          sinceTimestamp = config.sinceDate.timestamp;
-        }
-        // Filter: round.date >= sinceTimestamp (inclusive from start of since date)
-        courseRounds = courseRounds.filter(round => round.date >= sinceTimestamp);
-      }
-      if (config.untilDate) {
-        let untilTimestamp: number;
-        if (config.untilDate === DATE_OPTION_TODAY) {
-          const today = new Date();
-          today.setHours(23, 59, 59, 999); // End of today in local timezone
-          untilTimestamp = today.getTime();
-        } else if (config.untilDate === DATE_OPTION_YESTERDAY) {
-          const yesterday = new Date();
-          yesterday.setDate(yesterday.getDate() - 1);
-          yesterday.setHours(23, 59, 59, 999); // End of yesterday in local timezone
-          untilTimestamp = yesterday.getTime();
-        } else {
-          // Custom date - timestamp should already be set to end of day (23:59:59.999) in local timezone
-          untilTimestamp = config.untilDate.timestamp;
-        }
-        // Filter: round.date <= untilTimestamp (inclusive until end of until date)
-        courseRounds = courseRounds.filter(round => round.date <= untilTimestamp);
-      }
       
       // Step 0.5: VERY IMPORTANT - Filter to only include completed rounds (every hole has nonzero score)
       // This must be done early, before any other filtering
@@ -1375,7 +1411,7 @@ export default function CornerStatisticConfigModal({
     };
 
     computePreview();
-  }, [config, rounds, courseName, currentRoundPlayers]);
+  }, [config, rounds, courseName, currentRoundPlayers, currentRoundDate]);
 
   return (
     <Portal>
@@ -2029,6 +2065,99 @@ export default function CornerStatisticConfigModal({
                 </View>
               )}
 
+              {/* Color options: Auto-color or Custom color */}
+              <View style={styles.colorOptionsContainer}>
+                <Text style={[styles.colorOptionsLabel, { color: theme.colors.onSurface }]}>
+                  Corner Color
+                </Text>
+                <View style={styles.colorOptionsRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.colorOptionButton,
+                      config.autoColor === true && styles.colorOptionButtonActive,
+                      { borderColor: theme.colors.outline }
+                    ]}
+                    onPress={() => updateConfig({ autoColor: true, customColor: undefined })}
+                  >
+                    <Text style={[
+                      styles.colorOptionText,
+                      { color: config.autoColor === true ? theme.colors.primary : theme.colors.onSurface }
+                    ]}>
+                      Auto
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.colorOptionButton,
+                      (config.autoColor !== true && config.customColor) ? styles.colorOptionButtonActive : undefined,
+                      { borderColor: theme.colors.outline }
+                    ]}
+                    onPress={() => {
+                      if (config.autoColor === true || !config.customColor) {
+                        updateConfig({ autoColor: false, customColor: '#666666' });
+                      }
+                    }}
+                  >
+                    <View style={styles.customColorRow}>
+                      <View style={[
+                        styles.colorPreview,
+                        { backgroundColor: config.customColor || '#666666' }
+                      ]} />
+                      <Text style={[
+                        styles.colorOptionText,
+                        { color: config.autoColor !== true && config.customColor ? theme.colors.primary : theme.colors.onSurface }
+                      ]}>
+                        Custom
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Custom color picker (shown when custom is selected) */}
+                {config.autoColor !== true && (
+                  <View style={styles.customColorPickerContainer}>
+                    <Text style={[styles.customColorLabel, { color: theme.colors.onSurface }]}>
+                      Color:
+                    </Text>
+                    <View style={styles.colorPalette}>
+                      {['#d32f2f', '#f57c00', '#388e3c', '#1976d2', '#7b1fa2', '#c2185b', '#fbc02d', '#455a64', '#000000', '#666666'].map((color) => (
+                        <TouchableOpacity
+                          key={color}
+                          style={[
+                            styles.colorSwatch,
+                            { backgroundColor: color },
+                            config.customColor === color && styles.colorSwatchSelected
+                          ]}
+                          onPress={() => updateConfig({ customColor: color, autoColor: false })}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.hexInputContainer}>
+                      <Text style={[styles.hexLabel, { color: theme.colors.onSurface }]}>Hex:</Text>
+                      <TextInput
+                        style={[
+                          styles.hexInput,
+                          {
+                            borderColor: theme.colors.outline,
+                            color: theme.colors.onSurface,
+                            backgroundColor: theme.colors.surface
+                          }
+                        ]}
+                        value={config.customColor || ''}
+                        onChangeText={(text) => {
+                          // Validate hex color format
+                          if (/^#[0-9A-Fa-f]{0,6}$/.test(text) || text === '') {
+                            updateConfig({ customColor: text || undefined, autoColor: false });
+                          }
+                        }}
+                        placeholder="#000000"
+                        maxLength={7}
+                      />
+                    </View>
+                  </View>
+                )}
+              </View>
+
               {/* Validation warning for "relevant" mode */}
               {!validation.isValid && (
                 <View style={[styles.warningContainer, { backgroundColor: theme.colors.errorContainer }]}>
@@ -2343,6 +2472,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 8,
   },
+  autoColorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  autoColorLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
   percentileLabel: {
     fontSize: 16,
   },
@@ -2547,5 +2688,86 @@ const styles = StyleSheet.create({
   roundPickerScoreText: {
     fontSize: 11,
     lineHeight: 16,
+  },
+  colorOptionsContainer: {
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  colorOptionsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  colorOptionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  colorOptionButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  colorOptionButtonActive: {
+    borderWidth: 2,
+  },
+  colorOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  customColorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  colorPreview: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  customColorPickerContainer: {
+    marginTop: 8,
+  },
+  customColorLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  colorPalette: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  colorSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorSwatchSelected: {
+    borderColor: '#000000',
+    borderWidth: 3,
+  },
+  hexInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  hexLabel: {
+    fontSize: 14,
+  },
+  hexInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 14,
   },
 });

@@ -8,6 +8,7 @@ import { Course, Hole } from '../types';
 import { getStorageId } from './storage/storageId';
 import { saveCourse, getCourseByName, generateCourseId, getCourseById } from './storage/courseStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
+import { normalizeExportText } from '../utils';
 
 /**
  * Export a course to a human-readable text format
@@ -54,7 +55,9 @@ export async function exportCourse(courseId: string): Promise<string> {
   
   lines.push('=== END EXPORT ===');
   
-  return lines.join('\n');
+  const text = lines.join('\n');
+  // Normalize the exported text to ensure it uses regular newlines
+  return normalizeExportText(text);
 }
 
 /**
@@ -72,7 +75,9 @@ export interface ParsedCourseExport {
 }
 
 export function parseCourseExport(exportText: string): ParsedCourseExport {
-  const lines = exportText.split('\n').map(l => l.trim());
+  // Normalize the text to replace non-breaking spaces with newlines
+  const normalizedText = normalizeExportText(exportText);
+  const lines = normalizedText.split('\n').map(l => l.trim());
   const parsed: ParsedCourseExport = {};
   
   let i = 0;
