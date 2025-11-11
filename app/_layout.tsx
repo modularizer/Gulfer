@@ -92,14 +92,10 @@ export default function RootLayout() {
         document.head.appendChild(linkSvg);
       }
       
-      // Replace any favicon.ico links with favicon.png (high-res)
-      const existingFaviconIco = document.querySelector('link[rel*="icon"][href*="favicon.ico"]');
-      if (existingFaviconIco) {
-        existingFaviconIco.remove();
-      }
+      // Also add as icon links for browser compatibility
+      const existingIconPng = document.querySelector('link[rel="icon"][href="/favicon.png"]');
+      const existingIconSvg = document.querySelector('link[rel="icon"][href="/favicon.svg"]');
       
-      // Add favicon.png as the primary icon (high-res 512x512)
-      const existingIconPng = document.querySelector('link[rel="icon"][href*="favicon.png"]');
       if (!existingIconPng) {
         const iconPng = document.createElement('link');
         iconPng.rel = 'icon';
@@ -108,8 +104,6 @@ export default function RootLayout() {
         document.head.appendChild(iconPng);
       }
       
-      // Add SVG as fallback
-      const existingIconSvg = document.querySelector('link[rel="icon"][type="image/svg+xml"]');
       if (!existingIconSvg) {
         const iconSvg = document.createElement('link');
         iconSvg.rel = 'icon';
