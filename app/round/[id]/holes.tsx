@@ -6,6 +6,10 @@ import { Player, Score, Round } from '@/types';
 import { saveRound, getRoundById } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import CornerStatisticsSettingsDialog from '@/components/common/CornerStatisticsSettingsDialog';
+import { CornerStatisticsConfig } from '@/services/cornerStatistics';
+import { getCornerConfig, saveCornerConfig, getColumnVisibility, saveColumnVisibility, ColumnVisibilityConfig } from '@/services/storage/cornerConfigStorage';
+import { getCurrentUserName } from '@/services/storage/userStorage';
 
 export default function ScorecardPlayScreen() {
   const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
@@ -17,9 +21,45 @@ export default function ScorecardPlayScreen() {
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
   const [courseHoles, setCourseHoles] = useState<number | undefined>(undefined);
+  const [settingsDialogVisible, setSettingsDialogVisible] = useState(false);
+  const [cornerConfig, setCornerConfig] = useState<CornerStatisticsConfig | null>(null);
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityConfig | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | undefined>(undefined);
 
   // Track if initial load is complete - don't save during initial load or reload
   const initialLoadCompleteRef = useRef(false);
+
+  // Load corner config, column visibility, and current user ID
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const [config, visibility] = await Promise.all([
+          getCornerConfig(),
+          getColumnVisibility(),
+        ]);
+        setCornerConfig(config);
+        setColumnVisibility(visibility);
+        
+        // Resolve current user ID
+        const userName = await getCurrentUserName();
+        if (userName && players.length > 0) {
+          const userPlayer = players.find(p => p.name === userName);
+          if (userPlayer) {
+            setCurrentUserId(userPlayer.id);
+          } else if (players.length > 0) {
+            setCurrentUserId(players[0].id);
+          }
+        } else if (players.length > 0) {
+          setCurrentUserId(players[0].id);
+        }
+      } catch (error) {
+        console.error('Error loading config:', error);
+      }
+    };
+    if (players.length > 0) {
+      loadConfig();
+    }
+  }, [players]);
 
   // Load round data - reload on mount and whenever page comes into focus
   const loadRound = useCallback(async () => {
@@ -200,6 +240,26 @@ export default function ScorecardPlayScreen() {
     setScores((prev) => prev.filter((s) => s.holeNumber !== holeNumber));
   }, [holes.length]);
 
+  const handleSaveCornerConfig = useCallback(async (config: CornerStatisticsConfig) => {
+    try {
+      await saveCornerConfig(config);
+      setCornerConfig(config);
+    } catch (error) {
+      console.error('Error saving corner config:', error);
+      setErrorDialog({ visible: true, title: 'Error', message: 'Failed to save settings' });
+    }
+  }, []);
+
+  const handleSaveColumnVisibility = useCallback(async (visibility: ColumnVisibilityConfig) => {
+    try {
+      await saveColumnVisibility(visibility);
+      setColumnVisibility(visibility);
+    } catch (error) {
+      console.error('Error saving column visibility:', error);
+      setErrorDialog({ visible: true, title: 'Error', message: 'Failed to save settings' });
+    }
+  }, []);
+
   const theme = useTheme();
 
   if (loading) {
@@ -231,6 +291,22 @@ export default function ScorecardPlayScreen() {
           if (!round) return;
           router.push(`/round/${round.id}/overview`);
         }}
+        cornerStatisticsConfig={cornerConfig || undefined}
+        currentUserId={currentUserId}
+        onSettingsPress={() => setSettingsDialogVisible(true)}
+        columnVisibility={columnVisibility || undefined}
+      />
+
+      {/* Corner Statistics Settings Dialog */}
+      <CornerStatisticsSettingsDialog
+        visible={settingsDialogVisible}
+        onDismiss={() => setSettingsDialogVisible(false)}
+        onSave={handleSaveCornerConfig}
+        onColumnVisibilitySave={handleSaveColumnVisibility}
+        initialConfig={cornerConfig}
+        initialColumnVisibility={columnVisibility}
+        courseName={round.courseName}
+        currentRoundPlayers={players}
       />
 
       {/* Error Dialog */}
