@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { TextInput, Dialog, Portal, IconButton, Button } from 'react-native-paper';
+import { TextInput, Dialog, Portal, IconButton } from 'react-native-paper';
 
 interface NumberModalProps {
   visible: boolean;
@@ -29,26 +29,6 @@ export default function NumberModal({
       setEditValue(defaultValue.toString());
     }
   }, [defaultValue, visible]);
-
-  const handleIncrement = () => {
-    const num = parseInt(editValue, 10) || 0;
-    if (num < max) {
-      const newValue = (num + 1).toString();
-      setEditValue(newValue);
-      // Auto-save
-      onSave(num + 1);
-    }
-  };
-
-  const handleDecrement = () => {
-    const num = parseInt(editValue, 10) || 0;
-    if (num > min) {
-      const newValue = (num - 1).toString();
-      setEditValue(newValue);
-      // Auto-save
-      onSave(num - 1);
-    }
-  };
 
   const handleValueChange = (text: string) => {
     setEditValue(text);
@@ -82,14 +62,6 @@ export default function NumberModal({
         </View>
         <Dialog.Content>
           <View style={styles.modalContent}>
-            <Button
-              mode="contained"
-              onPress={handleDecrement}
-              style={[styles.modalButton, { marginRight: 16 }]}
-              disabled={parseInt(editValue, 10) <= min}
-            >
-              -
-            </Button>
             <TextInput
               mode="outlined"
               value={editValue}
@@ -99,14 +71,6 @@ export default function NumberModal({
               autoFocus
               selectTextOnFocus
             />
-            <Button
-              mode="contained"
-              onPress={handleIncrement}
-              style={[styles.modalButton, { marginLeft: 16 }]}
-              disabled={parseInt(editValue, 10) >= max}
-            >
-              +
-            </Button>
           </View>
         </Dialog.Content>
       </Dialog>
@@ -132,9 +96,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 8,
-  },
-  modalButton: {
-    minWidth: 60,
   },
   modalInput: {
     width: 100,

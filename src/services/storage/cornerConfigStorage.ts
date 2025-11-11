@@ -12,6 +12,9 @@ export interface ColumnVisibilityConfig {
   distance?: boolean;
   par?: boolean;
   gStats?: boolean;    // G-Stats column (worst/25th/50th/75th/best)
+  showUnderlines?: boolean; // Show winner/loser underlines on scores
+  showFontSizeAdjustments?: boolean; // Adjust font size for wins (+3) and losses (-3)
+  showFontColorAdjustments?: boolean; // Adjust font color for wins/losses/ties
   [key: string]: boolean | undefined; // Allow for future columns
 }
 

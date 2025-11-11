@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'reac
 import { Text, Button, IconButton, useTheme } from 'react-native-paper';
 import { Player, Score, Course, Hole } from '../../types';
 import { getAllCourses } from '../../services/storage/courseStorage';
-import NumberModal from '../common/NumberModal';
+import HoleScoreModal from '../common/HoleScoreModal';
 import { CornerStatisticsConfig, computeCellCornerValues, computeTotalCornerValues } from '../../services/cornerStatistics';
 import { getCurrentUserName } from '../../services/storage/userStorage';
 import { computeAllHoleStatistics, computeTotalRoundStatistics, HoleStatistics } from '../../services/holeStatistics';
@@ -25,7 +25,7 @@ interface ScorecardProps {
   players: Player[];
   holes: number[];
   scores: Score[];
-  onScoreChange: (playerId: number, holeNumber: number, throws: number) => void;
+  onScoreChange: (playerId: string | number, holeNumber: number, throws: number) => void;
   onAddPlayer: () => void;
   onRemovePlayer: (playerId: number) => void;
   onAddHole: () => void;
@@ -72,10 +72,9 @@ export default function Scorecard({
   const theme = useTheme();
   const [editModal, setEditModal] = useState<{
     visible: boolean;
-    playerId: string | null;
     holeNumber: number | null;
-    currentValue: number;
-  }>({ visible: false, playerId: null, holeNumber: null, currentValue: 0 });
+    initialPlayerId?: string | number;
+  }>({ visible: false, holeNumber: null });
   const [distanceUnit, setDistanceUnit] = useState<'yd' | 'm' | 'ft'>('ft');
   const [courseHoles, setCourseHoles] = useState<Hole[]>([]);
   const [resolvedCurrentUserId, setResolvedCurrentUserId] = useState<string | undefined>(currentUserId);
@@ -327,22 +326,33 @@ export default function Scorecard({
 
   const openEditModal = (playerId: string | number, holeNumber: number) => {
     if (readOnly) return;
-    const currentScore = getScore(playerId, holeNumber);
-    setEditModal({ visible: true, playerId: String(playerId), holeNumber, currentValue: currentScore });
+    setEditModal({ visible: true, holeNumber, initialPlayerId: playerId });
   };
 
   const closeEditModal = () => {
-    setEditModal({ visible: false, playerId: null, holeNumber: null, currentValue: 0 });
+    setEditModal({ visible: false, holeNumber: null });
   };
 
-  const handleScoreSave = (value: number) => {
-    if (editModal.playerId && editModal.holeNumber !== null) {
-      // Convert string playerId to number for onScoreChange (legacy interface)
-      const numericPlayerId = parseInt(editModal.playerId, 10) || 0;
-      onScoreChange(numericPlayerId, editModal.holeNumber, value);
-      // Update the current value in modal state
-      setEditModal(prev => ({ ...prev, currentValue: value }));
-    }
+  const handleNextHole = (nextHoleNumber: number) => {
+    // Close current modal and open next hole's modal
+    setEditModal({ visible: true, holeNumber: nextHoleNumber, initialPlayerId: players[0]?.id });
+  };
+
+  const handleScoreChange = (playerId: string | number, holeNumber: number, score: number) => {
+    // Keep playerId as string (Score interface expects string UUID)
+    const stringPlayerId = typeof playerId === 'string' ? playerId : String(playerId);
+    
+    console.log('[Scorecard] handleScoreChange called:', {
+      playerId: stringPlayerId,
+      holeNumber,
+      score,
+      editModalHoleNumber: editModal.holeNumber
+    });
+    
+    // Use the holeNumber passed directly from the modal
+    onScoreChange(stringPlayerId, holeNumber, score);
+    
+    console.log('[Scorecard] onScoreChange called, checking if score was saved...');
   };
 
   const getHoleDistance = (holeNumber: number): number | undefined => {
@@ -469,11 +479,29 @@ export default function Scorecard({
             {/* Hole Rows */}
             {holes.map((hole) => (
               <View key={hole} style={styles.row}>
-                <View style={[styles.cell, styles.holeCell]}>
+                <TouchableOpacity
+                  style={[styles.cell, styles.holeCell]}
+                  onPress={() => {
+                    if (!readOnly && players.length > 0) {
+                      openEditModal(players[0].id, hole);
+                    }
+                  }}
+                  disabled={readOnly}
+                  activeOpacity={readOnly ? 1 : 0.7}
+                >
                   <Text style={styles.holeText}>{hole}</Text>
-                </View>
+                </TouchableOpacity>
                 {columnVisibility?.gStats === true && (
-                  <View style={[styles.cell, styles.gStatsCell]}>
+                  <TouchableOpacity
+                    style={[styles.cell, styles.gStatsCell]}
+                    onPress={() => {
+                      if (!readOnly && players.length > 0) {
+                        openEditModal(players[0].id, hole);
+                      }
+                    }}
+                    disabled={readOnly}
+                    activeOpacity={readOnly ? 1 : 0.7}
+                  >
                     {(() => {
                       const stats = holeStatistics.get(hole);
                       if (!stats || stats.worst === null || stats.p25 === null || stats.p50 === null || stats.p75 === null || stats.best === null) {
@@ -494,7 +522,7 @@ export default function Scorecard({
                         </View>
                       );
                     })()}
-                  </View>
+                  </TouchableOpacity>
                 )}
                 {columnVisibility?.distance !== false && (
                   <View style={[styles.cell, styles.distanceCell]}>
@@ -600,9 +628,93 @@ export default function Scorecard({
                         );
                       })()}
                       {/* Main score - centered */}
-                      <Text style={styles.scoreText}>
-                        {getScore(player.id, hole) || 0}
-                      </Text>
+                      {(() => {
+                        const playerScore = getScore(player.id, hole);
+                        // Find the winning score (lowest non-zero score) for this hole
+                        const allScores = players
+                          .map(p => getScore(p.id, hole))
+                          .filter(score => score > 0);
+                        const winningScore = allScores.length > 0 ? Math.min(...allScores) : null;
+                        const losingScore = allScores.length > 0 ? Math.max(...allScores) : null;
+                        const isWinner = winningScore !== null && playerScore === winningScore && playerScore > 0;
+                        const isLoser = losingScore !== null && playerScore === losingScore && playerScore > 0 && losingScore !== winningScore;
+                        
+                        // Check if there's a tie (multiple players with the winning score)
+                        const winnerCount = allScores.filter(score => score === winningScore).length;
+                        const isTie = winnerCount > 1;
+                        
+                        let underlineColor = undefined;
+                        const showUnderlines = columnVisibility?.showUnderlines === true;
+                        const showFontSizeAdjustments = columnVisibility?.showFontSizeAdjustments === true;
+                        
+                        if (showUnderlines) {
+                          if (isWinner) {
+                            if (isTie) {
+                              underlineColor = '#f9a825'; // Yellow for tie
+                            } else {
+                              underlineColor = '#2e7d32'; // Green for single winner
+                            }
+                          } else if (isLoser) {
+                            underlineColor = '#d32f2f'; // Red for loss
+                          }
+                        }
+                        
+                        // Calculate font size adjustment
+                        let fontSizeAdjustment = 0;
+                        if (showFontSizeAdjustments) {
+                          if (isWinner && !isTie) {
+                            fontSizeAdjustment = 3; // +3 for single winner
+                          } else if (isLoser) {
+                            fontSizeAdjustment = -3; // -3 for loss
+                          }
+                          // No font size adjustment for ties
+                        }
+                        
+                        // Calculate font color and weight adjustment based on point difference
+                        let textColor = undefined;
+                        let fontWeight: '400' | '500' | '600' | '700' | undefined = undefined;
+                        const showFontColorAdjustments = columnVisibility?.showFontColorAdjustments === true;
+                        if (showFontColorAdjustments && winningScore !== null && playerScore > 0) {
+                          const pointDifference = playerScore - winningScore;
+                          if (pointDifference === 0) {
+                            // Tie (0 difference)
+                            textColor = '#000';
+                            fontWeight = '700';
+                          } else if (pointDifference === 1) {
+                            // Behind by 1
+                            textColor = '#333';
+                            fontWeight = '600';
+                          } else if (pointDifference === 2) {
+                            // Behind by 2
+                            textColor = '#666';
+                            fontWeight = '500';
+                          } else if (pointDifference === 3) {
+                            // Behind by 3
+                            textColor = '#999';
+                            fontWeight = '400';
+                          } else {
+                            // Behind by 4+
+                            textColor = '#bbb';
+                            fontWeight = '400';
+                          }
+                        }
+                        
+                        return (
+                          <View style={styles.scoreTextContainer}>
+                            <Text style={[
+                              styles.scoreText, 
+                              fontSizeAdjustment !== 0 ? { fontSize: 18 + fontSizeAdjustment } : undefined,
+                              textColor ? { color: textColor } : undefined,
+                              fontWeight ? { fontWeight } : undefined
+                            ]}>
+                              {playerScore || 0}
+                            </Text>
+                            {underlineColor && (
+                              <View style={[styles.winnerUnderline, { backgroundColor: underlineColor }]} />
+                            )}
+                          </View>
+                        );
+                      })()}
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -628,7 +740,7 @@ export default function Scorecard({
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.totalRowContent}>
             <View style={[styles.cell, styles.totalRowCell, styles.holeHeaderCell]}>
-              <Text style={styles.totalRowText}>Total</Text>
+              <Text style={[styles.totalRowText, { marginLeft: -5 }]}>Sum</Text>
             </View>
             {columnVisibility?.gStats === true && (
               <View style={[styles.cell, styles.totalRowCell, styles.gStatsCell]}>
@@ -782,19 +894,28 @@ export default function Scorecard({
       </View>
 
       {/* Edit Score Modal */}
-      <NumberModal
-        visible={editModal.visible}
-        title={
-          editModal.playerId && editModal.holeNumber !== null
-            ? `${players.find(p => p.id === editModal.playerId)?.name || 'Player'} - Hole #${editModal.holeNumber}`
-            : 'Edit Score'
-        }
-        defaultValue={editModal.currentValue}
-        onSave={handleScoreSave}
-        onDismiss={closeEditModal}
-        min={0}
-        max={20}
-      />
+      {editModal.holeNumber !== null && (
+        <HoleScoreModal
+          visible={editModal.visible}
+          holeNumber={editModal.holeNumber}
+          players={players}
+          scores={(() => {
+            const scoresMap = new Map<string, number>();
+            players.forEach(player => {
+              const score = getScore(player.id, editModal.holeNumber!);
+              scoresMap.set(String(player.id), score);
+            });
+            return scoresMap;
+          })()}
+          onScoreChange={handleScoreChange}
+          onDismiss={closeEditModal}
+          initialActivePlayerId={editModal.initialPlayerId}
+          allHoles={holes}
+          onNextHole={handleNextHole}
+          min={0}
+          max={9}
+        />
+      )}
     </View>
   );
 }
@@ -988,6 +1109,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
+  },
+  scoreTextContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  winnerUnderline: {
+    position: 'absolute',
+    bottom: -2,
+    left: 0,
+    right: 0,
+    height: 1,
+    borderRadius: 1,
   },
   scoreCellContainer: {
     width: '100%',

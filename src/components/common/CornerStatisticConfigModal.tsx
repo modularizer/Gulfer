@@ -366,14 +366,20 @@ export default function CornerStatisticConfigModal({
 }: CornerStatisticConfigModalProps) {
   const theme = useTheme();
   const [config, setConfig] = useState<CornerConfig>(
-    initialConfig || {
-      scoreUserFilter: 'eachUser',
-      roundUserFilter: 'everyone',
-      accumulationMode: 'best',
-      scope: 'hole', // Default to 'hole' scope (not shown in UI but used in computation)
-      roundSelection: 'all',
-      userFilterMode: 'or', // Default to 'or' for multiple user selection
-    }
+    initialConfig || (() => {
+      const personalBestPreset = PRESETS.find(p => p.name === 'Personal Best on Hole');
+      return personalBestPreset 
+        ? { ...personalBestPreset.config, presetName: 'Personal Best on Hole', autoColor: true }
+        : {
+            scoreUserFilter: 'eachUser',
+            roundUserFilter: 'everyone',
+            accumulationMode: 'best',
+            scope: 'hole',
+            roundSelection: 'all',
+            userFilterMode: 'or',
+            autoColor: true,
+          };
+    })()
   );
   const [sinceDateInput, setSinceDateInput] = useState<string>('');
   const [untilDateInput, setUntilDateInput] = useState<string>('');
@@ -389,7 +395,9 @@ export default function CornerStatisticConfigModal({
   const [tempSelectedRoundIds, setTempSelectedRoundIds] = useState<string[]>([]);
   const [userRoundsModalVisible, setUserRoundsModalVisible] = useState(false);
   const [selectedPlayerForUserRounds, setSelectedPlayerForUserRounds] = useState<Player | null>(null);
-  const [selectedPreset, setSelectedPreset] = useState<string>(PRESET_CUSTOM);
+  const [selectedPreset, setSelectedPreset] = useState<string>(
+    initialConfig ? PRESET_CUSTOM : 'Personal Best on Hole'
+  );
   const isInitialMount = useRef(true);
   const isInitialRoundPickerMount = useRef(true);
 
@@ -484,6 +492,13 @@ export default function CornerStatisticConfigModal({
         if (initialConfig.untilDate && typeof initialConfig.untilDate === 'object' && initialConfig.untilDate.type === DATE_OPTION_CUSTOM) {
           const date = new Date(initialConfig.untilDate.timestamp);
           setUntilDateInput(date.toISOString().split('T')[0]); // YYYY-MM-DD format
+        }
+      } else {
+        // No initial config - apply "Personal Best on Hole" preset with autoColor
+        const personalBestPreset = PRESETS.find(p => p.name === 'Personal Best on Hole');
+        if (personalBestPreset) {
+          setConfig({ ...personalBestPreset.config, presetName: 'Personal Best on Hole', autoColor: true });
+          setSelectedPreset('Personal Best on Hole');
         }
       }
       isInitialMount.current = true;
@@ -2132,11 +2147,15 @@ export default function CornerStatisticConfigModal({
                         />
                       ))}
                     </View>
-                    <View style={styles.hexInputContainer}>
-                      <Text style={[styles.hexLabel, { color: theme.colors.onSurface }]}>Hex:</Text>
+                    <View style={styles.colorInputContainer}>
+                      <Text style={[styles.colorLabel, { color: theme.colors.onSurface }]}>Color:</Text>
+                      <View style={[
+                        styles.colorPreview,
+                        { backgroundColor: config.customColor || '#666666' }
+                      ]} />
                       <TextInput
                         style={[
-                          styles.hexInput,
+                          styles.colorInput,
                           {
                             borderColor: theme.colors.outline,
                             color: theme.colors.onSurface,
@@ -2145,13 +2164,10 @@ export default function CornerStatisticConfigModal({
                         ]}
                         value={config.customColor || ''}
                         onChangeText={(text) => {
-                          // Validate hex color format
-                          if (/^#[0-9A-Fa-f]{0,6}$/.test(text) || text === '') {
-                            updateConfig({ customColor: text || undefined, autoColor: false });
-                          }
+                          // Accept any text (CSS will validate)
+                          updateConfig({ customColor: text || undefined, autoColor: false });
                         }}
-                        placeholder="#000000"
-                        maxLength={7}
+                        placeholder="e.g. #000000, red, rgb(255,0,0)"
                       />
                     </View>
                   </View>
@@ -2744,9 +2760,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   colorSwatch: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: 'transparent',
   },
@@ -2754,16 +2770,16 @@ const styles = StyleSheet.create({
     borderColor: '#000000',
     borderWidth: 3,
   },
-  hexInputContainer: {
+  colorInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  hexLabel: {
+  colorLabel: {
     fontSize: 14,
   },
-  hexInput: {
-    flex: 1,
+  colorInput: {
+    width: 150,
     borderWidth: 1,
     borderRadius: 4,
     paddingHorizontal: 8,

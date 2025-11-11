@@ -244,6 +244,39 @@ export default function CornerStatisticsSettingsDialog({
                     }
                   />
                 </View>
+                <View style={styles.columnVisibilityRow}>
+                  <Text style={[styles.columnLabel, { color: theme.colors.onSurface }]}>
+                    Show Underlines
+                  </Text>
+                  <Switch
+                    value={columnVisibility.showUnderlines === true}
+                    onValueChange={(value) => 
+                      setColumnVisibility(prev => ({ ...prev, showUnderlines: value }))
+                    }
+                  />
+                </View>
+                <View style={styles.columnVisibilityRow}>
+                  <Text style={[styles.columnLabel, { color: theme.colors.onSurface }]}>
+                    Font Size Adjustments
+                  </Text>
+                  <Switch
+                    value={columnVisibility.showFontSizeAdjustments === true}
+                    onValueChange={(value) => 
+                      setColumnVisibility(prev => ({ ...prev, showFontSizeAdjustments: value }))
+                    }
+                  />
+                </View>
+                <View style={styles.columnVisibilityRow}>
+                  <Text style={[styles.columnLabel, { color: theme.colors.onSurface }]}>
+                    Font Color Adjustments
+                  </Text>
+                  <Switch
+                    value={columnVisibility.showFontColorAdjustments === true}
+                    onValueChange={(value) => 
+                      setColumnVisibility(prev => ({ ...prev, showFontColorAdjustments: value }))
+                    }
+                  />
+                </View>
               </View>
 
               <Text style={[styles.sectionTitle, { color: theme.colors.onSurface, marginTop: 24 }]}>
