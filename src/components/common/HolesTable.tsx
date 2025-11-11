@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, IconButton, useTheme } from 'react-native-paper';
 import { Hole } from '../../types';
 import NumberModal from './NumberModal';
+import GStatsCell from './GStatsCell';
+import { computeAllHoleStatistics, HoleStatistics } from '../../services/holeStatistics';
+import { scorecardTableStyles } from '../../styles/scorecardTableStyles';
 
 interface HolesTableProps {
   holes: Hole[];
@@ -10,6 +13,8 @@ interface HolesTableProps {
   onBack?: () => void;
   distanceUnit?: 'yd' | 'm';
   onDistanceUnitChange?: (unit: 'yd' | 'm') => void;
+  courseId?: string;
+  showGStats?: boolean;
 }
 
 export default function HolesTable({
@@ -18,6 +23,8 @@ export default function HolesTable({
   onBack,
   distanceUnit = 'yd',
   onDistanceUnitChange,
+  courseId,
+  showGStats = false,
 }: HolesTableProps) {
   const theme = useTheme();
   const [editModal, setEditModal] = useState<{
@@ -25,6 +32,26 @@ export default function HolesTable({
     hole: Hole | null;
     field: 'par' | 'distance' | null;
   }>({ visible: false, hole: null, field: null });
+  const [holeStatistics, setHoleStatistics] = useState<Map<number, HoleStatistics>>(new Map());
+
+  // Compute hole statistics (G-Stats per hole) if courseId is provided and showGStats is true
+  useEffect(() => {
+    const computeStats = async () => {
+      if (showGStats && courseId && holes.length > 0) {
+        try {
+          const holeNumbers = holes.map(h => h.number);
+          const stats = await computeAllHoleStatistics(courseId, holeNumbers);
+          setHoleStatistics(stats);
+        } catch (error) {
+          console.error('Error computing hole statistics:', error);
+          setHoleStatistics(new Map());
+        }
+      } else {
+        setHoleStatistics(new Map());
+      }
+    };
+    computeStats();
+  }, [showGStats, courseId, holes]);
 
   const formatDistance = (distance: number | undefined): string => {
     if (distance === undefined) return '?';
@@ -65,65 +92,75 @@ export default function HolesTable({
   };
 
   return (
-    <View style={styles.wrapper}>
+    <View style={scorecardTableStyles.wrapper}>
       {/* Fixed Header Row */}
-      <View style={styles.fixedHeaderRow}>
+      <View style={scorecardTableStyles.fixedHeaderRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.headerRowContent}>
-            <View style={[styles.cell, styles.headerCell, styles.holeHeaderCell]}>
+          <View style={scorecardTableStyles.headerRowContent}>
+            <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.holeHeaderCell]}>
               {onBack ? (
                 <IconButton
                   icon="arrow-left"
                   size={20}
                   iconColor="#fff"
                   onPress={onBack}
-                  style={styles.backIconButton}
+                  style={scorecardTableStyles.backIconButton}
                 />
               ) : (
-                <Text style={styles.headerText}>#</Text>
+                <Text style={scorecardTableStyles.headerText}>#</Text>
               )}
             </View>
-            {onDistanceUnitChange ? (
-              <TouchableOpacity
-                style={[styles.cell, styles.headerCell, styles.distanceHeaderCell]}
-                onPress={toggleDistanceUnit}
-              >
-                <Text style={styles.headerText}>Dist ({distanceUnit})</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={[styles.cell, styles.headerCell, styles.distanceHeaderCell]}>
-                <Text style={styles.headerText}>Dist</Text>
+            {showGStats && (
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.gStatsHeaderCell]}>
+                <Text style={scorecardTableStyles.gStatHeaderText}>G-Stats</Text>
               </View>
             )}
-            <View style={[styles.cell, styles.headerCell, styles.parHeaderCell]}>
-              <Text style={styles.headerText}>Par</Text>
+            {onDistanceUnitChange ? (
+              <TouchableOpacity
+                style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.distanceHeaderCell]}
+                onPress={toggleDistanceUnit}
+              >
+                <Text style={scorecardTableStyles.headerText}>Dist ({distanceUnit})</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.distanceHeaderCell]}>
+                <Text style={scorecardTableStyles.headerText}>Dist</Text>
+              </View>
+            )}
+            <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.parHeaderCell]}>
+              <Text style={scorecardTableStyles.headerText}>Par</Text>
             </View>
           </View>
         </ScrollView>
       </View>
 
       {/* Scrollable Hole Rows */}
-      <ScrollView style={styles.scrollableContent}>
+      <ScrollView style={scorecardTableStyles.scrollableContent}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.table}>
+          <View style={scorecardTableStyles.table}>
             {holes.map((hole) => (
-              <View key={hole.number} style={styles.row}>
-                <View style={[styles.cell, styles.holeCell]}>
-                  <Text style={styles.holeText}>{hole.number}</Text>
+              <View key={hole.number} style={scorecardTableStyles.row}>
+                <View style={[scorecardTableStyles.cell, scorecardTableStyles.holeCell]}>
+                  <Text style={scorecardTableStyles.holeText}>{hole.number}</Text>
                 </View>
+                {showGStats && (
+                  <View style={[scorecardTableStyles.cell, scorecardTableStyles.gStatsCell]}>
+                    <GStatsCell stats={holeStatistics.get(hole.number)} />
+                  </View>
+                )}
                 <TouchableOpacity
-                  style={[styles.cell, styles.distanceCell]}
+                  style={[scorecardTableStyles.cell, scorecardTableStyles.distanceCell]}
                   onPress={() => openEditModal(hole, 'distance')}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.distanceText}>{formatDistance(hole.distance)}</Text>
+                  <Text style={scorecardTableStyles.distanceText}>{formatDistance(hole.distance)}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.cell, styles.parCell]}
+                  style={[scorecardTableStyles.cell, scorecardTableStyles.parCell]}
                   onPress={() => openEditModal(hole, 'par')}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.parText}>
+                  <Text style={scorecardTableStyles.parText}>
                     {hole.par !== undefined ? hole.par : '?'}
                   </Text>
                 </TouchableOpacity>
@@ -154,97 +191,4 @@ export default function HolesTable({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-  },
-  fixedHeaderRow: {
-    backgroundColor: '#4CAF50',
-    borderBottomWidth: 2,
-    borderBottomColor: '#388e3c',
-    zIndex: 10,
-  },
-  headerRowContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 8,
-  },
-  scrollableContent: {
-    flex: 1,
-  },
-  table: {
-    padding: 8,
-    paddingBottom: 0,
-  },
-  row: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    minHeight: 36,
-  },
-  cell: {
-    width: 100,
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerCell: {
-    backgroundColor: '#4CAF50',
-    minHeight: 36,
-  },
-  headerText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  holeCell: {
-    backgroundColor: '#f5f5f5',
-    width: 40,
-    minWidth: 40,
-  },
-  holeHeaderCell: {
-    width: 40,
-    minWidth: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backIconButton: {
-    margin: 0,
-    padding: 0,
-    width: 40,
-    height: 40,
-  },
-  distanceHeaderCell: {
-    width: 70,
-    minWidth: 70,
-  },
-  distanceCell: {
-    backgroundColor: '#f5f5f5',
-    width: 70,
-    minWidth: 70,
-  },
-  distanceText: {
-    fontWeight: '500',
-    fontSize: 12,
-    color: '#666',
-  },
-  parHeaderCell: {
-    width: 100,
-    minWidth: 100,
-  },
-  parCell: {
-    backgroundColor: '#f5f5f5',
-    width: 100,
-    minWidth: 100,
-  },
-  parText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  holeText: {
-    fontWeight: '600',
-    fontSize: 14,
-  },
-});
 

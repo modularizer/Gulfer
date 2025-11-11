@@ -190,8 +190,10 @@ const TEXT_PERCENT_SYMBOL = '%';
 const TEXT_BEST_SCORE_DESC = 'best score (lowest throw count) from';
 const TEXT_WORST_SCORE_DESC = 'worst score (highest throw count) from';
 const TEXT_AVERAGE_SCORE_DESC = 'Average score from';
-const TEXT_PERCENTILE_BELOW_DESC = 'th percentile score (which is below average and high throw count) from';
-const TEXT_PERCENTILE_ABOVE_DESC = 'th percentile score (which is above average and low throw count) from';
+// For golf: Xth percentile means "better than worst X% of scores" = "X% of scores are HIGHER/worse than this"
+// Lower percentiles = better scores (lower throw count), higher percentiles = worse scores (higher throw count)
+const TEXT_PERCENTILE_BELOW_DESC = 'th percentile score (X% of scores are HIGHER/worse than this) from';
+const TEXT_PERCENTILE_ABOVE_DESC = 'th percentile score (X% of scores are HIGHER/worse than this) from';
 const TEXT_NO_ROUNDS_FOUND = 'No rounds found → corner will be left empty';
 const TEXT_USING = 'Using';
 const TEXT_SELECTED_ROUNDS_LABEL = 'Selected Round(s):';
@@ -1402,8 +1404,11 @@ export default function CornerStatisticConfigModal({
               break;
             case AccumulationModeEnum.Percentile:
               if (config.percentile !== undefined) {
+                // IMPORTANT: For golf, percentiles are inverted (see computePercentile in cornerStatistics.ts)
+                // Xth percentile means X% of scores are HIGHER/worse, so we use (100-X)th traditional percentile
                 const sorted = [...sampleScores].sort((a, b) => a - b);
-                const index = Math.ceil((config.percentile / 100) * sorted.length) - 1;
+                const traditionalPercentile = 100 - config.percentile;
+                const index = Math.ceil((traditionalPercentile / 100) * sorted.length) - 1;
                 result = sorted[Math.max(0, Math.min(index, sorted.length - 1))];
               }
               break;

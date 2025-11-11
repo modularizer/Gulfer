@@ -86,14 +86,16 @@ export default function CourseHolesScreen() {
         holes={holes}
         onHoleUpdate={handleHoleUpdate}
         onBack={() => {
-          if (codenameParam) {
-            router.push(`/course/${codenameParam}/overview`);
+          if (courseNameParam) {
+            router.push(`/course/${encodeURIComponent(courseNameParam)}/overview`);
           } else {
             router.push('/course/list');
           }
         }}
         distanceUnit={distanceUnit}
         onDistanceUnitChange={setDistanceUnit}
+        courseId={course.id}
+        showGStats={true}
       />
     </View>
   );

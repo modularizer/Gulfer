@@ -289,11 +289,29 @@ export async function selectRoundsByCriteria(
 
 /**
  * Compute percentile from sorted scores
+ * 
+ * IMPORTANT: For golf/disc golf, lower scores are better, so percentiles are inverted.
+ * 
+ * In golf, "Xth percentile" means "better than the worst X% of scores",
+ * which means "X% of scores are HIGHER (worse) than this value".
+ * 
+ * This is the OPPOSITE of the standard percentile definition where "Xth percentile"
+ * means "X% of values are at or below this value".
+ * 
+ * To get the golf percentile, we calculate the (100-X)th traditional percentile:
+ * - 25th percentile (golf) = 75th percentile (traditional) = 75% at or below = 25% are HIGHER
+ * - 75th percentile (golf) = 25th percentile (traditional) = 25% at or below = 75% are HIGHER
+ * 
+ * @param scores - Array of scores (will be sorted ascending)
+ * @param percentile - The percentile to calculate (0-100), where X means "X% are HIGHER/worse"
  */
 function computePercentile(scores: number[], percentile: number): number {
   if (scores.length === 0) return 0;
   const sorted = [...scores].sort((a, b) => a - b);
-  const index = Math.ceil((percentile / 100) * sorted.length) - 1;
+  
+  // Invert the percentile: for golf, Xth percentile means X% are HIGHER, so we use (100-X)th traditional percentile
+  const traditionalPercentile = 100 - percentile;
+  const index = Math.ceil((traditionalPercentile / 100) * sorted.length) - 1;
   return sorted[Math.max(0, Math.min(index, sorted.length - 1))];
 }
 
@@ -640,9 +658,8 @@ export async function computeCornerValue(
         if (config.percentile === undefined) {
           return { value: '', visible: false };
         }
-        const sorted = [...scores].sort((a, b) => a - b);
-        const index = Math.ceil((config.percentile / 100) * sorted.length) - 1;
-        result = sorted[Math.max(0, Math.min(index, sorted.length - 1))];
+        // Use the shared computePercentile function which handles golf percentile inversion
+        result = computePercentile(scores, config.percentile);
         break;
       case 'relevant':
         // For 'relevant', we should have exactly one round per player

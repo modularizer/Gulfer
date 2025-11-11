@@ -7,22 +7,38 @@ import { getAllRounds } from './storage/roundStorage';
 
 export interface HoleStatistics {
   worst: number | null;      // Worst (maximum) score
-  p25: number | null;        // 25th percentile (25% of scores are at or below this - good/low score)
+  p25: number | null;        // 25th percentile: better than worst 25% (25% of scores are HIGHER/worse than this)
   p50: number | null;        // 50th percentile / median
-  p75: number | null;        // 75th percentile (75% of scores are at or below this - worse/higher score)
+  p75: number | null;        // 75th percentile: better than worst 75% (75% of scores are HIGHER/worse than this)
   best: number | null;        // Best (minimum) score
 }
 
 /**
  * Calculate percentile from sorted array (ascending - lower is better)
- * For golf/disc golf: lower scores are better
- * Percentile means: X% of scores are at or below this value
- * So 25th percentile is a good (low) score, 75th percentile is a worse (higher) score
+ * 
+ * IMPORTANT: For golf/disc golf, lower scores are better, so percentiles are inverted.
+ * 
+ * In golf, "Xth percentile" means "better than the worst X% of scores",
+ * which means "X% of scores are HIGHER (worse) than this value".
+ * 
+ * This is the OPPOSITE of the standard percentile definition where "Xth percentile"
+ * means "X% of values are at or below this value".
+ * 
+ * To get the golf percentile, we calculate the (100-X)th traditional percentile:
+ * - 25th percentile (golf) = 75th percentile (traditional) = 75% at or below = 25% are HIGHER
+ * - 75th percentile (golf) = 25th percentile (traditional) = 25% at or below = 75% are HIGHER
+ * 
+ * @param sortedScores - Scores sorted ascending (lower is better)
+ * @param percentile - The percentile to calculate (0-100), where X means "X% are HIGHER/worse"
  */
 function calculatePercentile(sortedScores: number[], percentile: number): number {
   if (sortedScores.length === 0) return 0;
+  
+  // Invert the percentile: for golf, Xth percentile means X% are HIGHER, so we use (100-X)th traditional percentile
+  const traditionalPercentile = 100 - percentile;
+  
   // Use linear interpolation for more accurate percentile
-  const position = (percentile / 100) * (sortedScores.length - 1);
+  const position = (traditionalPercentile / 100) * (sortedScores.length - 1);
   const lower = Math.floor(position);
   const upper = Math.ceil(position);
   const weight = position - lower;
@@ -97,9 +113,9 @@ export async function computeHoleStatistics(
 
     // Calculate statistics
     const worst = sortedScores[sortedScores.length - 1]; // Maximum (worst) score
-    const p25 = calculatePercentile(sortedScores, 25);   // 25% of scores are at or below this (good/low)
+    const p25 = calculatePercentile(sortedScores, 25);   // 25th percentile: 25% of scores are HIGHER/worse than this
     const p50 = calculateMedian(sortedScores);            // 50th percentile / median
-    const p75 = calculatePercentile(sortedScores, 75);   // 75% of scores are at or below this (worse/higher)
+    const p75 = calculatePercentile(sortedScores, 75);   // 75th percentile: 75% of scores are HIGHER/worse than this
     const best = sortedScores[0];                         // Minimum (best) score
 
     return {
@@ -199,9 +215,9 @@ export async function computeTotalRoundStatistics(
 
     // Calculate statistics
     const worst = sortedScores[sortedScores.length - 1]; // Maximum (worst) total
-    const p25 = calculatePercentile(sortedScores, 25);   // 25% of totals are at or below this (good/low)
+    const p25 = calculatePercentile(sortedScores, 25);   // 25th percentile: 25% of totals are HIGHER/worse than this
     const p50 = calculateMedian(sortedScores);            // 50th percentile / median
-    const p75 = calculatePercentile(sortedScores, 75);   // 75% of totals are at or below this (worse/higher)
+    const p75 = calculatePercentile(sortedScores, 75);   // 75th percentile: 75% of totals are HIGHER/worse than this
     const best = sortedScores[0];                         // Minimum (best) total
 
     return {

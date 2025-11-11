@@ -7,6 +7,8 @@ import HoleScoreModal from '../common/HoleScoreModal';
 import { CornerStatisticsConfig, computeCellCornerValues, computeTotalCornerValues } from '../../services/cornerStatistics';
 import { getCurrentUserName } from '../../services/storage/userStorage';
 import { computeAllHoleStatistics, computeTotalRoundStatistics, HoleStatistics } from '../../services/holeStatistics';
+import GStatsCell from '../common/GStatsCell';
+import { scorecardTableStyles } from '../../styles/scorecardTableStyles';
 
 export interface CornerData {
   value: string | number;
@@ -388,13 +390,13 @@ export default function Scorecard({
 
 
   return (
-    <View style={styles.wrapper}>
+    <View style={scorecardTableStyles.wrapper}>
       {/* Fixed Header Row */}
-      <View style={styles.fixedHeaderRow}>
+      <View style={scorecardTableStyles.fixedHeaderRow}>
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false} 
-          style={styles.headerScrollView}
+          style={scorecardTableStyles.headerScrollView}
           contentContainerStyle={
             headerContentWidth > 0 && headerContentWidth < screenWidth && onSettingsPress
               ? { paddingRight: 40 } // Add padding for settings button
@@ -402,70 +404,70 @@ export default function Scorecard({
           }
         >
           <View 
-            style={styles.headerRowContent}
+            style={scorecardTableStyles.headerRowContent}
             onLayout={(event) => {
               const { width } = event.nativeEvent.layout;
               setHeaderContentWidth(width);
             }}
           >
-            <View style={[styles.cell, styles.headerCell, styles.holeHeaderCell]}>
+            <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.holeHeaderCell]}>
               {onBack ? (
                 <IconButton
                   icon="arrow-left"
                   size={20}
                   iconColor="#fff"
                   onPress={onBack}
-                  style={styles.backIconButton}
+                  style={scorecardTableStyles.backIconButton}
                 />
               ) : (
-                <Text style={styles.headerText}>#</Text>
+                <Text style={scorecardTableStyles.headerText}>#</Text>
               )}
             </View>
             {columnVisibility?.gStats === true && (
-              <View style={[styles.cell, styles.headerCell, styles.gStatsHeaderCell]}>
-                <Text style={styles.gStatHeaderText}>G-Stats</Text>
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.gStatsHeaderCell]}>
+                <Text style={scorecardTableStyles.gStatHeaderText}>G-Stats</Text>
               </View>
             )}
             {columnVisibility?.distance !== false && (
               <TouchableOpacity
-                style={[styles.cell, styles.headerCell, styles.distanceHeaderCell]}
+                style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.distanceHeaderCell]}
                 onPress={toggleDistanceUnit}
               >
-                <Text style={styles.headerText}>Dist ({distanceUnit})</Text>
+                <Text style={scorecardTableStyles.headerText}>Dist ({distanceUnit})</Text>
               </TouchableOpacity>
             )}
             {columnVisibility?.par === true && (
-              <View style={[styles.cell, styles.headerCell, styles.parHeaderCell]}>
-                <Text style={styles.headerText}>Par</Text>
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.parHeaderCell]}>
+                <Text style={scorecardTableStyles.headerText}>Par</Text>
               </View>
             )}
             {players.map((player) => (
-              <View key={player.id} style={[styles.cell, styles.headerCell]}>
-                <Text style={styles.headerText}>{player.name}</Text>
+              <View key={player.id} style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell]}>
+                <Text style={scorecardTableStyles.headerText}>{player.name}</Text>
               </View>
             ))}
             {onSettingsPress && headerContentWidth > 0 && headerContentWidth >= screenWidth && (
-              <View style={[styles.cell, styles.headerCell, styles.settingsHeaderCell]}>
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.settingsHeaderCell]}>
                 <IconButton
                   icon="dots-vertical"
                   size={20}
                   iconColor="#fff"
                   onPress={onSettingsPress}
-                  style={styles.settingsIconButton}
+                  style={scorecardTableStyles.settingsIconButton}
                 />
               </View>
             )}
           </View>
         </ScrollView>
         {onSettingsPress && headerContentWidth > 0 && headerContentWidth < screenWidth && (
-          <View style={styles.settingsButtonAbsolute}>
-            <View style={[styles.cell, styles.headerCell, styles.settingsHeaderCell]}>
+          <View style={scorecardTableStyles.settingsButtonAbsolute}>
+            <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.settingsHeaderCell]}>
               <IconButton
                 icon="dots-vertical"
                 size={20}
                 iconColor="#fff"
                 onPress={onSettingsPress}
-                style={styles.settingsIconButton}
+                style={scorecardTableStyles.settingsIconButton}
               />
             </View>
           </View>
@@ -473,14 +475,14 @@ export default function Scorecard({
       </View>
 
       {/* Scrollable Hole Rows */}
-      <ScrollView style={styles.scrollableContent}>
+      <ScrollView style={scorecardTableStyles.scrollableContent}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.table}>
+          <View style={scorecardTableStyles.table}>
             {/* Hole Rows */}
             {holes.map((hole) => (
-              <View key={hole} style={styles.row}>
+              <View key={hole} style={scorecardTableStyles.row}>
                 <TouchableOpacity
-                  style={[styles.cell, styles.holeCell]}
+                  style={[scorecardTableStyles.cell, scorecardTableStyles.holeCell]}
                   onPress={() => {
                     if (!readOnly && players.length > 0) {
                       openEditModal(players[0].id, hole);
@@ -489,11 +491,11 @@ export default function Scorecard({
                   disabled={readOnly}
                   activeOpacity={readOnly ? 1 : 0.7}
                 >
-                  <Text style={styles.holeText}>{hole}</Text>
+                  <Text style={scorecardTableStyles.holeText}>{hole}</Text>
                 </TouchableOpacity>
                 {columnVisibility?.gStats === true && (
                   <TouchableOpacity
-                    style={[styles.cell, styles.gStatsCell]}
+                    style={[scorecardTableStyles.cell, scorecardTableStyles.gStatsCell]}
                     onPress={() => {
                       if (!readOnly && players.length > 0) {
                         openEditModal(players[0].id, hole);
@@ -502,36 +504,17 @@ export default function Scorecard({
                     disabled={readOnly}
                     activeOpacity={readOnly ? 1 : 0.7}
                   >
-                    {(() => {
-                      const stats = holeStatistics.get(hole);
-                      if (!stats || stats.worst === null || stats.p25 === null || stats.p50 === null || stats.p75 === null || stats.best === null) {
-                        return <Text style={styles.gStatText}>—</Text>;
-                      }
-                      const worst = Math.round(stats.worst);
-                      const p25 = Math.round(stats.p25);
-                      const p50 = Math.round(stats.p50);
-                      const p75 = Math.round(stats.p75);
-                      const best = Math.round(stats.best);
-                      return (
-                        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline' }}>
-                          <Text style={styles.gStatText}>{worst}·</Text>
-                          <Text style={styles.gStatTextInner}>{p25}·</Text>
-                          <Text style={styles.gStatTextMiddle}>{p50}</Text>
-                          <Text style={styles.gStatTextInner}>·{p75}·</Text>
-                          <Text style={styles.gStatText}>{best}</Text>
-                        </View>
-                      );
-                    })()}
+                    <GStatsCell stats={holeStatistics.get(hole)} />
                   </TouchableOpacity>
                 )}
                 {columnVisibility?.distance !== false && (
-                  <View style={[styles.cell, styles.distanceCell]}>
-                    <Text style={styles.distanceText}>{formatDistance(hole)}</Text>
+                  <View style={[scorecardTableStyles.cell, scorecardTableStyles.distanceCell]}>
+                    <Text style={scorecardTableStyles.distanceText}>{formatDistance(hole)}</Text>
                   </View>
                 )}
                 {columnVisibility?.par === true && (
-                  <View style={[styles.cell, styles.parCell]}>
-                    <Text style={styles.parText}>
+                  <View style={[scorecardTableStyles.cell, scorecardTableStyles.parCell]}>
+                    <Text style={scorecardTableStyles.parText}>
                       {(() => {
                         const holeData = courseHoles.find(h => h.number === hole);
                         return holeData?.par !== undefined ? holeData.par : '?';
@@ -542,12 +525,12 @@ export default function Scorecard({
                 {players.map((player) => (
                   <TouchableOpacity
                     key={`${player.id}-${hole}`}
-                    style={styles.cell}
+                    style={scorecardTableStyles.cell}
                     onPress={() => openEditModal(player.id, hole)}
                     disabled={readOnly}
                     activeOpacity={readOnly ? 1 : 0.7}
                   >
-                    <View style={styles.scoreCellContainer}>
+                    <View style={scorecardTableStyles.scoreCellContainer}>
                       {(() => {
                         const key = `${player.id}-${hole}`;
                         const cornerValues = cellCornerValues.get(key) || {
@@ -592,7 +575,7 @@ export default function Scorecard({
                             {cornerValues.topLeft.visible && (() => {
                               const color = getCornerColor(cornerValues.topLeft, 'topLeft');
                               return (
-                                <Text style={[styles.cornerTextTopLeft, color ? { color } : undefined]}>
+                                <Text style={[scorecardTableStyles.cornerTextTopLeft, color ? { color } : undefined]}>
                                   {cornerValues.topLeft.value}
                                 </Text>
                               );
@@ -601,7 +584,7 @@ export default function Scorecard({
                             {cornerValues.topRight.visible && (() => {
                               const color = getCornerColor(cornerValues.topRight, 'topRight');
                               return (
-                                <Text style={[styles.cornerTextTopRight, color ? { color } : undefined]}>
+                                <Text style={[scorecardTableStyles.cornerTextTopRight, color ? { color } : undefined]}>
                                   {cornerValues.topRight.value}
                                 </Text>
                               );
@@ -610,7 +593,7 @@ export default function Scorecard({
                             {cornerValues.bottomLeft.visible && (() => {
                               const color = getCornerColor(cornerValues.bottomLeft, 'bottomLeft');
                               return (
-                                <Text style={[styles.cornerTextBottomLeft, color ? { color } : undefined]}>
+                                <Text style={[scorecardTableStyles.cornerTextBottomLeft, color ? { color } : undefined]}>
                                   {cornerValues.bottomLeft.value}
                                 </Text>
                               );
@@ -619,7 +602,7 @@ export default function Scorecard({
                             {cornerValues.bottomRight.visible && (() => {
                               const color = getCornerColor(cornerValues.bottomRight, 'bottomRight');
                               return (
-                                <Text style={[styles.cornerTextBottomRight, color ? { color } : undefined]}>
+                                <Text style={[scorecardTableStyles.cornerTextBottomRight, color ? { color } : undefined]}>
                                   {cornerValues.bottomRight.value}
                                 </Text>
                               );
@@ -700,9 +683,9 @@ export default function Scorecard({
                         }
                         
                         return (
-                          <View style={styles.scoreTextContainer}>
+                          <View style={scorecardTableStyles.scoreTextContainer}>
                             <Text style={[
-                              styles.scoreText, 
+                              scorecardTableStyles.scoreText, 
                               fontSizeAdjustment !== 0 ? { fontSize: 18 + fontSizeAdjustment } : undefined,
                               textColor ? { color: textColor } : undefined,
                               fontWeight ? { fontWeight } : undefined
@@ -710,7 +693,7 @@ export default function Scorecard({
                               {playerScore || 0}
                             </Text>
                             {underlineColor && (
-                              <View style={[styles.winnerUnderline, { backgroundColor: underlineColor }]} />
+                              <View style={[scorecardTableStyles.winnerUnderline, { backgroundColor: underlineColor }]} />
                             )}
                           </View>
                         );
@@ -723,8 +706,8 @@ export default function Scorecard({
 
             {/* Add Player Column */}
             {!readOnly && allowAddPlayer && (
-              <View style={styles.row}>
-                <View style={[styles.cell, styles.addCell]}>
+              <View style={scorecardTableStyles.row}>
+                <View style={[scorecardTableStyles.cell, scorecardTableStyles.addCell]}>
                   <Button mode="outlined" onPress={onAddPlayer}>
                     Add Player
                   </Button>
@@ -736,59 +719,41 @@ export default function Scorecard({
       </ScrollView>
 
       {/* Fixed Total Row */}
-      <View style={styles.fixedTotalRow}>
+      <View style={scorecardTableStyles.fixedTotalRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.totalRowContent}>
-            <View style={[styles.cell, styles.totalRowCell, styles.holeHeaderCell]}>
-              <Text style={[styles.totalRowText, { marginLeft: -5 }]}>Sum</Text>
+          <View style={scorecardTableStyles.totalRowContent}>
+            <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.holeHeaderCell]}>
+              <Text style={[scorecardTableStyles.totalRowText, { marginLeft: -5 }]}>Sum</Text>
             </View>
             {columnVisibility?.gStats === true && (
-              <View style={[styles.cell, styles.totalRowCell, styles.gStatsCell]}>
-                {(() => {
-                  if (!totalRoundStatistics || totalRoundStatistics.worst === null || totalRoundStatistics.p25 === null || totalRoundStatistics.p50 === null || totalRoundStatistics.p75 === null || totalRoundStatistics.best === null) {
-                    return <Text style={styles.gStatText}>—</Text>;
-                  }
-                  const worst = Math.round(totalRoundStatistics.worst);
-                  const p25 = Math.round(totalRoundStatistics.p25);
-                  const p50 = Math.round(totalRoundStatistics.p50);
-                  const p75 = Math.round(totalRoundStatistics.p75);
-                  const best = Math.round(totalRoundStatistics.best);
-                  return (
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline' }}>
-                      <Text style={styles.gStatTextTotal}>{worst}·</Text>
-                      <Text style={styles.gStatTextInnerTotal}>{p25}·</Text>
-                      <Text style={styles.gStatTextMiddleTotal}>{p50}</Text>
-                      <Text style={styles.gStatTextInnerTotal}>·{p75}·</Text>
-                      <Text style={styles.gStatTextTotal}>{best}</Text>
-                    </View>
-                  );
-                })()}
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.gStatsCell]}>
+                <GStatsCell stats={totalRoundStatistics} variant="total" />
               </View>
             )}
             {columnVisibility?.distance !== false && (
-              <View style={[styles.cell, styles.totalRowCell, styles.distanceCell]}>
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.distanceCell]}>
                 {(() => {
                   const totalDistance = holes.reduce((sum, hole) => {
                     const distance = getHoleDistance(hole);
                     return sum + (distance || 0);
                   }, 0);
                   
-                  if (totalDistance === 0) return <Text style={styles.distanceText}>—</Text>;
+                  if (totalDistance === 0) return <Text style={scorecardTableStyles.distanceText}>—</Text>;
                   
                   if (distanceUnit === 'ft') {
                     const feet = Math.round(totalDistance * 3.28084);
-                    return <Text style={styles.distanceText}>{feet}ft</Text>;
+                    return <Text style={scorecardTableStyles.distanceText}>{feet}ft</Text>;
                   } else if (distanceUnit === 'yd') {
                     const yards = Math.round(totalDistance * 1.09361);
-                    return <Text style={styles.distanceText}>{yards}yd</Text>;
+                    return <Text style={scorecardTableStyles.distanceText}>{yards}yd</Text>;
                   } else {
-                    return <Text style={styles.distanceText}>{Math.round(totalDistance)}m</Text>;
+                    return <Text style={scorecardTableStyles.distanceText}>{Math.round(totalDistance)}m</Text>;
                   }
                 })()}
               </View>
             )}
             {columnVisibility?.par === true && (
-              <View style={[styles.cell, styles.totalRowCell, styles.parCell]}>
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.parCell]}>
                 {(() => {
                   const parsWithValues = holes
                     .map(hole => {
@@ -798,11 +763,11 @@ export default function Scorecard({
                     .filter((par): par is number => par !== undefined);
                   
                   if (parsWithValues.length === 0) {
-                    return <Text style={styles.parText}>—</Text>;
+                    return <Text style={scorecardTableStyles.parText}>—</Text>;
                   }
                   
                   const averagePar = parsWithValues.reduce((sum, par) => sum + par, 0) / parsWithValues.length;
-                  return <Text style={styles.parText}>{averagePar.toFixed(1)}</Text>;
+                  return <Text style={scorecardTableStyles.parText}>{averagePar.toFixed(1)}</Text>;
                 })()}
               </View>
             )}
@@ -810,8 +775,8 @@ export default function Scorecard({
               const playerTotals = totalCornerValues.get(player.id);
               const totalScore = getTotal(player.id);
               return (
-                <View key={`total-${player.id}`} style={[styles.cell, styles.totalCell]}>
-                  <View style={styles.scoreCellContainer}>
+                <View key={`total-${player.id}`} style={[scorecardTableStyles.cell, scorecardTableStyles.totalCell]}>
+                  <View style={scorecardTableStyles.scoreCellContainer}>
                     {playerTotals && (() => {
                       const getCornerColor = (cornerValue: { value: string | number; visible: boolean }, cornerPosition: 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'): string | undefined => {
                         if (!cornerValue.visible) return undefined;
@@ -848,7 +813,7 @@ export default function Scorecard({
                           {playerTotals.topLeft.visible && (() => {
                             const color = getCornerColor(playerTotals.topLeft, 'topLeft');
                             return (
-                              <Text style={[styles.cornerTextTopLeftTotal, color ? { color } : undefined]}>
+                              <Text style={[scorecardTableStyles.cornerTextTopLeftTotal, color ? { color } : undefined]}>
                                 {playerTotals.topLeft.value}
                               </Text>
                             );
@@ -857,7 +822,7 @@ export default function Scorecard({
                           {playerTotals.topRight.visible && (() => {
                             const color = getCornerColor(playerTotals.topRight, 'topRight');
                             return (
-                              <Text style={[styles.cornerTextTopRightTotal, color ? { color } : undefined]}>
+                              <Text style={[scorecardTableStyles.cornerTextTopRightTotal, color ? { color } : undefined]}>
                                 {playerTotals.topRight.value}
                               </Text>
                             );
@@ -866,7 +831,7 @@ export default function Scorecard({
                           {playerTotals.bottomLeft.visible && (() => {
                             const color = getCornerColor(playerTotals.bottomLeft, 'bottomLeft');
                             return (
-                              <Text style={[styles.cornerTextBottomLeftTotal, color ? { color } : undefined]}>
+                              <Text style={[scorecardTableStyles.cornerTextBottomLeftTotal, color ? { color } : undefined]}>
                                 {playerTotals.bottomLeft.value}
                               </Text>
                             );
@@ -875,7 +840,7 @@ export default function Scorecard({
                           {playerTotals.bottomRight.visible && (() => {
                             const color = getCornerColor(playerTotals.bottomRight, 'bottomRight');
                             return (
-                              <Text style={[styles.cornerTextBottomRightTotal, color ? { color } : undefined]}>
+                              <Text style={[scorecardTableStyles.cornerTextBottomRightTotal, color ? { color } : undefined]}>
                                 {playerTotals.bottomRight.value}
                               </Text>
                             );
@@ -884,7 +849,7 @@ export default function Scorecard({
                       );
                     })()}
                     {/* Main total - centered */}
-                    <Text style={styles.totalText}>{totalScore}</Text>
+                    <Text style={scorecardTableStyles.totalText}>{totalScore}</Text>
                   </View>
                 </View>
               );
@@ -919,292 +884,4 @@ export default function Scorecard({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-  },
-  fixedHeaderRow: {
-    backgroundColor: '#4CAF50',
-    borderBottomWidth: 2,
-    borderBottomColor: '#388e3c',
-    zIndex: 10,
-    position: 'relative',
-  },
-  headerScrollView: {
-    flex: 1,
-  },
-  headerRowContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 8,
-  },
-  settingsButtonAbsolute: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    height: '100%',
-    zIndex: 11,
-    justifyContent: 'center',
-  },
-  scrollableContent: {
-    flex: 1,
-  },
-  table: {
-    padding: 8,
-    paddingBottom: 0,
-  },
-  fixedTotalRow: {
-    backgroundColor: '#e8f5e9',
-    borderTopWidth: 2,
-    borderTopColor: '#4CAF50',
-    paddingTop: 4,
-    paddingBottom: 0,
-    zIndex: 10,
-  },
-  totalRowContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 8,
-  },
-  row: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    minHeight: 31,
-  },
-  cell: {
-    width: 77,
-    padding: 4,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#e0e0e0',
-  },
-  headerCell: {
-    backgroundColor: '#4CAF50',
-    minHeight: 31,
-  },
-  headerText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  holeCell: {
-    backgroundColor: '#f5f5f5',
-    width: 35,
-    minWidth: 35,
-  },
-  holeHeaderCell: {
-    width: 35,
-    minWidth: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backIconButton: {
-    margin: 0,
-    padding: 0,
-    width: 40,
-    height: 40,
-  },
-  settingsHeaderCell: {
-    width: 40,
-    minWidth: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  settingsIconButton: {
-    margin: 0,
-    padding: 0,
-    width: 40,
-    height: 40,
-  },
-  distanceHeaderCell: {
-    width: 60,
-    minWidth: 60,
-  },
-  parHeaderCell: {
-    width: 60,
-    minWidth: 60,
-  },
-  gStatsHeaderCell: {
-    width: 80,
-    minWidth: 80,
-  },
-  distanceCell: {
-    backgroundColor: '#f5f5f5',
-    width: 60,
-    minWidth: 60,
-  },
-  distanceText: {
-    fontWeight: '500',
-    fontSize: 12,
-    color: '#666',
-  },
-  parCell: {
-    backgroundColor: '#f5f5f5',
-    width: 60,
-    minWidth: 60,
-  },
-  parText: {
-    fontWeight: '500',
-    fontSize: 12,
-    color: '#666',
-  },
-  gStatsCell: {
-    backgroundColor: '#e0e0e0',
-    width: 80,
-    minWidth: 80,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#d0d0d0',
-    marginBottom: -1,
-  },
-  gStatText: {
-    fontWeight: '500',
-    fontSize: 9,
-    color: '#666',
-  },
-  gStatTextMiddle: {
-    fontWeight: '600',
-    fontSize: 18,
-    color: '#333',
-  },
-  gStatTextInner: {
-    fontWeight: '500',
-    fontSize: 13,
-    color: '#666',
-  },
-  gStatTextTotal: {
-    fontWeight: '500',
-    fontSize: 7,
-    color: '#666',
-  },
-  gStatTextMiddleTotal: {
-    fontWeight: '600',
-    fontSize: 14,
-    color: '#333',
-  },
-  gStatTextInnerTotal: {
-    fontWeight: '500',
-    fontSize: 10,
-    color: '#666',
-  },
-  gStatHeaderText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  holeText: {
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  totalRowCell: {
-    backgroundColor: '#e8f5e9',
-  },
-  totalRowText: {
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  scoreText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  scoreTextContainer: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  winnerUnderline: {
-    position: 'absolute',
-    bottom: -2,
-    left: 0,
-    right: 0,
-    height: 1,
-    borderRadius: 1,
-  },
-  scoreCellContainer: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  cornerTextTopLeft: {
-    position: 'absolute',
-    top: -1,
-    left: 3,
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#666',
-  },
-  cornerTextTopRight: {
-    position: 'absolute',
-    top: -1,
-    right: 3,
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#666',
-  },
-  cornerTextBottomLeft: {
-    position: 'absolute',
-    bottom: -1,
-    left: 3,
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#666',
-  },
-  cornerTextBottomRight: {
-    position: 'absolute',
-    bottom: -1,
-    right: 3,
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#666',
-  },
-  cornerTextTopLeftTotal: {
-    position: 'absolute',
-    top: 0,
-    left: 5,
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#666',
-  },
-  cornerTextTopRightTotal: {
-    position: 'absolute',
-    top: 0,
-    right: 5,
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#666',
-  },
-  cornerTextBottomLeftTotal: {
-    position: 'absolute',
-    bottom: 0,
-    left: 5,
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#666',
-  },
-  cornerTextBottomRightTotal: {
-    position: 'absolute',
-    bottom: 0,
-    right: 5,
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#666',
-  },
-  totalCell: {
-    backgroundColor: '#e8f5e9',
-    paddingTop: 0,
-    paddingBottom: 0,
-  },
-  totalText: {
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  addCell: {
-    padding: 12,
-  },
-});
 
