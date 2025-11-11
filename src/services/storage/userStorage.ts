@@ -10,6 +10,7 @@ export interface User {
   id: string; // UUID for global uniqueness
   name: string; // Locally unique name
   isCurrentUser?: boolean; // Flag to identify the current user
+  notes?: string;
 }
 
 const USERS_STORAGE_KEY = '@gulfer_users';

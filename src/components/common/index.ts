@@ -22,4 +22,7 @@ export { default as SectionTitle } from './SectionTitle';
 export { default as RoundCard } from './RoundCard';
 export { default as ListPageLayout } from './ListPageLayout';
 export { default as GStatsCell } from './GStatsCell';
+export { default as NotesSection } from './NotesSection';
+export { default as CourseCard } from './CourseCard';
+export { default as PlayerCard } from './PlayerCard';
 

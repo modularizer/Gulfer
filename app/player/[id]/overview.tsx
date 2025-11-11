@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { useTheme, Text, Card, Chip, Button } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
-import { getAllUsers, getUserById, getUserByName, User } from '@/services/storage/userStorage';
+import { getAllUsers, getUserById, getUserByName, User, saveUser } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { Round, Player, Score } from '@/types';
 import { getAllCourses, Course } from '@/services/storage/courseStorage';
@@ -11,13 +11,16 @@ import { exportPlayer } from '@/services/playerExport';
 import { decodeNameFromUrl } from '@/utils/urlEncoding';
 import {
   DetailPageLayout,
+  HeroSection,
   SectionTitle,
   RoundCard,
   ErrorDialog,
+  NotesSection,
 } from '@/components/common';
 import { useExport } from '@/hooks/useExport';
 import { encodeNameForUrl } from '@/utils/urlEncoding';
 import { detailPageStyles } from '@/styles/detailPageStyles';
+import { loadPhotosByStorageKey, savePhotosByStorageKey } from '@/utils/photoStorage';
 
 interface CourseScore {
   course: Course;
@@ -31,6 +34,8 @@ export default function PlayerDetailScreen() {
   const theme = useTheme();
   const [player, setPlayer] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
   const [courseScores, setCourseScores] = useState<CourseScore[]>([]);
   const [playerRounds, setPlayerRounds] = useState<Round[]>([]);
   const [allCourses, setAllCourses] = useState<Course[]>([]);
@@ -122,6 +127,10 @@ export default function PlayerDetailScreen() {
           return;
         }
         setPlayer(foundPlayer);
+        // Load photos from storage
+        const loadedPhotos = await loadPhotosByStorageKey(foundPlayer.id);
+        setPhotos(loadedPhotos);
+        setNotes(foundPlayer.notes || '');
 
         const allRounds = await getAllRounds();
         const loadedCourses = await getAllCourses();
@@ -202,6 +211,30 @@ export default function PlayerDetailScreen() {
     loadAppVersion();
   }, []);
 
+  const handlePhotosChange = useCallback(async (newPhotos: string[]) => {
+    setPhotos(newPhotos);
+    if (player) {
+      try {
+        await savePhotosByStorageKey(player.id, newPhotos);
+      } catch (error) {
+        console.error('Error saving player photos:', error);
+      }
+    }
+  }, [player]);
+
+  const handleNotesChange = useCallback(async (newNotes: string) => {
+    setNotes(newNotes);
+    if (player) {
+      try {
+        const updatedPlayer = { ...player, notes: newNotes };
+        await saveUser(updatedPlayer);
+        setPlayer(updatedPlayer);
+      } catch (error) {
+        console.error('Error saving player notes:', error);
+      }
+    }
+  }, [player]);
+
   return (
     <DetailPageLayout
       loading={loading || !player}
@@ -257,6 +290,24 @@ export default function PlayerDetailScreen() {
         onDismiss: () => setErrorDialog({ visible: false, title: '', message: '' }),
       }}
     >
+      {player && (
+        <>
+          <HeroSection
+            photos={photos}
+            onPhotosChange={handlePhotosChange}
+            storageKey={player.id}
+            isEditable={true}
+          />
+
+          {/* Notes Section */}
+          <NotesSection
+            value={notes}
+            onChangeText={handleNotesChange}
+            placeholder="Add any notes about this player..."
+          />
+        </>
+      )}
+
       {player && courseScores.length > 0 ? (
         <View style={detailPageStyles.section}>
           <SectionTitle>Courses ({courseScores.length})</SectionTitle>

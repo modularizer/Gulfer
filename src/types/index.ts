@@ -61,5 +61,6 @@ export interface Course {
     latitude: number;
     longitude: number;
   };
+  notes?: string;
 }
 

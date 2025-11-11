@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
 import { Course, Round, Player } from '@/types';
-import { getCourseById, getCourseByName } from '@/services/storage/courseStorage';
+import { getCourseById, getCourseByName, saveCourse } from '@/services/storage/courseStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { exportCourse } from '@/services/courseExport';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -14,10 +14,12 @@ import {
   RoundCard,
   PlayerChip,
   ErrorDialog,
+  NotesSection,
 } from '@/components/common';
 import { useExport } from '@/hooks/useExport';
 import { detailPageStyles } from '@/styles/detailPageStyles';
 import { listPageStyles } from '@/styles/listPageStyles';
+import { loadPhotosByStorageKey, savePhotosByStorageKey } from '@/utils/photoStorage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,6 +29,7 @@ export default function CourseDetailScreen() {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
   const [rounds, setRounds] = useState<Round[]>([]);
   const [bestScores, setBestScores] = useState<Map<string, { player: Player; score: number }>>(new Map());
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
@@ -53,7 +56,10 @@ export default function CourseDetailScreen() {
         }
 
         setCourse(loadedCourse);
-        setPhotos([]);
+        // Load photos from storage
+        const loadedPhotos = await loadPhotosByStorageKey(loadedCourse.id);
+        setPhotos(loadedPhotos);
+        setNotes(loadedCourse.notes || '');
         
         const allRounds = await getAllRounds();
         const courseRounds = allRounds.filter(r => {
@@ -94,9 +100,29 @@ export default function CourseDetailScreen() {
     }
   }, [encodedNameParam]);
 
-  const handlePhotosChange = useCallback((newPhotos: string[]) => {
+  const handlePhotosChange = useCallback(async (newPhotos: string[]) => {
     setPhotos(newPhotos);
-  }, []);
+    if (course) {
+      try {
+        await savePhotosByStorageKey(course.id, newPhotos);
+      } catch (error) {
+        console.error('Error saving course photos:', error);
+      }
+    }
+  }, [course]);
+
+  const handleNotesChange = useCallback(async (newNotes: string) => {
+    setNotes(newNotes);
+    if (course) {
+      try {
+        const updatedCourse = { ...course, notes: newNotes };
+        await saveCourse(updatedCourse);
+        setCourse(updatedCourse);
+      } catch (error) {
+        console.error('Error saving course notes:', error);
+      }
+    }
+  }, [course]);
 
 
   const handleExport = useCallback(async () => {
@@ -147,6 +173,13 @@ export default function CourseDetailScreen() {
         </Text>
       </View>
 
+      {/* Notes Section */}
+      <NotesSection
+        value={notes}
+        onChangeText={handleNotesChange}
+        placeholder="Add any notes about this course..."
+      />
+
       <View style={detailPageStyles.section}>
         <SectionTitle>Best Scores</SectionTitle>
         {bestScores.size > 0 ? (
@@ -194,4 +227,5 @@ export default function CourseDetailScreen() {
     </DetailPageLayout>
   );
 }
+
 

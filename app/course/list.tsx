@@ -1,16 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TouchableOpacity, View, Platform } from 'react-native';
-import { Card, Title, useTheme, Dialog, Portal, TextInput, Button } from 'react-native-paper';
+import { Dialog, Portal, TextInput, Button } from 'react-native-paper';
 import { Course, Player } from '@/types';
 import { getAllCourses, saveCourse, generateCourseId, deleteCourse } from '@/services/storage/courseStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
-import { getShadowStyle } from '@/utils';
 import { router, useFocusEffect } from 'expo-router';
 import { encodeNameForUrl } from '@/utils/urlEncoding';
-import { Alert } from 'react-native';
+import { loadPhotosByStorageKey } from '@/utils/photoStorage';
 import {
   ListPageLayout,
-  PlayerChip,
+  CourseCard,
 } from '@/components/common';
 import { useSelection } from '@/hooks/useSelection';
 import { useListPage } from '@/hooks/useListPage';
@@ -21,6 +19,7 @@ export default function CoursesScreen() {
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
   const [newCourseDialog, setNewCourseDialog] = useState({ visible: false, name: '', holes: '9' });
   const [bestScoresByCourse, setBestScoresByCourse] = useState<Map<string, Map<string, { player: Player; score: number }>>>(new Map());
+  const [photosByCourse, setPhotosByCourse] = useState<Map<string, string[]>>(new Map());
   
   const loadCourses = useCallback(async () => {
     try {
@@ -32,7 +31,13 @@ export default function CoursesScreen() {
       const allRounds = await getAllRounds();
       const bestScoresMap = new Map<string, Map<string, { player: Player; score: number }>>();
       
+      // Load photos and best scores for all courses
+      const photosMap = new Map<string, string[]>();
       await Promise.all(loadedCourses.map(async (course) => {
+        // Load photos for this course
+        const photos = await loadPhotosByStorageKey(course.id);
+        photosMap.set(course.id, photos);
+        
         const courseRounds = allRounds.filter(r => {
           const roundCourseName = r.courseName?.trim();
           const courseName = course.name.trim();
@@ -63,6 +68,7 @@ export default function CoursesScreen() {
       }));
       
       setBestScoresByCourse(bestScoresMap);
+      setPhotosByCourse(photosMap);
     } catch (error) {
       console.error('Error loading courses:', error);
     }
@@ -143,73 +149,27 @@ export default function CoursesScreen() {
   }, [newCourseDialog, loadCourses, listPage]);
 
 
-  const getHoleCount = (course: Course): number => {
-    if (Array.isArray(course.holes)) {
-      return course.holes.length;
-    }
-    return course.holes as unknown as number || 0;
-  };
-
-  const theme = useTheme();
 
   const renderCourseItem = useCallback(
     ({ item }: { item: Course }) => {
-      const holeCount = getHoleCount(item);
       const courseBestScores = bestScoresByCourse.get(item.id);
       const bestScoresArray = courseBestScores ? Array.from(courseBestScores.values()) : [];
+      const photos = photosByCourse.get(item.id) || [];
       const isSelected = selection.isSelected(item.id);
-      
-      const winner = bestScoresArray.length > 0 
-        ? bestScoresArray.reduce((min, current) => current.score < min.score ? current : min)
-        : null;
 
       return (
-        <TouchableOpacity 
+        <CourseCard
+          course={item}
+          photos={photos}
+          showPhotos={true}
+          isSelected={isSelected}
+          bestScores={bestScoresArray}
           onPress={() => handleCoursePress(item.id, item.name)}
           onLongPress={() => handleCourseLongPress(item.id)}
-          delayLongPress={300}
-          {...(Platform.OS === 'web' ? {
-            onContextMenu: (e: any) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleCourseLongPress(item.id);
-            }
-          } : {})}
-        >
-          <Card style={[
-            listPageStyles.card, 
-            getShadowStyle(2),
-            isSelected && { backgroundColor: theme.colors.primaryContainer }
-          ]}>
-            <Card.Content>
-              <View style={listPageStyles.cardHeader}>
-                <Title style={listPageStyles.cardTitle}>
-                  {item.name} ({holeCount} {holeCount === 1 ? 'hole' : 'holes'})
-                </Title>
-              </View>
-              {bestScoresArray.length > 0 && (
-                <View style={listPageStyles.bestScoresContainer}>
-                  {bestScoresArray
-                    .sort((a, b) => a.score - b.score)
-                    .map(({ player, score }) => {
-                      const isWinner = winner ? player.id === winner.player.id : false;
-                      return (
-                        <PlayerChip
-                          key={player.id}
-                          player={player}
-                          score={score}
-                          isWinner={isWinner}
-                        />
-                      );
-                    })}
-                </View>
-              )}
-            </Card.Content>
-          </Card>
-        </TouchableOpacity>
+        />
       );
     },
-    [handleCoursePress, handleCourseLongPress, selection, bestScoresByCourse, theme.colors.primaryContainer]
+    [handleCoursePress, handleCourseLongPress, selection, bestScoresByCourse, photosByCourse]
   );
 
   return (

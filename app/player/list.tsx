@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TouchableOpacity, View, Platform } from 'react-native';
-import { Card, Title, useTheme, Chip, Text } from 'react-native-paper';
 import { User } from '@/services/storage/userStorage';
 import { getAllUsers, saveUser, generateUserId, deleteUser } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
-import { getShadowStyle } from '@/utils';
 import { router, useFocusEffect } from 'expo-router';
 import { encodeNameForUrl } from '@/utils/urlEncoding';
+import { loadPhotosByStorageKey } from '@/utils/photoStorage';
 import {
   ListPageLayout,
   NameUsernameDialog,
+  PlayerCard,
 } from '@/components/common';
 import { useSelection } from '@/hooks/useSelection';
 import { useListPage } from '@/hooks/useListPage';
@@ -19,6 +18,10 @@ export default function PlayersScreen() {
   const [players, setPlayers] = useState<User[]>([]);
   const [playerRoundsCount, setPlayerRoundsCount] = useState<Map<string, number>>(new Map());
   const [playerCoursesCount, setPlayerCoursesCount] = useState<Map<string, number>>(new Map());
+  const [playerWinsCount, setPlayerWinsCount] = useState<Map<string, number>>(new Map());
+  const [playerTotalThrows, setPlayerTotalThrows] = useState<Map<string, number>>(new Map());
+  const [playerHolesCount, setPlayerHolesCount] = useState<Map<string, number>>(new Map());
+  const [photosByPlayer, setPhotosByPlayer] = useState<Map<string, string[]>>(new Map());
   const [newPlayerDialogVisible, setNewPlayerDialogVisible] = useState(false);
   
   const loadPlayers = useCallback(async () => {
@@ -29,8 +32,17 @@ export default function PlayersScreen() {
       const allRounds = await getAllRounds();
       const roundsCountMap = new Map<string, number>();
       const coursesCountMap = new Map<string, number>();
+      const winsCountMap = new Map<string, number>();
+      const totalThrowsMap = new Map<string, number>();
+      const holesCountMap = new Map<string, number>();
+      const photosMap = new Map<string, string[]>();
       
-      loadedPlayers.forEach(player => {
+      // Load photos and stats for all players
+      await Promise.all(loadedPlayers.map(async (player) => {
+        // Load photos for this player
+        const photos = await loadPhotosByStorageKey(player.id);
+        photosMap.set(player.id, photos);
+        
         const playerRounds = allRounds.filter(round => {
           return round.players.some(p => p.id === player.id) && round.scores && round.scores.length > 0;
         });
@@ -38,16 +50,46 @@ export default function PlayersScreen() {
         roundsCountMap.set(player.id, playerRounds.length);
         
         const uniqueCourses = new Set<string>();
+        let wins = 0;
+        let totalThrows = 0;
+        let holesPlayed = 0;
+        
         playerRounds.forEach(round => {
           if (round.courseName) {
             uniqueCourses.add(round.courseName.trim());
           }
+          
+          // Calculate player's total throws for this round
+          const playerScores = round.scores?.filter(s => s.playerId === player.id) || [];
+          const playerTotal = playerScores.reduce((sum, s) => sum + s.throws, 0);
+          totalThrows += playerTotal;
+          holesPlayed += playerScores.length;
+          
+          // Check if player won this round (lowest score)
+          if (round.scores && round.players && round.scores.length > 0) {
+            const allPlayerTotals = round.players.map(p => {
+              const scores = round.scores!.filter(s => s.playerId === p.id);
+              return scores.reduce((sum, s) => sum + s.throws, 0);
+            });
+            const minScore = Math.min(...allPlayerTotals);
+            if (playerTotal === minScore && playerTotal > 0) {
+              wins++;
+            }
+          }
         });
+        
         coursesCountMap.set(player.id, uniqueCourses.size);
-      });
+        winsCountMap.set(player.id, wins);
+        totalThrowsMap.set(player.id, totalThrows);
+        holesCountMap.set(player.id, holesPlayed);
+      }));
       
       setPlayerRoundsCount(roundsCountMap);
       setPlayerCoursesCount(coursesCountMap);
+      setPlayerWinsCount(winsCountMap);
+      setPlayerTotalThrows(totalThrowsMap);
+      setPlayerHolesCount(holesCountMap);
+      setPhotosByPlayer(photosMap);
     } catch (error) {
       console.error('Error loading players:', error);
     }
@@ -115,75 +157,33 @@ export default function PlayersScreen() {
     }
   }, [loadPlayers, listPage]);
 
-
-  const theme = useTheme();
-
   const renderPlayerItem = useCallback(
     ({ item }: { item: User }) => {
       const isSelected = selection.isSelected(item.id);
       const roundsCount = playerRoundsCount.get(item.id) || 0;
       const coursesCount = playerCoursesCount.get(item.id) || 0;
+      const winsCount = playerWinsCount.get(item.id) || 0;
+      const totalThrows = playerTotalThrows.get(item.id) || 0;
+      const holesCount = playerHolesCount.get(item.id) || 0;
+      const photos = photosByPlayer.get(item.id) || [];
       
       return (
-        <TouchableOpacity
+        <PlayerCard
+          player={item}
+          photos={photos}
+          showPhotos={true}
+          isSelected={isSelected}
+          roundsCount={roundsCount}
+          coursesCount={coursesCount}
+          winsCount={winsCount}
+          totalThrows={totalThrows}
+          holesCount={holesCount}
           onPress={() => handlePlayerPress(item.id)}
           onLongPress={() => handlePlayerLongPress(item.id)}
-          delayLongPress={300}
-          {...(Platform.OS === 'web' ? {
-            onContextMenu: (e: any) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handlePlayerLongPress(item.id);
-            }
-          } : {})}
-        >
-          <Card style={[
-            listPageStyles.card, 
-            getShadowStyle(2),
-            isSelected && { backgroundColor: theme.colors.primaryContainer }
-          ]}>
-            <Card.Content>
-              <View style={listPageStyles.cardHeader}>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.nameRow}>
-                    <Title style={listPageStyles.cardTitle}>{item.name}</Title>
-                    {item.isCurrentUser && (
-                      <Chip 
-                        style={styles.currentUserChip} 
-                        textStyle={styles.currentUserChipText}
-                        compact
-                      >
-                        You
-                      </Chip>
-                    )}
-                  </View>
-                  {(roundsCount > 0 || coursesCount > 0) && (
-                    <View style={styles.statsRow}>
-                      {roundsCount > 0 && (
-                        <Text style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                          {roundsCount} {roundsCount === 1 ? 'round' : 'rounds'}
-                        </Text>
-                      )}
-                      {roundsCount > 0 && coursesCount > 0 && (
-                        <Text style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                          {' • '}
-                        </Text>
-                      )}
-                      {coursesCount > 0 && (
-                        <Text style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                          {coursesCount} {coursesCount === 1 ? 'course' : 'courses'}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-                </View>
-              </View>
-            </Card.Content>
-          </Card>
-        </TouchableOpacity>
+        />
       );
     },
-    [handlePlayerPress, handlePlayerLongPress, selection, playerRoundsCount, playerCoursesCount, theme.colors.primaryContainer, theme.colors.onSurfaceVariant]
+    [handlePlayerPress, handlePlayerLongPress, selection, playerRoundsCount, playerCoursesCount, playerWinsCount, playerTotalThrows, playerHolesCount, photosByPlayer]
   );
 
   return (
@@ -218,35 +218,3 @@ export default function PlayersScreen() {
     </ListPageLayout>
   );
 }
-
-const styles = {
-  nameRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 8,
-  },
-  statsRow: {
-    flexDirection: 'row' as const,
-    marginTop: 4,
-  },
-  statText: {
-    fontSize: 14,
-  },
-  currentUserChip: {
-    height: 18,
-    minHeight: 18,
-    maxHeight: 18,
-    paddingHorizontal: 6,
-    paddingVertical: 0,
-    marginLeft: 6,
-    marginVertical: 0,
-    alignSelf: 'center',
-  },
-  currentUserChipText: {
-    fontSize: 10,
-    lineHeight: 14,
-    paddingVertical: 0,
-    marginVertical: 0,
-    height: 14,
-  },
-};

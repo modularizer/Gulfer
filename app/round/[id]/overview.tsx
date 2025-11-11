@@ -7,6 +7,7 @@ import PhotoGallery from '@/components/common/PhotoGallery';
 import CourseSelector from '@/components/common/CourseSelector';
 import PlayerChip from '@/components/common/PlayerChip';
 import NameUsernameDialog from '@/components/common/NameUsernameDialog';
+import NotesSection from '@/components/common/NotesSection';
 import { getRoundById, saveRound, generateRoundTitle } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
@@ -770,23 +771,11 @@ export default function RoundOverviewScreen() {
         />
 
         {/* Notes Section */}
-        <View style={styles.notesSection}>
-          <Text style={[styles.notesTitle, { color: theme.colors.onSurface }]}>
-            Notes
-          </Text>
-          <TextInput
-            mode="flat"
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Add any notes about this round..."
-            multiline
-            numberOfLines={3}
-            style={styles.notesInput}
-            contentStyle={styles.notesContent}
-            underlineColor="transparent"
-            activeUnderlineColor={theme.colors.primary}
-          />
-        </View>
+        <NotesSection
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Add any notes about this round..."
+        />
       </ScrollView>
 
       {/* Date/Time Picker Dialogs */}
@@ -1095,25 +1084,6 @@ const styles = StyleSheet.create({
   inputContent: {
     fontSize: 16,
     paddingVertical: 8,
-  },
-  notesSection: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-  notesTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    marginBottom: 0,
-  },
-  notesInput: {
-    backgroundColor: 'transparent',
-    marginTop: 8,
-  },
-  notesContent: {
-    fontSize: 16,
-    paddingVertical: 8,
-    paddingTop: 0,
   },
   startButton: {
     marginHorizontal: 24,

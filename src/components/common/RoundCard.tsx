@@ -4,13 +4,14 @@
  */
 
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, TouchableOpacity, Platform } from 'react-native';
 import { Card, Text, Chip, useTheme } from 'react-native-paper';
 import { Round, Player } from '../../types';
 import { getShadowStyle } from '../../utils';
 import PlayerChip from './PlayerChip';
 import HashedImage from './HashedImage';
 import { router } from 'expo-router';
+import { sharedCardStyles } from './sharedCardStyles';
 
 interface RoundCardProps {
   round: Round;
@@ -81,20 +82,20 @@ export default function RoundCard({
       } : {})}
     >
       <Card style={[
-        styles.card, 
+        sharedCardStyles.card, 
         { backgroundColor: isSelected ? theme.colors.primaryContainer : theme.colors.surface }, 
         getShadowStyle(2)
       ]}>
         <Card.Content>
-          <View style={styles.header}>
-            <Text style={[styles.date, { color: theme.colors.onSurface }]}>
-              <Text style={styles.boldText}>
+          <View style={sharedCardStyles.header}>
+            <Text style={[sharedCardStyles.date, { color: theme.colors.onSurface }]}>
+              <Text style={sharedCardStyles.boldText}>
                 {dateStr} {timeStr}
               </Text>
               {showCourse && round.courseName && (
                 <>
                   {' '}
-                  <Text style={styles.normalText}>
+                  <Text style={sharedCardStyles.normalText}>
                     @ {round.courseName} {courseHoleCount && courseHoleCount > 0 && `(${courseHoleCount} ⛳)`}
                   </Text>
                 </>
@@ -102,31 +103,29 @@ export default function RoundCard({
             </Text>
           </View>
 
-          {showPhotos && round.photos && round.photos.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.imagesContainer}
-              contentContainerStyle={styles.imagesContent}
-            >
-              {round.photos.slice(0, 3).map((hash) => (
+          {(showPhotos && round.photos && round.photos.length > 0) || round.notes ? (
+            <View style={sharedCardStyles.photoNotesRow}>
+              {showPhotos && round.photos && round.photos.length > 0 && (
                 <HashedImage
-                  key={hash}
-                  hash={hash}
-                  style={styles.roundImage}
+                  hash={round.photos[0]}
+                  style={sharedCardStyles.image}
                   contentFit="cover"
                 />
-              ))}
-              {round.photos.length > 3 && (
-                <View style={[styles.roundImage, styles.moreImagesOverlay]}>
-                  <Text style={styles.moreImagesText}>+{round.photos.length - 3}</Text>
-                </View>
               )}
-            </ScrollView>
-          )}
+              {round.notes && (
+                <Text 
+                  style={[sharedCardStyles.notesText, { color: theme.colors.onSurfaceVariant }]}
+                  numberOfLines={3}
+                  ellipsizeMode="tail"
+                >
+                  {round.notes}
+                </Text>
+              )}
+            </View>
+          ) : null}
 
           {playerScores.length > 0 && (
-            <View style={styles.playersContainer}>
+            <View style={sharedCardStyles.playersContainer}>
               {playerScores.map(({ player, total }) => {
                 const isWinner = winner && player.id === winner.player.id;
                 return (
@@ -146,50 +145,4 @@ export default function RoundCard({
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    marginBottom: 8,
-  },
-  header: {
-    marginBottom: 8,
-  },
-  date: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  boldText: {
-    fontWeight: 'bold',
-  },
-  normalText: {
-    fontWeight: 'normal',
-    fontSize: 12,
-  },
-  playersContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  imagesContainer: {
-    marginBottom: 8,
-  },
-  imagesContent: {
-    gap: 8,
-  },
-  roundImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-  },
-  moreImagesOverlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  moreImagesText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-});
 
