@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -5,6 +6,88 @@ import { useEffect, useRef } from 'react';
 /**
  * PWA utilities for service worker registration and route caching
  */
+
+const LAST_PAGE_STORAGE_KEY = 'gulfer-last-page';
+
+const normalizeBasePath = (basePath?: string | null): string => {
+  if (!basePath || basePath === '/') {
+    return '';
+  }
+
+  const trimmed = basePath.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeading.endsWith('/') ? withLeading.slice(0, -1) : withLeading;
+};
+
+const getBasePath = (): string => {
+  if (Platform.OS !== 'web') {
+    return '';
+  }
+
+  const configBase = normalizeBasePath(Constants.expoConfig?.experiments?.baseUrl as string | undefined);
+
+  if (configBase) {
+    return configBase;
+  }
+
+  if (typeof process !== 'undefined' && process.env) {
+    const envCandidates = [
+      process.env.EXPO_PUBLIC_BASE_PATH,
+      process.env.EXPO_PUBLIC_BASE_URL,
+      process.env.PUBLIC_URL,
+    ];
+
+    for (const candidate of envCandidates) {
+      const normalized = normalizeBasePath(candidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
+  return '';
+};
+
+const addBasePath = (relativePath: string, basePath: string): string => {
+  if (!relativePath) {
+    return basePath ? `${basePath}/` : '/';
+  }
+
+  if (!basePath) {
+    return relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  }
+
+  const sanitizedRelative = relativePath.startsWith('/')
+    ? relativePath
+    : `/${relativePath}`;
+
+  return `${basePath}${sanitizedRelative}`;
+};
+
+const stripBasePath = (pathname: string, basePath: string): string => {
+  if (!pathname) {
+    return '/';
+  }
+
+  if (!basePath) {
+    return pathname;
+  }
+
+  if (!pathname.startsWith(basePath)) {
+    return pathname;
+  }
+
+  const stripped = pathname.slice(basePath.length);
+  if (!stripped) {
+    return '/';
+  }
+
+  return stripped.startsWith('/') ? stripped : `/${stripped}`;
+};
 
 // Register service worker on web platform
 export function registerServiceWorker() {
@@ -14,9 +97,12 @@ export function registerServiceWorker() {
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      // Use absolute path to ensure it works from any route
+      const basePath = getBasePath();
+      const scope = basePath ? `${basePath}/` : '/';
+      const swPath = `${basePath || ''}/sw.js`;
+
       navigator.serviceWorker
-        .register('/sw.js', { updateViaCache: 'none' })
+        .register(swPath, { updateViaCache: 'none', scope })
         .then((registration) => {
           console.log('Service Worker registered:', registration.scope);
           
@@ -52,7 +138,33 @@ export function getLastVisitedPage(): string | null {
   }
 
   try {
-    return localStorage.getItem('gulfer-last-page');
+    const stored = localStorage.getItem(LAST_PAGE_STORAGE_KEY);
+    if (!stored) {
+      return null;
+    }
+
+    const basePath = getBasePath();
+
+    // Backwards compatibility: older versions stored absolute paths
+    if (basePath && stored.startsWith(basePath)) {
+      return stripBasePath(stored, basePath);
+    }
+
+    // Also handle accidental absolute paths without base path
+    if (stored.startsWith('http')) {
+      try {
+        const storedUrl = new URL(stored);
+        return stripBasePath(storedUrl.pathname + storedUrl.search, basePath);
+      } catch {
+        return null;
+      }
+    }
+
+    if (!stored.startsWith('/')) {
+      return `/${stored}`;
+    }
+
+    return stored;
   } catch (error) {
     console.log('Error getting last visited page:', error);
     return null;
@@ -68,14 +180,19 @@ export function cacheCurrentPage(url: string) {
   try {
     // Store just the pathname for routing
     const urlObj = new URL(url);
-    localStorage.setItem('gulfer-last-page', urlObj.pathname + urlObj.search);
+    const basePath = getBasePath();
+    const relativePathname = stripBasePath(urlObj.pathname, basePath);
+    const relativePathWithSearch = `${relativePathname}${urlObj.search}`;
+
+    localStorage.setItem(LAST_PAGE_STORAGE_KEY, relativePathWithSearch);
     
     // Also notify service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then((registration) => {
+        const absolutePathForServiceWorker = `${addBasePath(relativePathname, basePath)}${urlObj.search}`;
         registration.active?.postMessage({
           type: 'CACHE_CURRENT_PAGE',
-          url: urlObj.pathname + urlObj.search,
+          url: absolutePathForServiceWorker,
         });
       });
     }
@@ -98,9 +215,13 @@ export function usePWARouteCache() {
     if (!hasRestoredRef.current) {
       hasRestoredRef.current = true;
       const lastPage = getLastVisitedPage();
-      if (lastPage && lastPage !== window.location.pathname && lastPage !== '/') {
+      const basePath = getBasePath();
+      const currentPathname = stripBasePath(window.location.pathname, basePath);
+      const currentPathWithSearch = `${currentPathname}${window.location.search}`;
+
+      if (lastPage && lastPage !== currentPathWithSearch && lastPage !== '/') {
         // Only navigate if we're on the root page and have a cached page
-        if (window.location.pathname === '/') {
+        if (currentPathname === '/') {
           router.replace(lastPage as any);
         }
       }

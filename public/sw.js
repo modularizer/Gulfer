@@ -4,20 +4,33 @@
 // - JavaScript bundles: Cache-first with background update (100% offline, fresh when online)
 // - Other assets: Cache-first (fast), fallback to network, then graceful error
 // All successful responses are cached for offline use
-const CACHE_NAME = 'gulfer-v3';
-const RUNTIME_CACHE = 'gulfer-runtime-v3';
+const CACHE_NAME = 'gulfer-v4';
+const RUNTIME_CACHE = 'gulfer-runtime-v4';
 const CURRENT_PAGE_KEY = 'gulfer-current-page';
+const SCOPE_URL = new URL(self.registration?.scope ?? self.location.href);
+
+const resolveWithScope = (path) => {
+  try {
+    return new URL(path, SCOPE_URL).toString();
+  } catch (error) {
+    console.warn('Service worker failed to resolve scoped path', path, error);
+    return path;
+  }
+};
+
+const OFFLINE_URL = resolveWithScope('./');
+const PRECACHE_URLS = [
+  OFFLINE_URL,
+  resolveWithScope('favicon.png'),
+  resolveWithScope('favicon.svg'),
+];
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       // Cache will be populated as pages are visited
-      return cache.addAll([
-        '/',
-        '/favicon.png',
-        '/favicon.svg'
-      ]).catch((err) => {
+      return cache.addAll(PRECACHE_URLS).catch((err) => {
         console.log('Cache install error:', err);
       });
     })
@@ -54,7 +67,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
 
   // Skip cross-origin requests
-  if (url.origin !== location.origin) {
+  if (url.origin !== SCOPE_URL.origin) {
     return;
   }
 
@@ -102,7 +115,7 @@ self.addEventListener('fetch', (event) => {
               return response;
             }
             // If not in cache, return index.html for SPA routing
-            return caches.match('/');
+            return caches.match(OFFLINE_URL);
           });
         })
     );
@@ -240,10 +253,10 @@ self.addEventListener('fetch', (event) => {
               }
               // For favicons, try alternative paths
               if (isFavicon) {
-                const altPaths = ['/favicon.png', '/favicon.svg'];
-                return Promise.all(altPaths.map(altPath => {
-                  if (url.pathname !== altPath) {
-                    const altRequest = new Request(altPath);
+                const altUrls = ['favicon.png', 'favicon.svg'].map((asset) => new URL(asset, SCOPE_URL));
+                return Promise.all(altUrls.map((altUrl) => {
+                  if (url.pathname !== altUrl.pathname) {
+                    const altRequest = new Request(altUrl.toString());
                     return installCache.match(altRequest);
                   }
                   return Promise.resolve(null);
@@ -310,10 +323,10 @@ self.addEventListener('fetch', (event) => {
                   return cachedFavicon;
                 }
                 // Try alternative favicon paths
-                const altPaths = ['/favicon.png', '/favicon.svg'];
-                return Promise.all(altPaths.map(altPath => {
-                  if (errorUrl.pathname !== altPath) {
-                    const altRequest = new Request(altPath);
+                const altUrls = ['favicon.png', 'favicon.svg'].map((asset) => new URL(asset, SCOPE_URL));
+                return Promise.all(altUrls.map((altUrl) => {
+                  if (errorUrl.pathname !== altUrl.pathname) {
+                    const altRequest = new Request(altUrl.toString());
                     return installCache.match(altRequest);
                   }
                   return Promise.resolve(null);
