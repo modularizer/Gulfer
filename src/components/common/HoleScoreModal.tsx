@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { Text, TextInput, Dialog, Portal, IconButton, Button } from 'react-native-paper';
+import { Text, TextInput, Dialog, Portal, IconButton, Button, useTheme } from 'react-native-paper';
 import { Player } from '@/types';
-import { useDialogStyle } from '../../hooks/useDialogStyle';
+import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 interface HoleScoreModalProps {
   visible: boolean;
@@ -33,9 +33,107 @@ export default function HoleScoreModal({
 }: HoleScoreModalProps) {
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Map<string, string>>(new Map());
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const inputRefs = useRef<Map<string, any>>(new Map());
   const pendingSavesRef = useRef<Map<string, { playerId: string; holeNumber: number; expectedScore: number }>>(new Map());
   const shouldAdvanceRef = useRef<{ playerId: string; action: 'advance' | 'close' } | null>(null);
+  const theme = useTheme();
+
+  const getScore = (playerId: string): number => {
+    return scores.get(playerId) || 0;
+  };
+
+  // Generate funny message based on scores
+  const generateSuccessMessage = (): string => {
+    const playerScores = players.map(player => ({
+      player,
+      score: scores.get(String(player.id)) || 0
+    })).filter(x => x.score > 0);
+    if (!playerScores.length){
+        return "";
+    }
+
+  const allScores = playerScores.map(p => p.score);
+  const allSame = allScores.every(score => score === allScores[0]);
+  const minScore = Math.min(...allScores);
+  const winners = playerScores.filter(p => p.score === minScore);
+  const winnerCount = winners.length;
+  const winnerNames = winners.map(p => p.player.name);
+  const w = winnerCount > 2 ? `${winnerNames.slice(0,winnerCount - 1).join(',')}, and ${winnerNames[winnerCount - 1]}`:winnerNames.join(' and ');
+  const maxScore = Math.max(...allScores);
+  const scoreDiff = maxScore - minScore;
+
+    // Check for ace (score of 1)
+    if (minScore === 1) {
+      if (winnerCount === 1) {
+        return `🎉🎉🎉 ACE!!! ${w} GOT AN ACE!!! 🎉🎉🎉`;
+      } else if (winnerCount === 2) {
+          return `🎉🎉🎉 MULTIPLE ACES!!! ${w} BOTH GOT ACES!!! 🎉🎉🎉`;
+      } else {
+        return `🎉🎉🎉 MULTIPLE ACES!!! ${w} ALL GOT ACES!!! 🎉🎉🎉`;
+      }
+    }
+      if (minScore === 2) {
+          if (winnerCount === 1) {
+              return `🎉🎉 AMAZING!!! ${w} GOT A 2! 🎉🎉`;
+          } else if (winnerCount === 2) {
+              return `🎉🎉 INCREDIBLE! ${w} BOTH 2s! 🎉🎉`;
+          } else {
+              return `🎉🎉 INCREDIBLE! ${w} ALL GOT 2s! 🎉🎉`;
+          }
+      }
+
+      if (minScore >= 6) {
+          return "Tough one, huh? 😅";
+      }
+
+
+      // Check if all tied
+    if (allSame && winnerCount > 1) {
+        if (winnerCount == 2){
+            return "Tie! 🤝";
+        }
+        if (winnerCount === numPlayers){
+            return "Tie across the board! 🤝";
+        }
+    }else if (winnerCount > 1){
+        return `Tie! Congrats to ${w} 🤝`;
+    }
+
+    // Check if all scores are 3-4
+    const allThreeOrFour = (minScore >= 3) && (maxScore <= 4);
+    if (allThreeOrFour) {
+      return "Very nice! 👍";
+    }
+
+
+    // Check if within one
+    if (scoreDiff === 1) {
+      return `Close One! Nice job ${w} 🔥`;
+    }
+
+    // 2+ apart - congratulate winner(s)
+    if (winnerCount === 1) {
+      return `🎉 ${w} wins this hole! 🎉`;
+    } else {
+      return `🎉 ${w} tie for the win! 🎉`;
+    }
+  };
+
+  const handleShowSuccess = () => {
+    const message = generateSuccessMessage();
+    setSuccessMessage(message);
+    if (message) {
+        setShowSuccess(true);
+
+        // Close after 1 second
+        setTimeout(() => {
+            setShowSuccess(false);
+            onDismiss();
+        }, 1000);
+    }
+  };
   
   // Watch for score updates to confirm saves - this is the reactive confirmation
   useEffect(() => {
@@ -83,12 +181,13 @@ export default function HoleScoreModal({
             onScoreChange(playerId, holeNumber, num);
           }
         });
-        onDismiss();
+        // Show success message before closing
+        handleShowSuccess();
       } else {
         setActivePlayerId(action.playerId);
       }
     }
-  }, [scores, players, editValues, min, max, holeNumber, onScoreChange, onDismiss]);
+  }, [scores, players, editValues, min, max, holeNumber, onScoreChange, onDismiss, handleShowSuccess]);
   
   // Focus input when active player changes - reactive, no timeouts
   useEffect(() => {
@@ -128,9 +227,12 @@ export default function HoleScoreModal({
           }
         }
       }
+      // Reset success state when modal opens
+      setShowSuccess(false);
     } else {
       // Reset when modal closes
       lastHoleRef.current = null;
+      setShowSuccess(false);
     }
   }, [visible, holeNumber, players, initialActivePlayerId, scores]);
 
@@ -167,7 +269,7 @@ export default function HoleScoreModal({
         const currentIndex = players.findIndex(p => String(p.id) === normalizedPlayerId);
         if (currentIndex >= 0) {
           if (currentIndex === players.length - 1) {
-            handleClose();
+            handleShowSuccess();
           } else {
             const nextPlayerId = String(players[currentIndex + 1].id);
             setActivePlayerId(nextPlayerId);
@@ -220,8 +322,8 @@ export default function HoleScoreModal({
     // Check if we're on the rightmost player
     const currentIndex = players.findIndex(p => String(p.id) === playerId);
     if (currentIndex >= 0 && currentIndex === players.length - 1) {
-      // We're on the rightmost player, close the modal
-      handleClose();
+      // We're on the rightmost player, show success then close
+      handleShowSuccess();
     } else {
       // Advance to the next player
       if (currentIndex >= 0 && currentIndex < players.length - 1) {
@@ -239,12 +341,8 @@ export default function HoleScoreModal({
         onScoreChange(playerId, holeNumber, num);
       }
     });
-    onDismiss();
-  };
-
-
-  const getScore = (playerId: string): number => {
-    return scores.get(playerId) || 0;
+    // Show success message before closing
+    handleShowSuccess();
   };
 
   // Calculate responsive cell width
@@ -278,72 +376,89 @@ export default function HoleScoreModal({
           />
         </View>
         <Dialog.Content>
-          <View style={styles.tableContainer}>
-            <View style={styles.tableRow}>
-              {/* Player column headers */}
-              {players.map((player) => (
-                <View 
-                  key={player.id} 
-                  style={[
-                    styles.cell, 
-                    styles.headerCell,
-                    { width: cellWidth, minWidth: cellWidth, maxWidth: cellWidth }
-                  ]}
-                >
-                  <Text style={styles.headerText}>{player.name}</Text>
-                </View>
-              ))}
+          {showSuccess ? (
+            <View style={styles.successContainer}>
+              <View style={styles.successHeader}>
+                <IconButton
+                  icon="check-circle"
+                  iconColor={theme.colors.primary}
+                  size={32}
+                  style={styles.checkIcon}
+                />
+                <Text style={styles.successTitle}>
+                  Recorded scores for hole #{holeNumber}
+                </Text>
+              </View>
+              <Text style={styles.successMessage}>{successMessage}</Text>
             </View>
-            <View style={styles.tableRow}>
-              {/* Player score cells */}
-              {players.map((player, index) => {
-                const playerId = String(player.id);
-                const isActive = activePlayerId === playerId;
-                const editValue = editValues.get(playerId) || getScore(playerId).toString();
-                const isLastPlayer = index === players.length - 1;
-                
-                return (
-                  <TouchableOpacity
-                    key={player.id}
+          ) : (
+            <View style={styles.tableContainer}>
+              <View style={styles.tableRow}>
+                {/* Player column headers */}
+                {players.map((player) => (
+                  <View 
+                    key={player.id} 
                     style={[
-                      styles.cell,
-                      styles.scoreCell,
-                      isActive && styles.activeCell,
+                      styles.cell, 
+                      styles.headerCell,
                       { width: cellWidth, minWidth: cellWidth, maxWidth: cellWidth }
                     ]}
-                    onPress={() => handleCellPress(playerId)}
                   >
-                    <TextInput
-                      ref={(ref: any) => {
-                        if (ref) {
-                          inputRefs.current.set(playerId, ref);
-                        }
-                      }}
-                      mode="outlined"
-                      value={editValue}
-                      onChangeText={(text) => handleValueChange(playerId, text)}
-                      keyboardType="numeric"
-                      maxLength={1}
-                      autoFocus={isActive && visible}
-                      selectTextOnFocus
-                      style={[styles.input, { width: inputWidth }]}
-                      contentStyle={styles.inputContent}
-                      textAlign="center"
-                      dense
-                      returnKeyType={isLastPlayer ? "done" : "next"}
-                      onFocus={() => {
-                        // ALWAYS set as active when focused - no exceptions
-                        setActivePlayerId(playerId);
-                        console.log('[HoleScoreModal] Cell focused, setting active:', playerId);
-                      }}
-                      onBlur={() => handleBlur(playerId)}
-                      onSubmitEditing={() => handleSubmit(playerId)}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
+                    <Text style={styles.headerText}>{player.name}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={styles.tableRow}>
+                {/* Player score cells */}
+                {players.map((player, index) => {
+                  const playerId = String(player.id);
+                  const isActive = activePlayerId === playerId;
+                  const editValue = editValues.get(playerId) || getScore(playerId).toString();
+                  const isLastPlayer = index === players.length - 1;
+                  
+                  return (
+                    <TouchableOpacity
+                      key={player.id}
+                      style={[
+                        styles.cell,
+                        styles.scoreCell,
+                        isActive && styles.activeCell,
+                        { width: cellWidth, minWidth: cellWidth, maxWidth: cellWidth }
+                      ]}
+                      onPress={() => handleCellPress(playerId)}
+                    >
+                      <TextInput
+                        ref={(ref: any) => {
+                          if (ref) {
+                            inputRefs.current.set(playerId, ref);
+                          }
+                        }}
+                        mode="outlined"
+                        value={editValue}
+                        onChangeText={(text) => handleValueChange(playerId, text)}
+                        keyboardType="numeric"
+                        maxLength={1}
+                        autoFocus={isActive && visible}
+                        selectTextOnFocus
+                        style={[styles.input, { width: inputWidth }]}
+                        contentStyle={styles.inputContent}
+                        textAlign="center"
+                        dense
+                        returnKeyType={isLastPlayer ? "done" : "next"}
+                        onFocus={() => {
+                          // ALWAYS set as active when focused - no exceptions
+                          setActivePlayerId(playerId);
+                          console.log('[HoleScoreModal] Cell focused, setting active:', playerId);
+                        }}
+                        onBlur={() => handleBlur(playerId)}
+                        onSubmitEditing={() => handleSubmit(playerId)}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
-          </View>
+          )}
         </Dialog.Content>
       </Dialog>
     </Portal>
@@ -412,6 +527,31 @@ const styles = StyleSheet.create({
   inputContent: {
     textAlign: 'center',
     paddingHorizontal: 0,
+  },
+  successContainer: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  checkIcon: {
+    margin: 0,
+    marginRight: 8,
+  },
+  successTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  successMessage: {
+    fontSize: 16,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    lineHeight: 24,
   },
 });
 
