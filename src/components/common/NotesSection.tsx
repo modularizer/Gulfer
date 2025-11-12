@@ -3,7 +3,7 @@
  * Reusable editable notes section for rounds, courses, players, etc.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, TextInput, useTheme } from 'react-native-paper';
 
@@ -19,6 +19,7 @@ export default function NotesSection({
   placeholder = 'Add any notes...',
 }: NotesSectionProps) {
   const theme = useTheme();
+  const [inputHeight, setInputHeight] = useState(60);
 
   return (
     <View style={styles.notesSection}>
@@ -31,11 +32,16 @@ export default function NotesSection({
         onChangeText={onChangeText}
         placeholder={placeholder}
         multiline
-        numberOfLines={3}
-        style={styles.notesInput}
+        style={[styles.notesInput, { height: Math.max(inputHeight, 140), marginBottom: - 70 }]}
         contentStyle={styles.notesContent}
         underlineColor="transparent"
         activeUnderlineColor={theme.colors.primary}
+        scrollEnabled={false}
+        dense={false}
+        onContentSizeChange={(event) => {
+          const { height } = event.nativeEvent.contentSize;
+          setInputHeight(height);
+        }}
       />
     </View>
   );
@@ -55,6 +61,7 @@ const styles = StyleSheet.create({
   notesInput: {
     backgroundColor: 'transparent',
     marginTop: 8,
+    minHeight: 90, // Minimum height of 60px
   },
   notesContent: {
     fontSize: 16,

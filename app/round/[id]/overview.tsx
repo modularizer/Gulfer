@@ -24,7 +24,6 @@ if (Platform.OS !== 'web') {
   DateTimePicker = require('@react-native-community/datetimepicker').default;
 }
 
-const { width, height } = Dimensions.get('window');
 
 // Round minutes to nearest 5-minute increment
 const roundToNearest5Minutes = (minutes: number): number => {
@@ -675,48 +674,32 @@ export default function RoundOverviewScreen() {
           <TouchableOpacity 
             onPress={() => setShowDatePicker(true)}
             activeOpacity={0.7}
-            style={styles.dateTimeRow}
+            style={[styles.dateTimeRow, styles.dateRow]}
           >
-            <View style={styles.dateTimeContent}>
-              <IconButton
-                icon="calendar"
-                size={20}
-                iconColor={theme.colors.primary}
-                style={styles.dateIcon}
-              />
-              <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>
-                {formatDate(selectedDate)}
-              </Text>
-              <IconButton
-                icon="pencil"
-                size={18}
-                iconColor={theme.colors.onSurfaceVariant}
-                style={styles.editIcon}
-              />
-            </View>
+            <IconButton
+              icon="calendar"
+              size={18}
+              iconColor={theme.colors.primary}
+              style={styles.dateIcon}
+            />
+            <Text style={[styles.dateText, { color: theme.colors.onSurface }]} numberOfLines={1}>
+              {formatDate(selectedDate)}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity 
             onPress={() => setShowTimePicker(true)}
             activeOpacity={0.7}
-            style={styles.dateTimeRow}
+            style={[styles.dateTimeRow, styles.timeRow]}
           >
-            <View style={styles.dateTimeContent}>
-              <IconButton
-                icon="clock-outline"
-                size={20}
-                iconColor={theme.colors.primary}
-                style={styles.dateIcon}
-              />
-              <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>
-                {formatTime(selectedDate)}
-              </Text>
-              <IconButton
-                icon="pencil"
-                size={18}
-                iconColor={theme.colors.onSurfaceVariant}
-                style={styles.editIcon}
-              />
-            </View>
+            <IconButton
+              icon="clock-outline"
+              size={18}
+              iconColor={theme.colors.primary}
+              style={styles.dateIcon}
+            />
+            <Text style={[styles.dateText, { color: theme.colors.onSurface }]} numberOfLines={1}>
+              {formatTime(selectedDate)}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -885,7 +868,7 @@ export default function RoundOverviewScreen() {
             >
               <View style={styles.scorecardPreview}>
                 <View style={styles.scorecardPreviewInner}>
-                  <View style={{ height: 300, width: '100%' }}>
+                  <View style={{ height: 400, width: '100%' }}>
                     <Scorecard
                       players={players}
                       holes={(() => {
@@ -1135,8 +1118,8 @@ const styles = StyleSheet.create({
   },
   scorecardPreview: {
     overflow: 'hidden', // Keep hidden to clip content properly
-    height: 300, // Increased to show up to 5 rows (header 34px + 5 rows 170px + total row 34px + padding ~62px)
-    maxHeight: 300,
+    height: 400, // Increased to show up to 5 rows (header 34px + 5 rows 170px + total row 34px + padding ~62px)
+    maxHeight: 400,
     // width: '100%',
     marginLeft: -7,
     marginRight: -9, // Reserve space on right to clip 7px
@@ -1144,8 +1127,8 @@ const styles = StyleSheet.create({
   scorecardPreviewInner: {
     overflow: 'hidden', // Keep hidden to clip content properly
     width: '100%',
-    height: 300, // Explicit height instead of 100% to ensure Scorecard gets proper dimensions
-    minHeight: 300, // Force minimum height to ensure all rows render
+    height: 400, // Explicit height instead of 100% to ensure Scorecard gets proper dimensions
+    minHeight: 400, // Force minimum height to ensure all rows render
   },
   opacityGradientOverlay: {
     position: 'absolute',
@@ -1205,13 +1188,25 @@ const styles = StyleSheet.create({
   },
   dateSection: {
     paddingHorizontal: 18,
-    paddingTop: 12,
+    paddingTop: 7, // Reduced from 12 to reduce space above time by 5px
     paddingBottom: 0,
-    gap: 8,
-    flexDirection: 'column',
+    flexDirection: 'row', // Changed to row to put date and time side by side
+    alignItems: 'center',
+    gap: 8, // Space between date and time
   },
   dateTimeRow: {
-    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 1, // Allow shrinking if needed
+  },
+  dateRow: {
+    maxWidth: '60%', // Limit date to 60% of available width
+    flex: 1,
+  },
+  timeRow: {
+    maxWidth: '35%', // Limit time to 35% of available width
+    flexShrink: 0, // Don't shrink time
   },
   dateTimeContent: {
     flexDirection: 'row',
@@ -1227,10 +1222,10 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   dateText: {
-    fontSize: 16,
+    fontSize: 16, // Increased font size for better readability
     fontWeight: '600',
     letterSpacing: 0.5,
-    flex: 1,
+    flexShrink: 1, // Allow text to shrink if needed
   },
   editIcon: {
     margin: 0,
@@ -1252,6 +1247,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   playersSection: {
+    paddingTop: 16, // Add padding above players section
     paddingHorizontal: 24,
     paddingBottom: 24,
   },
@@ -1285,7 +1281,7 @@ const styles = StyleSheet.create({
   },
   inputSection: {
     paddingHorizontal: 18,
-    paddingTop: 12,
+    paddingTop: 2, // Reduced from 12 to reduce space above course selection by 10px
     paddingBottom: 12,
   },
   inputRow: {

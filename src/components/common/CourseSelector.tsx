@@ -261,8 +261,8 @@ export default function CourseSelector({
 const styles = StyleSheet.create({
   courseSelector: {
     borderBottomWidth: 1,
-    minHeight: 56,
-    height: 56,
+    minHeight: 40, // Reduced from 56 to reduce height
+    height: 40, // Reduced from 56 to reduce height
     justifyContent: 'center',
     width: '100%',
     minWidth: 300,
