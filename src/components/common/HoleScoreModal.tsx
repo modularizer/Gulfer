@@ -4,6 +4,8 @@ import { Text, TextInput, Dialog, Portal, IconButton, Button, useTheme } from 'r
 import { Player } from '@/types';
 import { useDialogStyle } from '@/hooks/useDialogStyle';
 
+const SUCCESS_MESSAGE_DURATION_MS = 1500;
+
 interface HoleScoreModalProps {
   visible: boolean;
   holeNumber: number;
@@ -16,6 +18,7 @@ interface HoleScoreModalProps {
   onNextHole?: (nextHoleNumber: number) => void;
   min?: number;
   max?: number;
+  allScores?: Array<{ playerId: string | number; holeNumber: number; throws: number }>; // All scores for calculating totals (Score[] format)
 }
 
 export default function HoleScoreModal({
@@ -30,11 +33,14 @@ export default function HoleScoreModal({
   onNextHole,
   min = 0,
   max = 9,
+  allScores,
 }: HoleScoreModalProps) {
   const [activePlayerId, setActivePlayerId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Map<string, string>>(new Map());
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [isClosing, setIsClosing] = useState(false);
+  const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRefs = useRef<Map<string, any>>(new Map());
   const pendingSavesRef = useRef<Map<string, { playerId: string; holeNumber: number; expectedScore: number }>>(new Map());
   const shouldAdvanceRef = useRef<{ playerId: string; action: 'advance' | 'close' } | null>(null);
@@ -67,20 +73,20 @@ export default function HoleScoreModal({
     // Check for ace (score of 1)
     if (minScore === 1) {
       if (winnerCount === 1) {
-        return `🎉🎉🎉 ACE!!! ${w} GOT AN ACE!!! 🎉🎉🎉`;
+        return `🎉🎉🎉 Ace! ${w} got an ace! 🎉🎉🎉`;
       } else if (winnerCount === 2) {
-          return `🎉🎉🎉 MULTIPLE ACES!!! ${w} BOTH GOT ACES!!! 🎉🎉🎉`;
+          return `🎉🎉🎉 Multiple aces! ${w} both got aces! 🎉🎉🎉`;
       } else {
-        return `🎉🎉🎉 MULTIPLE ACES!!! ${w} ALL GOT ACES!!! 🎉🎉🎉`;
+        return `🎉🎉🎉 Multiple aces! ${w} all got aces! 🎉🎉🎉`;
       }
     }
       if (minScore === 2) {
           if (winnerCount === 1) {
-              return `🎉🎉 AMAZING!!! ${w} GOT A 2! 🎉🎉`;
+              return `🎉🎉 Amazing! ${w} got a 2! 🎉🎉`;
           } else if (winnerCount === 2) {
-              return `🎉🎉 INCREDIBLE! ${w} BOTH 2s! 🎉🎉`;
+              return `🎉🎉 Incredible! ${w} both got 2s! 🎉🎉`;
           } else {
-              return `🎉🎉 INCREDIBLE! ${w} ALL GOT 2s! 🎉🎉`;
+              return `🎉🎉 Incredible! ${w} all got 2s! 🎉🎉`;
           }
       }
 
@@ -121,18 +127,134 @@ export default function HoleScoreModal({
     }
   };
 
-  const handleShowSuccess = () => {
-    const message = generateSuccessMessage();
-    setSuccessMessage(message);
-    if (message) {
-        setShowSuccess(true);
-
-        // Close after 1 second
-        setTimeout(() => {
-            setShowSuccess(false);
-            onDismiss();
-        }, 1000);
+  // Generate success message for the last hole (round completion)
+  // Comments on total scores across all holes, not just the last hole
+  const generateLastHoleSuccessMessage = (): string => {
+    if (!allScores || allScores.length === 0) {
+      return "Round complete! 🎉";
     }
+
+    // Calculate total scores for each player
+    const playerTotals = players.map(player => {
+      const total = allScores
+        .filter(s => String(s.playerId) === String(player.id))
+        .reduce((sum, s) => sum + s.throws, 0);
+      return { player, total };
+    }).filter(x => x.total > 0);
+    
+    if (!playerTotals.length) {
+      return "Round complete! 🎉";
+    }
+
+    const allTotals = playerTotals.map(p => p.total);
+    const minTotal = Math.min(...allTotals);
+    const winners = playerTotals.filter(p => p.total === minTotal);
+    const winnerCount = winners.length;
+    const winnerNames = winners.map(p => p.player.name);
+    const w = winnerCount > 2 
+      ? `${winnerNames.slice(0, winnerCount - 1).join(', ')}, and ${winnerNames[winnerCount - 1]}`
+      : winnerNames.join(' and ');
+
+    // Check if all tied
+    const allSame = allTotals.every(total => total === allTotals[0]);
+    if (allSame && winnerCount === playerTotals.length) {
+      return `🎉🎉🎉 Round complete! Everyone tied with ${minTotal} total! 🤝🎉🎉🎉`;
+    }
+
+    // Check for very low totals (excellent round)
+    if (minTotal <= 18) {
+      if (winnerCount === 1) {
+        return `🎉🎉🎉 Round complete! ${w} wins with an amazing ${minTotal} total! 🎉🎉🎉`;
+      } else {
+        return `🎉🎉🎉 Round complete! ${w} tie for the win with ${minTotal} total! 🎉🎉🎉`;
+      }
+    }
+
+    // Check for good totals
+    if (minTotal <= 27) {
+      if (winnerCount === 1) {
+        return `🎉🎉 Round complete! ${w} wins with ${minTotal} total! 🎉🎉`;
+      } else {
+        return `🎉🎉 Round complete! ${w} tie for the win with ${minTotal} total! 🎉🎉`;
+      }
+    }
+
+    // Check for high totals (tough round)
+    if (minTotal >= 54) {
+      if (winnerCount === 1) {
+        return `Round complete! ${w} wins with ${minTotal} total. Tough round! 😅`;
+      } else {
+        return `Round complete! ${w} tie with ${minTotal} total. Tough round! 😅`;
+      }
+    }
+
+    // Standard completion message
+    if (winnerCount === 1) {
+      return `🎉🎉 Round complete! ${w} wins with ${minTotal} total! 🎉🎉`;
+    } else {
+      return `🎉🎉 Round complete! ${w} tie for the win with ${minTotal} total! 🎉🎉`;
+    }
+  };
+
+  const handleShowSuccess = () => {
+    // If duration is 0, skip showing success message and close immediately
+    if (SUCCESS_MESSAGE_DURATION_MS === 0) {
+      onDismiss();
+      return;
+    }
+    
+    // Clear any existing timeout
+    if (successTimeoutRef.current) {
+      clearTimeout(successTimeoutRef.current);
+      successTimeoutRef.current = null;
+    }
+    
+    // Check if this is the last hole
+    const isLastHole = allHoles && allHoles.length > 0 
+      ? holeNumber === Math.max(...allHoles)
+      : false;
+    
+    // Use different message and duration for last hole
+    const message = isLastHole 
+      ? generateLastHoleSuccessMessage()
+      : generateSuccessMessage();
+    
+    // If message is empty/blank, close immediately without showing success
+    if (!message || message.trim() === '') {
+      console.log('[HoleScoreModal] Success message is empty, closing immediately');
+      onDismiss();
+      return;
+    }
+    
+    const duration = isLastHole 
+      ? SUCCESS_MESSAGE_DURATION_MS * 5 
+      : SUCCESS_MESSAGE_DURATION_MS;
+    
+    console.log('[HoleScoreModal] Showing success message:', message, isLastHole ? '(last hole, 5x duration)' : '');
+    
+    // Set message first, then success state
+    setSuccessMessage(message);
+    
+    // Use a small delay to ensure state updates in order
+    setTimeout(() => {
+      setShowSuccess(true);
+      console.log('[HoleScoreModal] showSuccess set to true');
+
+      // Close after success duration - close modal directly without showing edit form
+      successTimeoutRef.current = setTimeout(() => {
+        console.log('[HoleScoreModal] Closing modal after success message');
+        // Set closing flag first to prevent edit form from showing
+        setIsClosing(true);
+        // Close modal immediately
+        onDismiss();
+        // Reset success state after a brief delay to ensure modal is closed
+        setTimeout(() => {
+          setShowSuccess(false);
+          setIsClosing(false);
+          successTimeoutRef.current = null;
+        }, 50);
+      }, duration);
+    }, 10);
   };
   
   // Watch for score updates to confirm saves - this is the reactive confirmation
@@ -205,8 +327,22 @@ export default function HoleScoreModal({
   // Track the last hole number we initialized for
   const lastHoleRef = useRef<number | null>(null);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Initialize edit values from scores when modal opens or hole changes
   useEffect(() => {
+    // Don't reset success state if we're currently showing success
+    if (showSuccess) {
+      return;
+    }
+    
     if (visible) {
       // Only re-initialize if hole number changed or modal just opened
       if (lastHoleRef.current !== holeNumber) {
@@ -227,14 +363,18 @@ export default function HoleScoreModal({
           }
         }
       }
-      // Reset success state when modal opens
+      // Reset success state when modal opens (but not if already showing success)
       setShowSuccess(false);
+      setIsClosing(false);
     } else {
-      // Reset when modal closes
-      lastHoleRef.current = null;
-      setShowSuccess(false);
+      // Only reset when modal closes if we're not showing success
+      if (!showSuccess) {
+        lastHoleRef.current = null;
+        setShowSuccess(false);
+        setIsClosing(false);
+      }
     }
-  }, [visible, holeNumber, players, initialActivePlayerId, scores]);
+  }, [visible, holeNumber, players, initialActivePlayerId, scores, showSuccess]);
 
 
   const handleCellPress = (playerId: string) => {
@@ -242,11 +382,48 @@ export default function HoleScoreModal({
   };
 
   const handleValueChange = (playerId: string, text: string) => {
-    // Only allow single digits (0-9)
-    const digitOnly = text.replace(/[^0-9]/g, '').slice(0, 1); // Only keep first digit
-    
     // Ensure playerId is a string
     const normalizedPlayerId = String(playerId);
+    
+    // If text is empty (backspace/delete), set to 0 and advance
+    if (text === '' || text.length === 0) {
+      const newEditValues = new Map(editValues);
+      newEditValues.set(normalizedPlayerId, '0');
+      setEditValues(newEditValues);
+      
+      // Check if score already matches 0 (no need to save)
+      const currentScore = scores.get(normalizedPlayerId);
+      if (currentScore === 0) {
+        // Score already 0, proceed with advance/close immediately
+        const currentIndex = players.findIndex(p => String(p.id) === normalizedPlayerId);
+        if (currentIndex >= 0) {
+          if (currentIndex === players.length - 1) {
+            handleShowSuccess();
+          } else {
+            const nextPlayerId = String(players[currentIndex + 1].id);
+            setActivePlayerId(nextPlayerId);
+          }
+        }
+        return;
+      }
+      
+      // Add to pending saves - we'll wait for scores prop to update
+      const pendingKey = `${normalizedPlayerId}-${holeNumber}`;
+      pendingSavesRef.current.set(pendingKey, {
+        playerId: normalizedPlayerId,
+        holeNumber,
+        expectedScore: 0
+      });
+      
+      // Save 0 immediately
+      onScoreChange(normalizedPlayerId, holeNumber, 0);
+      
+      // The useEffect watching scores will detect when the save completes and proceed
+      return;
+    }
+    
+    // Only allow single digits (0-9)
+    const digitOnly = text.replace(/[^0-9]/g, '').slice(0, 1); // Only keep first digit
     
     const newEditValues = new Map(editValues);
     newEditValues.set(normalizedPlayerId, digitOnly);
@@ -302,21 +479,51 @@ export default function HoleScoreModal({
 
   const handleBlur = (playerId: string) => {
     // Save on blur (but don't advance, since we advance immediately on input)
-    const editValue = editValues.get(playerId) || '0';
-    const num = parseInt(editValue, 10);
+    const editValue = editValues.get(playerId);
     
+    // If empty or invalid, set to 0
+    if (!editValue || editValue === '') {
+      const newEditValues = new Map(editValues);
+      newEditValues.set(playerId, '0');
+      setEditValues(newEditValues);
+      onScoreChange(playerId, holeNumber, 0);
+      return;
+    }
+    
+    const num = parseInt(editValue, 10);
     if (!isNaN(num) && num >= min && num <= max) {
       onScoreChange(playerId, holeNumber, num);
+    } else {
+      // Invalid value, set to 0
+      const newEditValues = new Map(editValues);
+      newEditValues.set(playerId, '0');
+      setEditValues(newEditValues);
+      onScoreChange(playerId, holeNumber, 0);
     }
   };
 
   const handleSubmit = (playerId: string) => {
-    const editValue = editValues.get(playerId) || '0';
-    const num = parseInt(editValue, 10);
+    const editValue = editValues.get(playerId);
     
-    // Save on submit
-    if (!isNaN(num) && num >= min && num <= max) {
-      onScoreChange(playerId, holeNumber, num);
+    // If empty or invalid, set to 0
+    if (!editValue || editValue === '') {
+      const newEditValues = new Map(editValues);
+      newEditValues.set(playerId, '0');
+      setEditValues(newEditValues);
+      onScoreChange(playerId, holeNumber, 0);
+    } else {
+      const num = parseInt(editValue, 10);
+      
+      // Save on submit
+      if (!isNaN(num) && num >= min && num <= max) {
+        onScoreChange(playerId, holeNumber, num);
+      } else {
+        // Invalid value, set to 0
+        const newEditValues = new Map(editValues);
+        newEditValues.set(playerId, '0');
+        setEditValues(newEditValues);
+        onScoreChange(playerId, holeNumber, 0);
+      }
     }
     
     // Check if we're on the rightmost player
@@ -334,23 +541,45 @@ export default function HoleScoreModal({
   };
 
   const handleClose = () => {
+    // Clear any pending success timeout
+    if (successTimeoutRef.current) {
+      clearTimeout(successTimeoutRef.current);
+      successTimeoutRef.current = null;
+    }
+    
     // Save all values before closing
     editValues.forEach((value, playerId) => {
-      const num = parseInt(value, 10);
-      if (!isNaN(num) && num >= min && num <= max) {
-        onScoreChange(playerId, holeNumber, num);
+      // If empty or invalid, set to 0
+      if (!value || value === '') {
+        onScoreChange(playerId, holeNumber, 0);
+      } else {
+        const num = parseInt(value, 10);
+        if (!isNaN(num) && num >= min && num <= max) {
+          onScoreChange(playerId, holeNumber, num);
+        } else {
+          // Invalid value, set to 0
+          onScoreChange(playerId, holeNumber, 0);
+        }
       }
     });
-    // Show success message before closing
-    handleShowSuccess();
+    
+    // Close immediately without showing success message
+    setIsClosing(true);
+    setShowSuccess(false);
+    onDismiss();
   };
 
   // Calculate responsive cell width
   const dialogStyle = useDialogStyle();
   const screenWidth = Dimensions.get('window').width;
+  
+  // Calculate dialog width constraints to prevent flash
+  // On web big screens, limit to 500px max width (matching useDialogStyle)
+  const isWebBigScreen = typeof window !== 'undefined' && (screenWidth > 500 || Dimensions.get('window').height > 900);
+  const maxDialogWidth = isWebBigScreen ? 500 : screenWidth;
   const dialogMargin = 32; // 16px on each side
   const contentPadding = 48; // Approximate padding from Dialog.Content
-  const availableWidth = screenWidth - dialogMargin - contentPadding;
+  const availableWidth = Math.min(maxDialogWidth, screenWidth) - dialogMargin - contentPadding;
   
   const MIN_CELL_WIDTH = 60;
   const MAX_CELL_WIDTH = 120; // 2x the current width
@@ -362,21 +591,52 @@ export default function HoleScoreModal({
   // Calculate input width based on cell width (accounting for padding and border)
   const cellPadding = 2;
   const inputWidth = cellWidth - (cellPadding * 2) - 4; // 4px for outline border
+  
+  // Combine dialog style with width constraint to prevent flash
+  // Calculate minimum width based on players to prevent narrow flash
+  const minDialogWidth = Math.max(300, numPlayers * MIN_CELL_WIDTH + dialogMargin + contentPadding);
+  const combinedDialogStyle = [
+    styles.dialog,
+    dialogStyle,
+    isWebBigScreen && { maxWidth: 500, alignSelf: 'center' as const },
+    { minWidth: minDialogWidth }
+  ].filter(Boolean);
+
+  const handleDismiss = () => {
+    // If showing success, clear timeout and close immediately
+    if (showSuccess && successTimeoutRef.current) {
+      clearTimeout(successTimeoutRef.current);
+      successTimeoutRef.current = null;
+    }
+    setIsClosing(true);
+    setShowSuccess(false);
+    // Close the modal
+    onDismiss();
+  };
 
   return (
     <Portal>
-      <Dialog visible={visible} onDismiss={handleClose} style={[styles.dialog, dialogStyle]}>
-        <View style={styles.modalHeader}>
-          <Dialog.Title style={styles.modalTitle}>Hole #{holeNumber}</Dialog.Title>
-          <IconButton
-            icon="close"
-            size={24}
-            onPress={handleClose}
-            style={styles.closeButton}
-          />
-        </View>
+      <Dialog 
+        visible={isClosing ? false : (showSuccess ? true : visible)} 
+        onDismiss={handleDismiss} 
+        dismissable={true}
+        style={combinedDialogStyle}
+      >
+        {!showSuccess && (
+          <View style={styles.modalHeader}>
+            <Dialog.Title style={styles.modalTitle}>
+              Hole #{holeNumber}
+            </Dialog.Title>
+            <IconButton
+              icon="close"
+              size={24}
+              onPress={handleClose}
+              style={styles.closeButton}
+            />
+          </View>
+        )}
         <Dialog.Content>
-          {showSuccess ? (
+          {showSuccess && successMessage ? (
             <View style={styles.successContainer}>
               <View style={styles.successHeader}>
                 <IconButton

@@ -445,53 +445,22 @@ export default function Scorecard({
     }
   };
 
-  // Find the "next" hole (first hole where all players have 0 scores)
+  // Find the "next" hole (first hole where at least one player has a 0 score)
   const getNextHole = useCallback((): number | null => {
     if (players.length === 0 || holes.length === 0) return null;
 
-    // Find the last hole where at least one player has a non-zero score
-    let lastScoredHole = 0;
+    // Simply find the first hole where at least one player has 0 or no score
     for (const hole of holes) {
-      const hasNonZeroScore = players.some(player => {
+      const atLeastOnePlayerHasZero = players.some(player => {
         const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
-        return score && score.throws > 0;
+        return !score || score.throws === 0;
       });
-      if (hasNonZeroScore) {
-        lastScoredHole = hole;
+      if (atLeastOnePlayerHasZero) {
+        return hole;
       }
     }
     
-    // Find the next hole after lastScoredHole where all players have 0 scores
-    let nextHole: number | null = null;
-    for (const hole of holes) {
-      if (hole > lastScoredHole) {
-        // Check if all players have 0 or no score for this hole
-        const allPlayersHaveZero = players.every(player => {
-          const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
-          return !score || score.throws === 0;
-        });
-        if (allPlayersHaveZero) {
-          nextHole = hole;
-          break;
-        }
-      }
-    }
-    
-    // If no next hole found, find the first hole where all players have 0 scores
-    if (nextHole === null) {
-      for (const hole of holes) {
-        const allPlayersHaveZero = players.every(player => {
-          const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
-          return !score || score.throws === 0;
-        });
-        if (allPlayersHaveZero) {
-          nextHole = hole;
-          break;
-        }
-      }
-    }
-    
-    return nextHole;
+    return null;
   }, [players, holes, scores]);
 
   // Update hasNextHole in context and register function to open next hole modal for Footer
@@ -1034,6 +1003,7 @@ export default function Scorecard({
           onNextHole={handleNextHole}
           min={0}
           max={9}
+          allScores={scores}
         />
       )}
 
