@@ -885,23 +885,28 @@ export default function RoundOverviewScreen() {
             >
               <View style={styles.scorecardPreview}>
                 <View style={styles.scorecardPreviewInner}>
-                  <Scorecard
+                  <View style={{ height: 300, width: '100%' }}>
+                    <Scorecard
                       players={players}
                       holes={(() => {
-                        // Get unique hole numbers from scores, limit to first 6, or determine from course
-                        if (round.scores && round.scores.length > 0) {
-                          const holeNumbers = [...new Set(round.scores.map(s => s.holeNumber))].sort((a, b) => a - b);
-                          return holeNumbers.length > 0 ? holeNumbers.slice(0, 6) : [1, 2, 3, 4, 5, 6];
-                        }
-                        // If no scores, determine holes from course or default to first 6
+                        // Always show first 5 holes in preview, regardless of scores
+                        let holesArray: number[] = [];
                         if (round.courseName) {
                           const course = courses.find(c => c.name === round.courseName);
                           if (course) {
                             const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
-                            return Array.from({ length: Math.min(holeCount, 6) }, (_, i) => i + 1);
+                            holesArray = Array.from({ length: Math.min(holeCount, 5) }, (_, i) => i + 1);
+                            console.log('[Overview] Preview holes from course:', holesArray, 'course:', round.courseName, 'holeCount:', holeCount);
+                          } else {
+                            holesArray = [1, 2, 3, 4, 5];
+                            console.log('[Overview] Preview holes default (course not found):', holesArray);
                           }
+                        } else {
+                          holesArray = [1, 2, 3, 4, 5];
+                          console.log('[Overview] Preview holes default (no course name):', holesArray);
                         }
-                        return [1, 2, 3, 4, 5, 6];
+                        console.log('[Overview] Final preview holes array:', holesArray, 'length:', holesArray.length);
+                        return holesArray;
                       })()}
                       scores={round.scores || []}
                       onScoreChange={() => {}}
@@ -913,7 +918,9 @@ export default function RoundOverviewScreen() {
                       courseName={round.courseName || undefined}
                       courseId={undefined}
                       columnVisibility={{ gStats: true }}
+                      disableScrolling={true} // Disable scrolling in preview
                     />
+                  </View>
                 </View>
               </View>
               {/* Opacity gradient overlay - top at 50% visibility (50% overlay), bottom at 0% visibility (100% overlay) */}
@@ -1111,23 +1118,34 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   scorecardPreviewWrapper: {
-    marginTop: 24,
+    marginTop: 0, // No margin to minimize space above table preview
     alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: Platform.OS === 'web' ? 0 : 16,
   },
   scorecardPreviewContainer: {
     position: 'relative',
-    overflow: 'hidden',
+    overflow: 'hidden', // Keep hidden on container to clip the gradient overlay
     alignSelf: 'center',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+    width: Platform.OS === 'web' ? 'auto' : '100%', // Full width on mobile
+    maxWidth: Platform.OS === 'web' ? undefined : '100%',
   },
   scorecardPreview: {
-    overflow: 'hidden',
-    maxHeight: 250,
+    overflow: 'hidden', // Keep hidden to clip content properly
+    height: 300, // Increased to show up to 5 rows (header 34px + 5 rows 170px + total row 34px + padding ~62px)
+    maxHeight: 300,
+    // width: '100%',
+    marginLeft: -7,
+    marginRight: -9, // Reserve space on right to clip 7px
   },
   scorecardPreviewInner: {
-    overflow: 'hidden',
+    overflow: 'hidden', // Keep hidden to clip content properly
+    width: '100%',
+    height: 300, // Explicit height instead of 100% to ensure Scorecard gets proper dimensions
+    minHeight: 300, // Force minimum height to ensure all rows render
   },
   opacityGradientOverlay: {
     position: 'absolute',

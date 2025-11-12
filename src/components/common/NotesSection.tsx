@@ -44,7 +44,7 @@ export default function NotesSection({
 const styles = StyleSheet.create({
   notesSection: {
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingBottom: 0, // No padding to minimize space below notes
   },
   notesTitle: {
     fontSize: 20,

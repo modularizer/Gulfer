@@ -52,6 +52,7 @@ interface ScorecardProps {
   currentRoundDate?: number; // Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
   autoOpenNextHole?: boolean; // If true, automatically open the edit modal for the next hole
   onScrollToTop?: () => void; // Callback when user scrolls up and hole 1 is at the top
+  disableScrolling?: boolean; // If true, disable scrolling (for preview mode)
 }
 
 
@@ -86,6 +87,7 @@ export default function Scorecard({
   currentRoundDate,
   autoOpenNextHole = false,
   onScrollToTop,
+  disableScrolling = false,
 }: ScorecardProps) {
   const theme = useTheme();
   const [editModal, setEditModal] = useState<{
@@ -778,6 +780,9 @@ export default function Scorecard({
           onScroll={handleScroll}
           onLayout={handleScrollViewLayout}
           scrollEventThrottle={16}
+          removeClippedSubviews={false} // Disable view recycling to ensure all rows render in preview mode
+          scrollEnabled={!disableScrolling} // Disable scrolling in preview mode
+          showsVerticalScrollIndicator={!disableScrolling} // Hide scroll indicator in preview mode
           onTouchStart={(event) => {
             // React Native touch events use touches array
             const touch = event.nativeEvent.touches?.[0] || event.nativeEvent;
@@ -848,12 +853,15 @@ export default function Scorecard({
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={scorecardTableStyles.table}>
               {/* Hole Rows */}
-              {holes.map((hole) => {
-                const isNextHole = getNextHole() === hole;
-                const nextHole = getNextHole();
-                const hasNextHole = nextHole !== null;
-                const isHole1 = hole === 1;
-                return (
+              {(() => {
+                console.log('[Scorecard] Rendering holes, holes array:', holes, 'length:', holes.length, 'players:', players.length);
+                return holes.map((hole, index) => {
+                  console.log(`[Scorecard] Mapping hole ${hole} at index ${index}`);
+                  const isNextHole = getNextHole() === hole;
+                  const nextHole = getNextHole();
+                  const hasNextHole = nextHole !== null;
+                  const isHole1 = hole === 1;
+                  return (
               <View 
                 key={hole} 
                 ref={isHole1 ? hole1RowRef : undefined}
@@ -1102,7 +1110,8 @@ export default function Scorecard({
                 ))}
               </View>
                 );
-              })}
+                });
+              })()}
 
             {/* Add Player Column */}
             {!readOnly && allowAddPlayer && (
