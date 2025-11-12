@@ -6,14 +6,17 @@ import Constants from 'expo-constants';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PaperProvider } from 'react-native-paper';
 import { ThemeProvider, useTheme } from '@/theme/ThemeContext';
+import { ScorecardProvider } from '@/contexts/ScorecardContext';
 import AppLayout from '@/components/common/AppLayout';
 import { usePWARouteCache } from '@/utils/pwa';
+import { useNavigationState } from '@/hooks/useNavigationState';
 import '@/utils/suppressWarnings';
 import { migrateRoundsCourseId } from '@/services/storage/roundStorage';
 
 function RootLayoutNav() {
   const { theme, isDark } = useTheme();
-  usePWARouteCache(); // Handle PWA route caching
+  usePWARouteCache(); // Handle PWA route caching (web only)
+  useNavigationState(); // Handle navigation state persistence (web + mobile)
 
   return (
     <PaperProvider theme={theme}>
@@ -138,7 +141,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <RootLayoutNav />
+        <ScorecardProvider>
+          <RootLayoutNav />
+        </ScorecardProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

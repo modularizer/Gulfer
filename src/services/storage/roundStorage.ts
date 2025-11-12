@@ -4,7 +4,7 @@
  */
 
 import { getItem, setItem } from './storageAdapter';
-import { Round } from '../../types';
+import { Round } from '@/types';
 import { generateUniqueUUID } from '../../utils/uuid';
 import { getAllCourses, getCourseByName } from './courseStorage';
 

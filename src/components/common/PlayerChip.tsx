@@ -1,6 +1,6 @@
 import React from 'react';
 import { Chip } from 'react-native-paper';
-import { Player } from '../../types';
+import { Player } from '@/types';
 import { router } from 'expo-router';
 import { StyleSheet } from 'react-native';
 import { idToCodename } from '../../utils/idUtils';
@@ -53,10 +53,22 @@ export default function PlayerChip({
 
 const styles = StyleSheet.create({
   chip: {
-    height: 32,
+    height: 28,
+    minHeight: 28,
+    paddingLeft: 0,
+    paddingRight: 6,
+    paddingVertical: 0,
+    paddingBottom: 0,
+    marginBottom: 0,
   },
   chipText: {
     fontSize: 14,
+    lineHeight: 14,
+    padding: 0,
+    paddingBottom: 0,
+    margin: 0,
+    marginLeft: 4,
+    marginBottom: -2,
   },
   winnerChip: {
     backgroundColor: '#FFD700',

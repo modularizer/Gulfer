@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
-import { HoleStatistics } from '../../services/holeStatistics';
+import { HoleStatistics } from '@/services/holeStatistics';
 
 interface GStatsCellProps {
   stats: HoleStatistics | null | undefined;
@@ -17,7 +17,7 @@ interface GStatsCellProps {
  */
 export default function GStatsCell({ stats, variant = 'default' }: GStatsCellProps) {
   if (!stats || stats.worst === null || stats.p25 === null || stats.p50 === null || stats.p75 === null || stats.best === null) {
-    return <Text style={variant === 'total' ? styles.gStatTextTotal : styles.gStatText}>—</Text>;
+    return <Text style={[variant === 'total' ? styles.gStatTextTotal : styles.gStatText, variant === 'total' && { transform: [{ translateY: -4 }] }]}>—</Text>;
   }
 
   const worst = Math.round(stats.worst);
@@ -28,7 +28,7 @@ export default function GStatsCell({ stats, variant = 'default' }: GStatsCellPro
 
   if (variant === 'total') {
     return (
-      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline', transform: [{ translateY: -4 }] }}>
         <Text style={styles.gStatTextTotal}>{worst}·</Text>
         <Text style={styles.gStatTextInnerTotal}>{p25}·</Text>
         <Text style={styles.gStatTextMiddleTotal}>{p50}</Text>

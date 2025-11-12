@@ -40,7 +40,7 @@ export default function HillFooter({
   
   return (
     <View 
-      style={[styles.container, { backgroundColor }]}
+      style={[styles.container, { backgroundColor: 'transparent' }]}
       onLayout={(event) => {
         const { width } = event.nativeEvent.layout;
         if (width > 0) {
@@ -96,6 +96,7 @@ export default function HillFooter({
 const styles = StyleSheet.create({
   container: {
     height: TOTAL_HEIGHT,
+      marginTop: -32,
     width: '100%',
     position: 'relative',
     overflow: 'visible',

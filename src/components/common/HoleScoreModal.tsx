@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, TextInput, Dialog, Portal, IconButton, Button } from 'react-native-paper';
-import { Player } from '../../types';
+import { Player } from '@/types';
 import { useDialogStyle } from '../../hooks/useDialogStyle';
 
 interface HoleScoreModalProps {
@@ -242,31 +242,6 @@ export default function HoleScoreModal({
     onDismiss();
   };
 
-  const handleNextHole = () => {
-    // Save all values before moving to next hole
-    editValues.forEach((value, playerId) => {
-      const num = parseInt(value, 10);
-      if (!isNaN(num) && num >= min && num <= max) {
-        onScoreChange(playerId, holeNumber, num);
-      }
-    });
-    
-    if (allHoles && onNextHole) {
-      const currentIndex = allHoles.indexOf(holeNumber);
-      if (currentIndex >= 0 && currentIndex < allHoles.length - 1) {
-        const nextHole = allHoles[currentIndex + 1];
-        onNextHole(nextHole);
-      } else {
-        // Last hole, just close
-        onDismiss();
-      }
-    } else {
-      onDismiss();
-    }
-  };
-
-  // Check if this is the last hole
-  const isLastHole = allHoles ? allHoles.indexOf(holeNumber) === allHoles.length - 1 : false;
 
   const getScore = (playerId: string): number => {
     return scores.get(playerId) || 0;
@@ -370,16 +345,6 @@ export default function HoleScoreModal({
             </View>
           </View>
         </Dialog.Content>
-        <Dialog.Actions style={styles.dialogActions}>
-          <Button
-            mode="contained"
-            onPress={handleNextHole}
-            style={styles.nextButton}
-            contentStyle={styles.nextButtonContent}
-          >
-            {isLastHole ? 'Done' : 'Next Hole →'}
-          </Button>
-        </Dialog.Actions>
       </Dialog>
     </Portal>
   );
@@ -447,17 +412,6 @@ const styles = StyleSheet.create({
   inputContent: {
     textAlign: 'center',
     paddingHorizontal: 0,
-  },
-  dialogActions: {
-    justifyContent: 'flex-end',
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-  },
-  nextButton: {
-    marginLeft: 'auto',
-  },
-  nextButtonContent: {
-    paddingHorizontal: 16,
   },
 });
 

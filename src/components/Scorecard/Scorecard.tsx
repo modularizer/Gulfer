@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, Button, IconButton, useTheme } from 'react-native-paper';
-import { Player, Score, Course, Hole } from '../../types';
-import { getAllCourses } from '../../services/storage/courseStorage';
-import HoleScoreModal from '../common/HoleScoreModal';
-import { CornerStatisticsConfig, computeCellCornerValues, computeTotalCornerValues } from '../../services/cornerStatistics';
-import { getCurrentUserName } from '../../services/storage/userStorage';
-import { computeAllHoleStatistics, computeTotalRoundStatistics, HoleStatistics } from '../../services/holeStatistics';
-import GStatsCell from '../common/GStatsCell';
-import { scorecardTableStyles } from '../../styles/scorecardTableStyles';
+import { Player, Score, Course, Hole } from '@/types';
+import { getAllCourses, saveCourse, getCourseByName } from '@/services/storage/courseStorage';
+import HoleScoreModal from '@/components/common/HoleScoreModal';
+import NumberModal from '@/components/common/NumberModal';
+import { CornerStatisticsConfig, computeCellCornerValues, computeTotalCornerValues } from '@/services/cornerStatistics';
+import { getCurrentUserName } from '@/services/storage/userStorage';
+import { computeAllHoleStatistics, computeTotalRoundStatistics, HoleStatistics } from '@/services/holeStatistics';
+import GStatsCell from '@/components/common/GStatsCell';
+import { scorecardTableStyles } from '@/styles/scorecardTableStyles';
+import { useScorecard } from '@/contexts/ScorecardContext';
 
 export interface CornerData {
   value: string | number;
@@ -50,6 +52,16 @@ interface ScorecardProps {
   currentRoundDate?: number; // Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
 }
 
+
+const ftPerMeter = 3.28084;
+const ydsPerMeter = ftPerMeter / 3;
+const unitsPerMeter = {
+    ft: ftPerMeter,
+    yd: ydsPerMeter,
+    m: 1
+}
+
+
 export default function Scorecard({
   players,
   holes,
@@ -77,6 +89,12 @@ export default function Scorecard({
     holeNumber: number | null;
     initialPlayerId?: string | number;
   }>({ visible: false, holeNumber: null });
+  const [holeEditModal, setHoleEditModal] = useState<{
+    visible: boolean;
+    holeNumber: number | null;
+    field: 'par' | 'distance' | null;
+  }>({ visible: false, holeNumber: null, field: null });
+  const { registerOpenNextHole, setHasNextHole } = useScorecard();
   const [distanceUnit, setDistanceUnit] = useState<'yd' | 'm' | 'ft'>('ft');
   const [courseHoles, setCourseHoles] = useState<Hole[]>([]);
   const [resolvedCurrentUserId, setResolvedCurrentUserId] = useState<string | undefined>(currentUserId);
@@ -326,10 +344,10 @@ export default function Scorecard({
     return holes.reduce((sum, hole) => sum + getScore(playerId, hole), 0);
   };
 
-  const openEditModal = (playerId: string | number, holeNumber: number) => {
+  const openEditModal = useCallback((playerId: string | number, holeNumber: number) => {
     if (readOnly) return;
     setEditModal({ visible: true, holeNumber, initialPlayerId: playerId });
-  };
+  }, [readOnly]);
 
   const closeEditModal = () => {
     setEditModal({ visible: false, holeNumber: null });
@@ -365,19 +383,8 @@ export default function Scorecard({
   const formatDistance = (holeNumber: number): string => {
     const distance = getHoleDistance(holeNumber);
     if (distance === undefined) return '?';
-    
-    if (distanceUnit === 'ft') {
-      // Assume distance is stored in meters, convert to feet
-      const feet = Math.round(distance * 3.28084);
-      return `${feet}ft`;
-    } else if (distanceUnit === 'yd') {
-      // Assume distance is stored in meters, convert to yards
-      const yards = Math.round(distance * 1.09361);
-      return `${yards}yd`;
-    } else {
-      // Show in meters
-      return `${Math.round(distance)}m`;
-    }
+    return `${Math.round(distance * (unitsPerMeter[distanceUnit] || 1))}`
+
   };
 
   const toggleDistanceUnit = () => {
@@ -388,6 +395,136 @@ export default function Scorecard({
     });
   };
 
+  const openHoleEditModal = (holeNumber: number, field: 'par' | 'distance') => {
+    if (readOnly) return;
+    setHoleEditModal({ visible: true, holeNumber, field });
+  };
+
+  const closeHoleEditModal = () => {
+    setHoleEditModal({ visible: false, holeNumber: null, field: null });
+  };
+
+  const handleHoleEditSave = async (value: number | null) => {
+    if (!holeEditModal.holeNumber || !holeEditModal.field || !courseName) return;
+
+    try {
+      const course = await getCourseByName(courseName);
+      if (!course) return;
+
+      const updatedHoles = course.holes.map((h) => {
+        if (h.number === holeEditModal.holeNumber) {
+          if (holeEditModal.field === 'distance') {
+            // If value is null, clear the distance
+            if (value === null) {
+              return { ...h, distance: undefined };
+            }
+            // Convert from current unit to meters for storage
+            const distanceInMeters = value / (unitsPerMeter[distanceUnit] || 1);
+            return { ...h, distance: distanceInMeters };
+          } else {
+            // If value is null, clear the par
+            if (value === null) {
+              return { ...h, par: undefined };
+            }
+            return { ...h, par: value };
+          }
+        }
+        return h;
+      });
+
+      const updatedCourse: Course = {
+        ...course,
+        holes: updatedHoles,
+      };
+
+      await saveCourse(updatedCourse);
+      setCourseHoles(updatedHoles);
+      closeHoleEditModal();
+    } catch (error) {
+      console.error('Error saving hole edit:', error);
+    }
+  };
+
+  // Find the "next" hole (first hole where all players have 0 scores)
+  const getNextHole = useCallback((): number | null => {
+    if (players.length === 0 || holes.length === 0) return null;
+
+    // Find the last hole where at least one player has a non-zero score
+    let lastScoredHole = 0;
+    for (const hole of holes) {
+      const hasNonZeroScore = players.some(player => {
+        const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
+        return score && score.throws > 0;
+      });
+      if (hasNonZeroScore) {
+        lastScoredHole = hole;
+      }
+    }
+    
+    // Find the next hole after lastScoredHole where all players have 0 scores
+    let nextHole: number | null = null;
+    for (const hole of holes) {
+      if (hole > lastScoredHole) {
+        // Check if all players have 0 or no score for this hole
+        const allPlayersHaveZero = players.every(player => {
+          const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
+          return !score || score.throws === 0;
+        });
+        if (allPlayersHaveZero) {
+          nextHole = hole;
+          break;
+        }
+      }
+    }
+    
+    // If no next hole found, find the first hole where all players have 0 scores
+    if (nextHole === null) {
+      for (const hole of holes) {
+        const allPlayersHaveZero = players.every(player => {
+          const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
+          return !score || score.throws === 0;
+        });
+        if (allPlayersHaveZero) {
+          nextHole = hole;
+          break;
+        }
+      }
+    }
+    
+    return nextHole;
+  }, [players, holes, scores]);
+
+  // Update hasNextHole in context and register function to open next hole modal for Footer
+  useEffect(() => {
+    const nextHole = getNextHole();
+    setHasNextHole(nextHole !== null);
+    
+    if (!readOnly && players.length > 0 && holes.length > 0) {
+      const openNextHole = () => {
+        // Fallback to first hole if no hole with all zeros found
+        const holeToOpen = nextHole ?? holes[0];
+        
+        openEditModal(players[0].id, holeToOpen);
+      };
+      
+      registerOpenNextHole(openNextHole);
+    }
+  }, [readOnly, players, holes, scores, registerOpenNextHole, openEditModal, getNextHole, setHasNextHole]);
+  const h = 42;
+  const op = readOnly ? 1 : 0.7;
+
+
+  const getColor = (a: number, b: number) => {
+      if (a < b) {
+          return '#d32f2f'; // Red shade
+      } else if (a === b) {
+          return '#f57c00'; // Orange/yellow shade
+      } else {
+          return '#388e3c'; // Green shade
+      }
+  }
+  const iconColor="#fff";
+  const headerIconSize = 20;
 
   return (
     <View style={scorecardTableStyles.wrapper}>
@@ -414,8 +551,8 @@ export default function Scorecard({
               {onBack ? (
                 <IconButton
                   icon="arrow-left"
-                  size={20}
-                  iconColor="#fff"
+                  size={headerIconSize}
+                  iconColor={iconColor}
                   onPress={onBack}
                   style={scorecardTableStyles.backIconButton}
                 />
@@ -428,18 +565,18 @@ export default function Scorecard({
                 <Text style={scorecardTableStyles.gStatHeaderText}>G-Stats</Text>
               </View>
             )}
+            {columnVisibility?.par === true && (
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.parHeaderCell]}>
+                <Text style={scorecardTableStyles.headerText}>Par</Text>
+              </View>
+            )}
             {columnVisibility?.distance !== false && (
               <TouchableOpacity
                 style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.distanceHeaderCell]}
                 onPress={toggleDistanceUnit}
               >
-                <Text style={scorecardTableStyles.headerText}>Dist ({distanceUnit})</Text>
+                <Text style={scorecardTableStyles.headerText}>{distanceUnit}</Text>
               </TouchableOpacity>
-            )}
-            {columnVisibility?.par === true && (
-              <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.parHeaderCell]}>
-                <Text style={scorecardTableStyles.headerText}>Par</Text>
-              </View>
             )}
             {players.map((player) => (
               <View key={player.id} style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell]}>
@@ -450,8 +587,8 @@ export default function Scorecard({
               <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.settingsHeaderCell]}>
                 <IconButton
                   icon="dots-vertical"
-                  size={20}
-                  iconColor="#fff"
+                  size={headerIconSize}
+                  iconColor={iconColor}
                   onPress={onSettingsPress}
                   style={scorecardTableStyles.settingsIconButton}
                 />
@@ -464,8 +601,8 @@ export default function Scorecard({
             <View style={[scorecardTableStyles.cell, scorecardTableStyles.headerCell, scorecardTableStyles.settingsHeaderCell]}>
               <IconButton
                 icon="dots-vertical"
-                size={20}
-                iconColor="#fff"
+                size={headerIconSize}
+                iconColor={iconColor}
                 onPress={onSettingsPress}
                 style={scorecardTableStyles.settingsIconButton}
               />
@@ -474,61 +611,102 @@ export default function Scorecard({
         )}
       </View>
 
-      {/* Scrollable Hole Rows */}
-      <ScrollView style={scorecardTableStyles.scrollableContent}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={scorecardTableStyles.table}>
-            {/* Hole Rows */}
-            {holes.map((hole) => (
-              <View key={hole} style={scorecardTableStyles.row}>
+      <View style={{ flex: 1, paddingBottom: 10 }}>
+        {/* Scrollable Hole Rows */}
+        <ScrollView 
+          style={scorecardTableStyles.scrollableContent}
+        >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={scorecardTableStyles.table}>
+              {/* Hole Rows */}
+              {holes.map((hole) => {
+                const isNextHole = getNextHole() === hole;
+                const nextHole = getNextHole();
+                const hasNextHole = nextHole !== null;
+                return (
+              <View key={hole} style={[
+                scorecardTableStyles.row,
+                isNextHole && scorecardTableStyles.nextHoleRow,
+                isNextHole && scorecardTableStyles.nextHoleRowOverride,
+                hasNextHole && !isNextHole && { opacity: 0.95 }
+              ]}>
                 <TouchableOpacity
-                  style={[scorecardTableStyles.cell, scorecardTableStyles.holeCell]}
+                  style={[
+                    scorecardTableStyles.cell, 
+                    scorecardTableStyles.holeCell,
+                    isNextHole && { height: h, minHeight: h, maxHeight: h }
+                  ]}
                   onPress={() => {
                     if (!readOnly && players.length > 0) {
                       openEditModal(players[0].id, hole);
                     }
                   }}
                   disabled={readOnly}
-                  activeOpacity={readOnly ? 1 : 0.7}
+                  activeOpacity={op}
                 >
                   <Text style={scorecardTableStyles.holeText}>{hole}</Text>
                 </TouchableOpacity>
                 {columnVisibility?.gStats === true && (
                   <TouchableOpacity
-                    style={[scorecardTableStyles.cell, scorecardTableStyles.gStatsCell]}
+                    style={[
+                      scorecardTableStyles.cell, 
+                      scorecardTableStyles.gStatsCell,
+                      isNextHole && { height: h, minHeight: h, maxHeight: h }
+                    ]}
                     onPress={() => {
                       if (!readOnly && players.length > 0) {
                         openEditModal(players[0].id, hole);
                       }
                     }}
                     disabled={readOnly}
-                    activeOpacity={readOnly ? 1 : 0.7}
+                    activeOpacity={op}
                   >
                     <GStatsCell stats={holeStatistics.get(hole)} />
                   </TouchableOpacity>
                 )}
-                {columnVisibility?.distance !== false && (
-                  <View style={[scorecardTableStyles.cell, scorecardTableStyles.distanceCell]}>
-                    <Text style={scorecardTableStyles.distanceText}>{formatDistance(hole)}</Text>
-                  </View>
-                )}
                 {columnVisibility?.par === true && (
-                  <View style={[scorecardTableStyles.cell, scorecardTableStyles.parCell]}>
+                  <TouchableOpacity
+                    style={[
+                      scorecardTableStyles.cell, 
+                      scorecardTableStyles.parCell,
+                      isNextHole && { height: h, minHeight: h, maxHeight: h }
+                    ]}
+                    onPress={() => openHoleEditModal(hole, 'par')}
+                    disabled={readOnly}
+                    activeOpacity={op}
+                  >
                     <Text style={scorecardTableStyles.parText}>
                       {(() => {
                         const holeData = courseHoles.find(h => h.number === hole);
                         return holeData?.par !== undefined ? holeData.par : '?';
                       })()}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
+                )}
+                {columnVisibility?.distance !== false && (
+                  <TouchableOpacity
+                    style={[
+                      scorecardTableStyles.cell, 
+                      scorecardTableStyles.distanceCell,
+                      isNextHole && { height: h, minHeight: h, maxHeight: h }
+                    ]}
+                    onPress={() => openHoleEditModal(hole, 'distance')}
+                    disabled={readOnly}
+                    activeOpacity={op}
+                  >
+                    <Text style={scorecardTableStyles.distanceText}>{formatDistance(hole)}</Text>
+                  </TouchableOpacity>
                 )}
                 {players.map((player) => (
                   <TouchableOpacity
                     key={`${player.id}-${hole}`}
-                    style={scorecardTableStyles.cell}
+                    style={[
+                      scorecardTableStyles.cell,
+                      isNextHole && { height: h, minHeight: h, maxHeight: h }
+                    ]}
                     onPress={() => openEditModal(player.id, hole)}
                     disabled={readOnly}
-                    activeOpacity={readOnly ? 1 : 0.7}
+                    activeOpacity={op}
                   >
                     <View style={scorecardTableStyles.scoreCellContainer}>
                       {(() => {
@@ -557,14 +735,8 @@ export default function Scorecard({
                             if (cellScore === 0) return undefined; // Don't auto-color if cell is empty
                             const cornerNum = typeof cornerValue.value === 'number' ? cornerValue.value : parseFloat(String(cornerValue.value));
                             if (isNaN(cornerNum)) return undefined;
-                            
-                            if (cornerNum < cellScore) {
-                              return '#d32f2f'; // Red shade
-                            } else if (cornerNum === cellScore) {
-                              return '#f57c00'; // Orange/yellow shade
-                            } else {
-                              return '#388e3c'; // Green shade
-                            }
+
+                            return getColor(cornerNum, cellScore);
                           }
                           
                           return undefined; // Default color (use style default)
@@ -631,15 +803,7 @@ export default function Scorecard({
                         const showFontSizeAdjustments = columnVisibility?.showFontSizeAdjustments === true;
                         
                         if (showUnderlines) {
-                          if (isWinner) {
-                            if (isTie) {
-                              underlineColor = '#f9a825'; // Yellow for tie
-                            } else {
-                              underlineColor = '#2e7d32'; // Green for single winner
-                            }
-                          } else if (isLoser) {
-                            underlineColor = '#d32f2f'; // Red for loss
-                          }
+                            underlineColor = getColor(winningScore || 1, playerScore);
                         }
                         
                         // Calculate font size adjustment
@@ -702,7 +866,8 @@ export default function Scorecard({
                   </TouchableOpacity>
                 ))}
               </View>
-            ))}
+                );
+              })}
 
             {/* Add Player Column */}
             {!readOnly && allowAddPlayer && (
@@ -718,38 +883,18 @@ export default function Scorecard({
         </ScrollView>
       </ScrollView>
 
-      {/* Fixed Total Row */}
-      <View style={scorecardTableStyles.fixedTotalRow}>
+        {/* Fixed Total Row */}
+        <View style={scorecardTableStyles.fixedTotalRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={scorecardTableStyles.totalRowContent}>
             <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.holeHeaderCell]}>
-              <Text style={[scorecardTableStyles.totalRowText, { marginLeft: -5 }]}>Sum</Text>
+              <Text style={[scorecardTableStyles.totalRowText, { marginLeft: -5, marginTop: -4 }]}>Sum</Text>
             </View>
             {columnVisibility?.gStats === true && (
-              <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.gStatsCell]}>
-                <GStatsCell stats={totalRoundStatistics} variant="total" />
-              </View>
-            )}
-            {columnVisibility?.distance !== false && (
-              <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.distanceCell]}>
-                {(() => {
-                  const totalDistance = holes.reduce((sum, hole) => {
-                    const distance = getHoleDistance(hole);
-                    return sum + (distance || 0);
-                  }, 0);
-                  
-                  if (totalDistance === 0) return <Text style={scorecardTableStyles.distanceText}>—</Text>;
-                  
-                  if (distanceUnit === 'ft') {
-                    const feet = Math.round(totalDistance * 3.28084);
-                    return <Text style={scorecardTableStyles.distanceText}>{feet}ft</Text>;
-                  } else if (distanceUnit === 'yd') {
-                    const yards = Math.round(totalDistance * 1.09361);
-                    return <Text style={scorecardTableStyles.distanceText}>{yards}yd</Text>;
-                  } else {
-                    return <Text style={scorecardTableStyles.distanceText}>{Math.round(totalDistance)}m</Text>;
-                  }
-                })()}
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.gStatsCell, { justifyContent: 'center', paddingTop: 0, paddingBottom: 0 }]}>
+                <View style={{ transform: [{ translateY: -4 }] }}>
+                  <GStatsCell stats={totalRoundStatistics} variant="total" />
+                </View>
               </View>
             )}
             {columnVisibility?.par === true && (
@@ -763,11 +908,24 @@ export default function Scorecard({
                     .filter((par): par is number => par !== undefined);
                   
                   if (parsWithValues.length === 0) {
-                    return <Text style={scorecardTableStyles.parText}>—</Text>;
+                    return <Text style={[scorecardTableStyles.parText, { marginTop: -4 }]}>—</Text>;
                   }
                   
                   const averagePar = parsWithValues.reduce((sum, par) => sum + par, 0) / parsWithValues.length;
-                  return <Text style={scorecardTableStyles.parText}>{averagePar.toFixed(1)}</Text>;
+                  return <Text style={[scorecardTableStyles.parText, { marginTop: -4 }]}>{averagePar.toFixed(1)}</Text>;
+                })()}
+              </View>
+            )}
+            {columnVisibility?.distance !== false && (
+              <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.distanceCell]}>
+                {(() => {
+                  const totalDistance = holes.reduce((sum, hole) => {
+                    const distance = getHoleDistance(hole);
+                    return sum + (distance || 0);
+                  }, 0);
+                  const d = (totalDistance === 0)?'—':`${Math.round(totalDistance * (unitsPerMeter[distanceUnit] || 1))}`;
+                  return <Text style={[scorecardTableStyles.distanceText, { marginTop: -4 }]}>{d}</Text>;
+
                 })()}
               </View>
             )}
@@ -795,18 +953,14 @@ export default function Scorecard({
                           if (totalScore === 0) return undefined; // Don't auto-color if cell is empty
                           const cornerNum = typeof cornerValue.value === 'number' ? cornerValue.value : parseFloat(String(cornerValue.value));
                           if (isNaN(cornerNum)) return undefined;
-                          
-                          if (cornerNum < totalScore) {
-                            return '#d32f2f'; // Red shade
-                          } else if (cornerNum === totalScore) {
-                            return '#f57c00'; // Orange/yellow shade
-                          } else {
-                            return '#388e3c'; // Green shade
-                          }
+                          return getColor(cornerNum, totalScore);
                         }
                         
                         return undefined; // Default color (use style default)
                       };
+
+
+
                       return (
                         <>
                           {/* Corner numbers - top left */}
@@ -849,13 +1003,14 @@ export default function Scorecard({
                       );
                     })()}
                     {/* Main total - centered */}
-                    <Text style={scorecardTableStyles.totalText}>{totalScore}</Text>
+                    <Text style={[scorecardTableStyles.totalText, { marginTop: -4 }]}>{totalScore}</Text>
                   </View>
                 </View>
               );
             })}
           </View>
         </ScrollView>
+        </View>
       </View>
 
       {/* Edit Score Modal */}
@@ -879,6 +1034,35 @@ export default function Scorecard({
           onNextHole={handleNextHole}
           min={0}
           max={9}
+        />
+      )}
+
+      {/* Edit Hole Par/Distance Modal */}
+      {holeEditModal.holeNumber !== null && holeEditModal.field && (
+        <NumberModal
+          visible={holeEditModal.visible}
+          title={
+            `Hole ${holeEditModal.holeNumber} - ${holeEditModal.field === 'par' ? 'Par' : 'Distance'}`
+          }
+          defaultValue={
+            (() => {
+              const hole = courseHoles.find(h => h.number === holeEditModal.holeNumber);
+              if (!hole) return 0;
+              if (holeEditModal.field === 'par') {
+                return hole.par || 0;
+              } else {
+                // Convert distance from meters to current unit
+                const distance = hole.distance;
+                if (distance === undefined) return 0;
+                return Math.round(distance * (unitsPerMeter[distanceUnit] || 1));
+              }
+            })()
+          }
+          onSave={handleHoleEditSave}
+          onDismiss={closeHoleEditModal}
+          min={0}
+          max={holeEditModal.field === 'par' ? 9 : 9999}
+          allowClear={true}
         />
       )}
     </View>

@@ -44,4 +44,21 @@
 -keep class com.facebook.hermes.unicode.** { *; }
 -keep class com.facebook.jni.** { *; }
 
+# react-native-svg
+-keep class com.horcrux.svg.** { *; }
+-keepclassmembers class com.horcrux.svg.** { *; }
+-keep interface com.horcrux.svg.** { *; }
+-keep enum com.horcrux.svg.** { *; }
+-keep class com.horcrux.svg.RenderableView { *; }
+-keep class com.horcrux.svg.RenderableViewManager { *; }
+-keep class com.horcrux.svg.RenderableViewManager$* { *; }
+-keep class com.horcrux.svg.SvgView { *; }
+-keep class com.horcrux.svg.SvgViewModule { *; }
+-keep class com.horcrux.svg.VirtualViewManager { *; }
+-keep class com.horcrux.svg.SvgPackage { *; }
+-keep class com.horcrux.svg.SvgPackage$* { *; }
+-keepclassmembers class com.horcrux.svg.SvgPackage { *; }
+-keepclassmembers class com.horcrux.svg.SvgPackage$* { *; }
+-dontwarn com.horcrux.svg.**
+
 # Add any project specific keep options here:

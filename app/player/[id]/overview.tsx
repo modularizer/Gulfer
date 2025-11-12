@@ -28,6 +28,7 @@ import { getCachedCardMode, loadCardMode, saveCardMode } from '@/services/storag
 import { exportAllDataAsJson, importAllData, parseExportJson } from '@/services/bulkExport';
 import { clear } from '@/services/storage/storageAdapter';
 import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
 import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 interface CourseScore {
@@ -364,8 +365,47 @@ export default function PlayerDetailScreen() {
         fileInputRef.current.click();
       }
     } else {
-      // On mobile, we'd need to use a file picker
-      Alert.alert('Import', 'File import on mobile is not yet supported. Please use the web version.');
+      // On mobile, use document picker
+      try {
+        setIsImporting(true);
+        const result = await DocumentPicker.getDocumentAsync({
+          type: 'application/json',
+          copyToCacheDirectory: true,
+        });
+
+        if (result.canceled) {
+          setIsImporting(false);
+          return;
+        }
+
+        const file = result.assets[0];
+        if (!file) {
+          setIsImporting(false);
+          return;
+        }
+
+        console.log('[Import] Reading file from:', file.uri);
+        
+        // Read the file content
+        const fileContent = await FileSystem.readAsStringAsync(file.uri);
+        console.log('[Import] File read, parsing JSON...');
+        
+        const exportData = parseExportJson(fileContent);
+        console.log('[Import] JSON parsed successfully');
+        
+        // Store the data and show confirmation dialog
+        setPendingImportData(exportData);
+        setImportDialogVisible(true);
+        setIsImporting(false);
+      } catch (error) {
+        console.error('[Import] Error picking/reading file:', error);
+        setIsImporting(false);
+        setErrorDialog({
+          visible: true,
+          title: 'Import Error',
+          message: error instanceof Error ? error.message : 'Failed to read import file',
+        });
+      }
     }
   }, []);
 
@@ -428,6 +468,25 @@ export default function PlayerDetailScreen() {
       // Reload the page immediately to show the imported data
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         window.location.reload();
+      } else {
+        // On mobile, show success message and reload the current route
+        Alert.alert(
+          'Import Successful',
+          `Rounds: ${summary.rounds.imported} imported\nPlayers: ${summary.players.imported} imported\nCourses: ${summary.courses.imported} imported`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Refresh the current route to show imported data
+                if (playerNameParam) {
+                  router.replace(`/player/${playerNameParam}/overview`);
+                } else {
+                  router.push('/player/list');
+                }
+              },
+            },
+          ]
+        );
       }
     } catch (error) {
       console.error('[Import] Error importing data:', error);
@@ -444,7 +503,7 @@ export default function PlayerDetailScreen() {
         fileInputRef.current.value = '';
       }
     }
-  }, [pendingImportData]);
+  }, [pendingImportData, playerNameParam]);
 
   const handleCancelImport = useCallback(() => {
     console.log('[Import] User cancelled import');

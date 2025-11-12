@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { IconButton, Text, Menu, Dialog, Portal, Button, useTheme, Surface } from 'react-native-paper';
-import { Player } from '../../types';
-import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, getUserIdForPlayerName, User } from '../../services/storage/userStorage';
+import { Player } from '@/types';
+import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
 import { getShadowStyle } from '../../utils';
 import NameUsernameDialog from './NameUsernameDialog';
 

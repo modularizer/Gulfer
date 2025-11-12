@@ -6,7 +6,7 @@
 import React from 'react';
 import { View, TouchableOpacity, Platform } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
-import { Course, Player } from '../../types';
+import { Course, Player } from '@/types';
 import { getShadowStyle } from '../../utils';
 import PlayerChip from './PlayerChip';
 import HashedImage from './HashedImage';

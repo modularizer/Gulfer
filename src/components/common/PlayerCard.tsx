@@ -6,7 +6,7 @@
 import React from 'react';
 import { View, TouchableOpacity, Platform } from 'react-native';
 import { Card, Text, Chip, useTheme } from 'react-native-paper';
-import { User } from '../../services/storage/userStorage';
+import { User } from '@/services/storage/userStorage';
 import { getShadowStyle } from '../../utils';
 import HashedImage from './HashedImage';
 import { router } from 'expo-router';
@@ -51,6 +51,13 @@ export default function PlayerCard({
     } else {
       router.push(`/player/${encodeNameForUrl(player.name)}/overview`);
     }
+  };
+
+  const renderWinsChipContent = () => {
+    if (mode === 'large') {
+      return `${winsCount} ${winsCount === 1 ? 'win' : 'wins'}`;
+    }
+    return winsCount;
   };
 
   const renderCoursesChipContent = () => {
@@ -186,7 +193,7 @@ export default function PlayerCard({
                     icon="crown"
                     compact
                   >
-                    {winsCount} {winsCount === 1 ? 'win' : 'wins'}
+                    {renderWinsChipContent()}
                   </Chip>
                 )}
                 {coursesCount !== undefined && coursesCount > 0 && (
@@ -286,7 +293,7 @@ export default function PlayerCard({
                     icon="crown"
                     compact
                   >
-                    {winsCount} {winsCount === 1 ? 'win' : 'wins'}
+                    {renderWinsChipContent()}
                   </Chip>
                 )}
                 {coursesCount !== undefined && coursesCount > 0 && (
@@ -406,7 +413,7 @@ export default function PlayerCard({
                   icon="crown"
                   compact
                 >
-                  {winsCount} {winsCount === 1 ? 'win' : 'wins'}
+                  {renderWinsChipContent()}
                 </Chip>
               )}
               {coursesCount !== undefined && coursesCount > 0 && (
@@ -483,25 +490,29 @@ const styles = {
   statsChipsContainer: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
-    gap: 3,
+    gap: 4,
     marginTop: 0,
   },
   statChip: {
     height: 28,
-    paddingHorizontal: 0,
-    paddingVertical: 0,
+    minHeight: 28,
     paddingLeft: 0,
-    paddingRight: 8,
-    paddingBottom: 4,
+    paddingRight: 4,
+    paddingVertical: 0,
+    paddingBottom: 0,
     margin: 0,
     marginHorizontal: 0,
     marginVertical: 0,
-    marginBottom: 4,
+    marginBottom: 0,
   },
   statChipText: {
     fontSize: 13,
-    padding: 4,
+    lineHeight: 13,
+    padding: 0,
+    paddingBottom: 0,
     margin: 0,
+    marginLeft: 4,
+    marginBottom: -2,
   },
 };
 

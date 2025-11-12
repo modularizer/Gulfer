@@ -1,11 +1,12 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { router, usePathname, useSegments, useFocusEffect } from 'expo-router';
 import { Linking, Platform } from 'react-native';
-import { getAllUsers } from '../../services/storage/userStorage';
+import { getAllUsers } from '@/services/storage/userStorage';
 import { encodeNameForUrl } from '../../utils/urlEncoding';
-import { getRoundById } from '../../services/storage/roundStorage';
-import { getAllCourses } from '../../services/storage/courseStorage';
-import { Round } from '../../types';
+import { getRoundById } from '@/services/storage/roundStorage';
+import { getAllCourses } from '@/services/storage/courseStorage';
+import { Round } from '@/types';
+import { useScorecard } from '../../contexts/ScorecardContext';
 import HillFooter from './Footer/HillFooter';
 
 interface FooterProps {}
@@ -14,6 +15,7 @@ export default function Footer({}: FooterProps) {
   const pathname = usePathname();
   const segments = useSegments();
   const [round, setRound] = useState<Round | null>(null);
+  const { openNextHole, hasNextHole } = useScorecard();
   
   // Check if we're on a holes page (but not on /players page)
   const isHolesPage = (pathname?.includes('/holes') && !pathname?.includes('/players')) || false;
@@ -82,6 +84,12 @@ export default function Footer({}: FooterProps) {
 
   const handleCenterPress = useCallback(() => {
     console.log('[CenterButton] Pressed - pathname:', pathname, 'segments:', segments);
+    
+    // Check if we're on a holes page - open next hole modal
+    if (isHolesPage) {
+      openNextHole();
+      return;
+    }
     
     // Check if we're on the about page - open GitHub
     if (pathname === '/about' || pathname?.includes('/about')) {
@@ -154,7 +162,7 @@ export default function Footer({}: FooterProps) {
     // Default: navigate to new round
     console.log('[CenterButton] Navigating to (default): /round/new');
     router.push('/round/new');
-  }, [pathname, segments]);
+  }, [pathname, segments, isHolesPage, openNextHole]);
 
   const handleProfilePress = useCallback(async () => {
     try {
@@ -234,6 +242,11 @@ export default function Footer({}: FooterProps) {
 
   // Determine the button label based on current route and round state
   const getButtonLabel = useCallback(async () => {
+    // Check if we're on a holes page
+    if (isHolesPage) {
+      return 'Next Hole';
+    }
+    
     // Check if we're on the about page
     if (pathname === '/about' || pathname?.includes('/about')) {
       return 'View on GitHub';
@@ -265,7 +278,7 @@ export default function Footer({}: FooterProps) {
     
     // Default: Start Round
     return 'Start Round';
-  }, [pathname, segments, round, getRoundLabel]);
+  }, [pathname, segments, round, getRoundLabel, isHolesPage]);
   
   // Get label synchronously (will use cached result)
   const [buttonLabel, setButtonLabel] = useState('Start Round');
@@ -279,7 +292,7 @@ export default function Footer({}: FooterProps) {
       onHistoryPress={() => router.push('/round/list')}
       onNewRoundPress={handleCenterPress}
       onProfilePress={handleProfilePress}
-      showCenterButton={!isHolesPage}
+      showCenterButton={isHolesPage ? hasNextHole : true}
       centerButtonLabel={buttonLabel}
     />
   );

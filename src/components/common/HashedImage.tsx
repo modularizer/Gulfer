@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { getImageByHash } from '../../services/storage/imageStorage';
+import { getImageByHash } from '@/services/storage/imageStorage';
 
 interface HashedImageProps {
   hash: string;

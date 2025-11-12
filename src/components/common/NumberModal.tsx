@@ -7,10 +7,11 @@ interface NumberModalProps {
   visible: boolean;
   title: string;
   defaultValue: number;
-  onSave: (value: number) => void;
+  onSave: (value: number | null) => void;
   onDismiss: () => void;
   min?: number;
   max?: number;
+  allowClear?: boolean;
 }
 
 export default function NumberModal({
@@ -21,6 +22,7 @@ export default function NumberModal({
   onDismiss,
   min = 0,
   max = 20,
+  allowClear = false,
 }: NumberModalProps) {
   const dialogStyle = useDialogStyle();
   const [editValue, setEditValue] = useState(defaultValue.toString());
@@ -33,19 +35,22 @@ export default function NumberModal({
   }, [defaultValue, visible]);
 
   const handleValueChange = (text: string) => {
+    // Only update the display value, don't save yet
     setEditValue(text);
-    const num = parseInt(text, 10);
-    if (!isNaN(num) && num >= min && num <= max) {
-      // Auto-save on valid input
-      onSave(num);
-    }
   };
 
   const handleClose = () => {
     // Save before closing
-    const num = parseInt(editValue, 10);
-    if (!isNaN(num) && num >= min && num <= max) {
-      onSave(num);
+    const trimmedValue = editValue.trim();
+    
+    // If allowClear is true and value is empty or 0, clear the value
+    if (allowClear && (trimmedValue === '' || trimmedValue === '0')) {
+      onSave(null);
+    } else {
+      const num = parseInt(trimmedValue, 10);
+      if (!isNaN(num) && num >= min && num <= max) {
+        onSave(num);
+      }
     }
     onDismiss();
   };

@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text, Menu } from 'react-native-paper';
-import { Player, Round } from '@/types';
+import { Player, Round, Score } from '@/types';
 import PhotoGallery, { PhotoGalleryHandle } from '@/components/common/PhotoGallery';
 import CourseSelector from '@/components/common/CourseSelector';
 import PlayerChip from '@/components/common/PlayerChip';
 import NameUsernameDialog from '@/components/common/NameUsernameDialog';
 import NotesSection from '@/components/common/NotesSection';
+import { Scorecard } from '@/components/Scorecard';
 import { getRoundById, saveRound, generateRoundTitle } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
@@ -15,6 +16,7 @@ import { exportRound } from '@/services/roundExport';
 import { router, useLocalSearchParams, usePathname, useFocusEffect } from 'expo-router';
 import { Platform } from 'react-native';
 import { useExport } from '@/hooks/useExport';
+import { useModalStateSimple } from '@/hooks/useModalState';
 
 // Conditional DateTimePicker import for native platforms
 let DateTimePicker: any;
@@ -23,6 +25,11 @@ if (Platform.OS !== 'web') {
 }
 
 const { width, height } = Dimensions.get('window');
+
+// Round minutes to nearest 5-minute increment
+const roundToNearest5Minutes = (minutes: number): number => {
+  return Math.round(minutes / 5) * 5;
+};
 
 export default function RoundOverviewScreen() {
   const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
@@ -46,10 +53,34 @@ export default function RoundOverviewScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const photoGalleryRef = useRef<PhotoGalleryHandle>(null);
+  const hasNavigatedRef = useRef(false);
   const { exportToClipboard } = useExport();
 
   // Track if initial load is complete - don't save during initial load or reload
   const initialLoadCompleteRef = useRef(false);
+  
+  // Persist modal state across app restarts
+  useModalStateSimple({
+    addPlayerDialogVisible,
+    setAddPlayerDialogVisible,
+    addPlayerMenuVisible,
+    setAddPlayerMenuVisible,
+    editPlayerDialog,
+    setEditPlayerDialog,
+    showDatePicker,
+    setShowDatePicker,
+    showTimePicker,
+    setShowTimePicker,
+  }, {
+    clearOnClose: true, // Clear state when all modals are closed
+  });
+  
+  // Reset navigation flag when round changes or page comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      hasNavigatedRef.current = false;
+    }, [roundIdParam])
+  );
 
   // Load all users for the add player menu
   useEffect(() => {
@@ -129,6 +160,9 @@ export default function RoundOverviewScreen() {
       setPhotos(loadedPhotos);
       // Initialize selected date from round date
       const loadedDate = new Date(loadedRound.date);
+      // Round to nearest 5 minutes
+      const roundedMinutes = roundToNearest5Minutes(loadedDate.getMinutes());
+      loadedDate.setMinutes(roundedMinutes);
       setSelectedDate(loadedDate);
       
       // Initialize previous values to prevent saving on load
@@ -513,22 +547,39 @@ export default function RoundOverviewScreen() {
   };
 
   const handleDateChange = (event: any, date?: Date) => {
-    setShowDatePicker(false);
-    if (date) {
+    if (Platform.OS === 'web') {
+      // On web, the input onChange handles it directly
+      return;
+    }
+    // On mobile, close picker immediately after selection
+    if (event.type === 'set' && date) {
       // Preserve the time when changing date
       const newDate = new Date(date);
       newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
       setSelectedDate(newDate);
+      setShowDatePicker(false);
+      // Auto-save will handle saving the change
+    } else if (event.type === 'dismissed') {
+      setShowDatePicker(false);
     }
   };
 
   const handleTimeChange = (event: any, date?: Date) => {
-    setShowTimePicker(false);
-    if (date) {
+    if (Platform.OS === 'web') {
+      // On web, the input onChange handles it directly
+      return;
+    }
+    // On mobile, close picker immediately after selection
+    // minuteInterval={5} ensures the picker only allows 5-minute increments
+    if (event.type === 'set' && date) {
       // Preserve the date when changing time
       const newDate = new Date(selectedDate);
       newDate.setHours(date.getHours(), date.getMinutes());
       setSelectedDate(newDate);
+      setShowTimePicker(false);
+      // Auto-save will handle saving the change
+    } else if (event.type === 'dismissed') {
+      setShowTimePicker(false);
     }
   };
 
@@ -576,6 +627,21 @@ export default function RoundOverviewScreen() {
         style={styles.scrollView} 
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        onScroll={(event) => {
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          const scrollPosition = contentOffset.y;
+          const scrollableHeight = contentSize.height - layoutMeasurement.height;
+          
+          // Navigate to holes page when scrolled to bottom (with 50px threshold)
+          if (scrollPosition >= scrollableHeight - 50 && scrollableHeight > 0 && !hasNavigatedRef.current) {
+            const roundId = roundIdParam || round?.id;
+            if (roundId) {
+              hasNavigatedRef.current = true;
+              router.push(`/round/${roundId}/holes`);
+            }
+          }
+        }}
+        scrollEventThrottle={16}
       >
         {/* Hero Image Section with Logo */}
         <View style={styles.heroSection}>
@@ -604,30 +670,55 @@ export default function RoundOverviewScreen() {
           />
         </View>
 
-        {/* Date Display - Editable */}
-        <TouchableOpacity 
-          style={styles.dateSection}
-          onPress={() => setShowDatePicker(true)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.dateContent}>
-            <IconButton
-              icon="calendar"
-              size={20}
-              iconColor={theme.colors.primary}
-              style={styles.dateIcon}
-            />
-            <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>
-              {round.title}
-            </Text>
-            <IconButton
-              icon="pencil"
-              size={18}
-              iconColor={theme.colors.onSurfaceVariant}
-              style={styles.editIcon}
-            />
-          </View>
-        </TouchableOpacity>
+        {/* Date and Time Display - Editable */}
+        <View style={styles.dateSection}>
+          <TouchableOpacity 
+            onPress={() => setShowDatePicker(true)}
+            activeOpacity={0.7}
+            style={styles.dateTimeRow}
+          >
+            <View style={styles.dateTimeContent}>
+              <IconButton
+                icon="calendar"
+                size={20}
+                iconColor={theme.colors.primary}
+                style={styles.dateIcon}
+              />
+              <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>
+                {formatDate(selectedDate)}
+              </Text>
+              <IconButton
+                icon="pencil"
+                size={18}
+                iconColor={theme.colors.onSurfaceVariant}
+                style={styles.editIcon}
+              />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => setShowTimePicker(true)}
+            activeOpacity={0.7}
+            style={styles.dateTimeRow}
+          >
+            <View style={styles.dateTimeContent}>
+              <IconButton
+                icon="clock-outline"
+                size={20}
+                iconColor={theme.colors.primary}
+                style={styles.dateIcon}
+              />
+              <Text style={[styles.dateText, { color: theme.colors.onSurface }]}>
+                {formatTime(selectedDate)}
+              </Text>
+              <IconButton
+                icon="pencil"
+                size={18}
+                iconColor={theme.colors.onSurfaceVariant}
+                style={styles.editIcon}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* Location and Number of Holes Input */}
         <View style={styles.inputSection}>
@@ -778,6 +869,63 @@ export default function RoundOverviewScreen() {
           onChangeText={setNotes}
           placeholder="Add any notes about this round..."
         />
+
+        {/* Scorecard Preview */}
+        {round && (
+          <View style={styles.scorecardPreviewWrapper}>
+            <TouchableOpacity
+              activeOpacity={0.3}
+              onPress={() => {
+                const roundId = roundIdParam || round?.id;
+                if (roundId) {
+                  router.push(`/round/${roundId}/holes`);
+                }
+              }}
+              style={styles.scorecardPreviewContainer}
+            >
+              <View style={styles.scorecardPreview}>
+                <View style={styles.scorecardPreviewInner}>
+                  <Scorecard
+                      players={players}
+                      holes={(() => {
+                        // Get unique hole numbers from scores, limit to first 6, or determine from course
+                        if (round.scores && round.scores.length > 0) {
+                          const holeNumbers = [...new Set(round.scores.map(s => s.holeNumber))].sort((a, b) => a - b);
+                          return holeNumbers.length > 0 ? holeNumbers.slice(0, 6) : [1, 2, 3, 4, 5, 6];
+                        }
+                        // If no scores, determine holes from course or default to first 6
+                        if (round.courseName) {
+                          const course = courses.find(c => c.name === round.courseName);
+                          if (course) {
+                            const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
+                            return Array.from({ length: Math.min(holeCount, 6) }, (_, i) => i + 1);
+                          }
+                        }
+                        return [1, 2, 3, 4, 5, 6];
+                      })()}
+                      scores={round.scores || []}
+                      onScoreChange={() => {}}
+                      onAddPlayer={() => {}}
+                      onRemovePlayer={() => {}}
+                      onAddHole={() => {}}
+                      onRemoveHole={() => {}}
+                      readOnly={true}
+                      courseName={round.courseName || undefined}
+                      courseId={undefined}
+                      columnVisibility={{ gStats: true }}
+                    />
+                </View>
+              </View>
+              {/* Opacity gradient overlay - top at 50% visibility (50% overlay), bottom at 0% visibility (100% overlay) */}
+              <View style={styles.opacityGradientOverlay} pointerEvents="none">
+                <View style={[styles.opacityLayer1, { backgroundColor: theme.colors.background, opacity: 0.5 }]} />
+                <View style={[styles.opacityLayer2, { backgroundColor: theme.colors.background, opacity: 0.625 }]} />
+                <View style={[styles.opacityLayer3, { backgroundColor: theme.colors.background, opacity: 0.75 }]} />
+                <View style={[styles.opacityLayer4, { backgroundColor: theme.colors.background, opacity: 1 }]} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* Date/Time Picker Dialogs */}
@@ -805,6 +953,8 @@ export default function RoundOverviewScreen() {
                     const newDate = new Date(year, month - 1, day);
                     newDate.setHours(selectedDate.getHours(), selectedDate.getMinutes());
                     setSelectedDate(newDate);
+                    setShowDatePicker(false);
+                    // Auto-save will handle saving the change
                   }
                 }}
                 style={{
@@ -832,15 +982,6 @@ export default function RoundOverviewScreen() {
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setShowDatePicker(false)}>Cancel</Button>
-            <Button 
-              mode="contained" 
-              onPress={() => {
-                setShowDatePicker(false);
-                setShowTimePicker(true);
-              }}
-            >
-              Next: Time
-            </Button>
           </Dialog.Actions>
         </Dialog>
 
@@ -853,13 +994,21 @@ export default function RoundOverviewScreen() {
             {Platform.OS === 'web' ? (
               <input
                 type="time"
-                value={selectedDate.toTimeString().slice(0, 5)}
+                step="300"
+                value={(() => {
+                  const hours = String(selectedDate.getHours()).padStart(2, '0');
+                  const minutes = String(selectedDate.getMinutes()).padStart(2, '0');
+                  return `${hours}:${minutes}`;
+                })()}
                 onChange={(e) => {
                   if (e.target.value) {
+                    // step="300" ensures the input only allows 5-minute increments
                     const [hours, minutes] = e.target.value.split(':');
                     const newDate = new Date(selectedDate);
                     newDate.setHours(parseInt(hours), parseInt(minutes));
                     setSelectedDate(newDate);
+                    setShowTimePicker(false);
+                    // Auto-save will handle saving the change
                   }
                 }}
                 style={{
@@ -881,34 +1030,14 @@ export default function RoundOverviewScreen() {
                     display="default"
                     onChange={handleTimeChange}
                     is24Hour={false}
+                    minuteInterval={5}
                   />
                 )}
               </View>
             )}
-            <Text style={[styles.previewText, { color: theme.colors.onSurfaceVariant, marginTop: 16 }]}>
-              {selectedDate.toLocaleString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true,
-              })}
-            </Text>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setShowTimePicker(false)}>Cancel</Button>
-            <Button 
-              mode="contained" 
-              onPress={() => {
-                setShowTimePicker(false);
-                // Date/time is already updated in selectedDate state
-                // Auto-save will handle saving it
-              }}
-            >
-              Save
-            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -981,6 +1110,60 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 24,
   },
+  scorecardPreviewWrapper: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  scorecardPreviewContainer: {
+    position: 'relative',
+    overflow: 'hidden',
+    alignSelf: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  scorecardPreview: {
+    overflow: 'hidden',
+    maxHeight: 250,
+  },
+  scorecardPreviewInner: {
+    overflow: 'hidden',
+  },
+  opacityGradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  opacityLayer1: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '25%',
+  },
+  opacityLayer2: {
+    position: 'absolute',
+    top: '25%',
+    left: 0,
+    right: 0,
+    height: '25%',
+  },
+  opacityLayer3: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    height: '25%',
+  },
+  opacityLayer4: {
+    position: 'absolute',
+    top: '75%',
+    left: 0,
+    right: 0,
+    height: '25%',
+  },
   heroSection: {
     width: '100%',
     paddingVertical: 4,
@@ -1006,6 +1189,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 0,
+    gap: 8,
+    flexDirection: 'column',
+  },
+  dateTimeRow: {
+    width: '100%',
+  },
+  dateTimeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   dateContent: {
     flexDirection: 'row',
@@ -1033,6 +1226,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    width: '100%',
+    minWidth: 0,
   },
   courseLinkIcon: {
     margin: 0,
@@ -1071,12 +1266,14 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   inputSection: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   inputRow: {
     flexDirection: 'row',
     gap: 12,
+    width: '100%',
   },
   inputFlex: {
     flex: 1,

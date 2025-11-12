@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { IconButton, Text, Menu, Dialog, Portal, Button, TextInput, useTheme } from 'react-native-paper';
-import { Course, getAllCourses, saveCourse, generateCourseId, getLastUsedCourse, getLatestAddedCourse } from '../../services/storage/courseStorage';
+import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { IconButton, Menu, Dialog, Portal, Button, TextInput, useTheme } from 'react-native-paper';
+import { Course, getAllCourses, saveCourse, generateCourseId, getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
 
 // Helper function to get number of holes from Course (handles both old and new format)
 const getHoleCount = (course: Course): number => {
@@ -154,6 +154,7 @@ export default function CourseSelector({
           <TouchableOpacity
             onPress={() => setCourseMenuVisible(true)}
             style={[styles.courseSelector, { borderBottomColor: theme.colors.outlineVariant }]}
+            activeOpacity={0.7}
           >
             <View style={styles.courseSelectorContent}>
               <IconButton
@@ -162,9 +163,15 @@ export default function CourseSelector({
                 iconColor={theme.colors.onSurface}
                 style={styles.courseIcon}
               />
-              <Text style={[styles.courseSelectorText, { color: theme.colors.onSurface }]}>
-                {formatCourseDisplayName(selectedCourse)}
-              </Text>
+              <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+                <Text 
+                  style={[styles.courseSelectorText, { color: theme.colors.onSurface }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {formatCourseDisplayName(selectedCourse)}
+                </Text>
+              </View>
               <IconButton
                 icon="chevron-down"
                 size={20}
@@ -255,19 +262,30 @@ const styles = StyleSheet.create({
   courseSelector: {
     borderBottomWidth: 1,
     minHeight: 56,
+    height: 56,
     justifyContent: 'center',
+    width: '100%',
+    minWidth: 300,
+    maxWidth: 400,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
   },
   courseSelectorContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    width: '100%',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   courseSelectorText: {
-    flex: 1,
     fontSize: 16,
   },
   courseIcon: {
     margin: 0,
+    padding: 0,
+    width: 40,
+    height: 40,
   },
   dialogInput: {
     marginBottom: 16,

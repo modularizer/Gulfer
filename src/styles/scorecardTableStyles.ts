@@ -7,6 +7,7 @@ import { StyleSheet } from 'react-native';
 export const scorecardTableStyles = StyleSheet.create({
   wrapper: {
     flex: 1,
+    flexDirection: 'column',
   },
   fixedHeaderRow: {
     backgroundColor: '#4CAF50',
@@ -14,9 +15,16 @@ export const scorecardTableStyles = StyleSheet.create({
     borderBottomColor: '#388e3c',
     zIndex: 10,
     position: 'relative',
+    height: 34,
+    minHeight: 34,
+    maxHeight: 34,
+    flexShrink: 0,
+    flexGrow: 0,
   },
   headerScrollView: {
-    flex: 1,
+    height: 34,
+    minHeight: 34,
+    maxHeight: 34,
   },
   headerRowContent: {
     flexDirection: 'row',
@@ -32,9 +40,11 @@ export const scorecardTableStyles = StyleSheet.create({
   },
   scrollableContent: {
     flex: 1,
+    flexShrink: 1,
   },
   table: {
     padding: 8,
+    paddingTop: 0,
     paddingBottom: 0,
   },
   fixedTotalRow: {
@@ -42,8 +52,14 @@ export const scorecardTableStyles = StyleSheet.create({
     borderTopWidth: 2,
     borderTopColor: '#4CAF50',
     paddingTop: 4,
-    paddingBottom: 0,
+    paddingBottom: 4,
+    marginBottom: 50,
     zIndex: 10,
+    height: 34,
+    minHeight: 34,
+    maxHeight: 34,
+    flexShrink: 0,
+    flexGrow: 0,
   },
   totalRowContent: {
     flexDirection: 'row',
@@ -53,7 +69,26 @@ export const scorecardTableStyles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
-    minHeight: 31,
+    height: 34,
+    minHeight: 34,
+    maxHeight: 34,
+  },
+  nextHoleRowOverride: {
+  },
+  nextHoleRow: {
+    height: 46,
+    minHeight: 46,
+    maxHeight: 46,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    borderRadius: 4,
+    marginTop:-3,
+    marginLeft: -2, marginRight: -2,
+    borderBottomWidth: 2,
+    borderBottomColor: '#4CAF50',
+    fontWeight: '700',
+    paddingVertical: 2,
+    alignItems: 'center',
   },
   cell: {
     width: 77,
@@ -62,10 +97,15 @@ export const scorecardTableStyles = StyleSheet.create({
     alignItems: 'center',
     borderRightWidth: 1,
     borderRightColor: '#e0e0e0',
+    height: 34,
+    minHeight: 34,
+    maxHeight: 34,
   },
   headerCell: {
     backgroundColor: '#4CAF50',
-    minHeight: 31,
+    height: 34,
+    minHeight: 34,
+    maxHeight: 34,
   },
   headerText: {
     color: '#fff',
@@ -76,6 +116,8 @@ export const scorecardTableStyles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     width: 35,
     minWidth: 35,
+    borderBottomColor: '#b5b5b5',
+    borderBottomWidth: 1,
   },
   holeHeaderCell: {
     width: 35,
@@ -117,6 +159,10 @@ export const scorecardTableStyles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     width: 60,
     minWidth: 60,
+    borderRightColor: '#999',
+    borderRightWidth: 1,
+    borderBottomColor: '#b5b5b5',
+    borderBottomWidth: 1,
   },
   distanceText: {
     fontWeight: '500',
@@ -127,6 +173,8 @@ export const scorecardTableStyles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     width: 60,
     minWidth: 60,
+    borderBottomColor: '#b5b5b5',
+    borderBottomWidth: 1,
   },
   parText: {
     fontWeight: '500',
@@ -140,7 +188,7 @@ export const scorecardTableStyles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#d0d0d0',
+    borderBottomColor: '#b5b5b5',
     marginBottom: -1,
   },
   gStatHeaderText: {
@@ -154,10 +202,13 @@ export const scorecardTableStyles = StyleSheet.create({
   },
   totalRowCell: {
     backgroundColor: '#e8f5e9',
+    height: 34,
+    minHeight: 34,
+    maxHeight: 34,
   },
   totalRowText: {
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: 10,
   },
   scoreText: {
     fontSize: 18,
