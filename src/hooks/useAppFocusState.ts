@@ -1,10 +1,18 @@
 /**
  * Hook to track when the app was opened or returned to foreground
  * Returns whether the app was focused within the last N milliseconds
+ * 
+ * Uses a module-level variable to track app focus time, so it persists
+ * across component mounts and only updates when the app state actually changes.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
+
+// Module-level variable to track when app became active
+// This persists across component mounts/unmounts
+let lastAppActiveTime: number | null = null;
+let isInitialized = false;
 
 /**
  * Hook to check if app was focused within the last N milliseconds
@@ -12,35 +20,47 @@ import { AppState, AppStateStatus } from 'react-native';
  * @returns true if app was focused within the last maxAgeMs, false otherwise
  */
 export function useAppFocusState(maxAgeMs: number = 5000): boolean {
-  const [isRecentlyFocused, setIsRecentlyFocused] = useState(false);
-  const lastFocusTimeRef = useRef<number | null>(null);
+  const [isRecentlyFocused, setIsRecentlyFocused] = useState(() => {
+    // Initial state: check if we have a recent focus time
+    if (lastAppActiveTime !== null) {
+      const age = Date.now() - lastAppActiveTime;
+      return age < maxAgeMs;
+    }
+    return false;
+  });
 
   useEffect(() => {
-    // Record initial focus time
-    const now = Date.now();
-    lastFocusTimeRef.current = now;
-    setIsRecentlyFocused(true);
-
-    // Set up listener for app state changes
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
-        // App came to foreground
-        const now = Date.now();
-        lastFocusTimeRef.current = now;
-        setIsRecentlyFocused(true);
+    // Initialize the listener only once (module-level)
+    if (!isInitialized) {
+      isInitialized = true;
+      
+      // On first initialization, if app is already active and we haven't recorded a time yet,
+      // record it (this handles the case where the app was just launched)
+      if (AppState.currentState === 'active' && lastAppActiveTime === null) {
+        lastAppActiveTime = Date.now();
       }
-    });
+      
+      // Set up listener for app state changes
+      // Only record when app state CHANGES to active, not when it's already active
+      AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+        if (nextAppState === 'active') {
+          // App came to foreground - record the time
+          lastAppActiveTime = Date.now();
+        }
+      });
+    }
 
     // Check periodically if we're still within the time window
     const interval = setInterval(() => {
-      if (lastFocusTimeRef.current !== null) {
-        const age = Date.now() - lastFocusTimeRef.current;
+      if (lastAppActiveTime !== null) {
+        const age = Date.now() - lastAppActiveTime;
         setIsRecentlyFocused(age < maxAgeMs);
+      } else {
+        setIsRecentlyFocused(false);
       }
     }, 100); // Check every 100ms
 
     return () => {
-      subscription.remove();
       clearInterval(interval);
     };
   }, [maxAgeMs]);

@@ -11,6 +11,7 @@ import { CornerStatisticsConfig } from '@/services/cornerStatistics';
 import { getCornerConfig, saveCornerConfig, getColumnVisibility, saveColumnVisibility, ColumnVisibilityConfig } from '@/services/storage/cornerConfigStorage';
 import { getCurrentUserName } from '@/services/storage/userStorage';
 import { useAppFocusState } from '@/hooks';
+import { useScorecard } from '@/contexts/ScorecardContext';
 
 export default function ScorecardPlayScreen() {
   const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
@@ -36,6 +37,7 @@ export default function ScorecardPlayScreen() {
 
   // Track if app was focused within last 5 seconds
   const isRecentlyFocused = useAppFocusState(5000);
+  const { hasNextHole } = useScorecard();
 
   // Check if we should auto-open the next hole modal when navigating to this page
   useFocusEffect(
@@ -43,8 +45,12 @@ export default function ScorecardPlayScreen() {
       // Reset the auto-open flag when screen comes into focus
       hasAutoOpenedRef.current = false;
 
-      // Only proceed if round is loaded and app was recently focused
-      if (!round || !isRecentlyFocused || players.length === 0 || holes.length === 0) {
+      // Only proceed if:
+      // 1. Round is loaded
+      // 2. App was recently focused (within last 5 seconds)
+      // 3. There's actually a next hole (hasNextHole from Scorecard context)
+      // 4. Players and holes are available
+      if (!round || !isRecentlyFocused || !hasNextHole || players.length === 0 || holes.length === 0) {
         return;
       }
 
@@ -53,25 +59,15 @@ export default function ScorecardPlayScreen() {
         return;
       }
 
-      // Find the first hole where at least one player has 0 or no score
-      const nextHole = holes.find(hole => {
-        return players.some(player => {
-          const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
-          return !score || score.throws === 0;
-        });
-      });
-
-      if (nextHole !== undefined) {
-        // There's a next hole with at least one 0 score
-        hasAutoOpenedRef.current = true;
-        setAutoOpenNextHole(true);
-        // Reset after a short delay to prevent re-opening
-        const timeout = setTimeout(() => {
-          setAutoOpenNextHole(false);
-        }, 500);
-        return () => clearTimeout(timeout);
-      }
-    }, [round, isRecentlyFocused, players, holes, scores])
+      // There's a next hole - auto-open the modal
+      hasAutoOpenedRef.current = true;
+      setAutoOpenNextHole(true);
+      // Reset after a short delay to prevent re-opening
+      const timeout = setTimeout(() => {
+        setAutoOpenNextHole(false);
+      }, 500);
+      return () => clearTimeout(timeout);
+    }, [round, isRecentlyFocused, hasNextHole, players, holes])
   );
 
   // Load corner config, column visibility, and current user ID
