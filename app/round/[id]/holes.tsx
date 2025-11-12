@@ -344,6 +344,10 @@ export default function ScorecardPlayScreen() {
         columnVisibility={columnVisibility || undefined}
         currentRoundDate={round.date}  // Exclude rounds that started at the same time or after
         autoOpenNextHole={autoOpenNextHole}
+        onScrollToTop={() => {
+          if (!round) return;
+          router.push(`/round/${round.id}/overview`);
+        }}
       />
 
       {/* Corner Statistics Settings Dialog */}

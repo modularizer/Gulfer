@@ -715,10 +715,10 @@ export async function computeCellCornerValues(
   };
   
   // Only log if at least one corner is visible (to reduce noise)
-  const hasVisibleCorner = Object.values(cornerResults).some(c => c.visible);
-  if (hasVisibleCorner) {
-    console.log(`[CornerStats] Player ${playerId}, Hole ${holeNumber}:`, cornerResults);
-  }
+  // const hasVisibleCorner = Object.values(cornerResults).some(c => c.visible);
+  // if (hasVisibleCorner) {
+  //   console.log(`[CornerStats] Player ${playerId}, Hole ${holeNumber}:`, cornerResults);
+  // }
 
   return { topLeft, topRight, bottomLeft, bottomRight };
 }

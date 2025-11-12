@@ -53,7 +53,7 @@ export const scorecardTableStyles = StyleSheet.create({
     borderTopColor: '#4CAF50',
     paddingTop: 4,
     paddingBottom: 4,
-    marginBottom: 50,
+    marginBottom: 0,
     zIndex: 10,
     height: 34,
     minHeight: 34,
@@ -61,6 +61,10 @@ export const scorecardTableStyles = StyleSheet.create({
     flexShrink: 0,
     flexGrow: 0,
   },
+    fixedTotalRowHasNext: {
+        marginBottom: 50,
+        paddingBottom: 4,
+    },
   totalRowContent: {
     flexDirection: 'row',
     paddingHorizontal: 8,

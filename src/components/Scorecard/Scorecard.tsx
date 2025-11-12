@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, Button, IconButton, useTheme } from 'react-native-paper';
 import { Player, Score, Course, Hole } from '@/types';
@@ -51,6 +51,7 @@ interface ScorecardProps {
   };
   currentRoundDate?: number; // Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
   autoOpenNextHole?: boolean; // If true, automatically open the edit modal for the next hole
+  onScrollToTop?: () => void; // Callback when user scrolls up and hole 1 is at the top
 }
 
 
@@ -84,6 +85,7 @@ export default function Scorecard({
   columnVisibility,
   currentRoundDate,
   autoOpenNextHole = false,
+  onScrollToTop,
 }: ScorecardProps) {
   const theme = useTheme();
   const [editModal, setEditModal] = useState<{
@@ -96,7 +98,7 @@ export default function Scorecard({
     holeNumber: number | null;
     field: 'par' | 'distance' | null;
   }>({ visible: false, holeNumber: null, field: null });
-  const { registerOpenNextHole, setHasNextHole } = useScorecard();
+  const { registerOpenNextHole, setHasNextHole, hasNextHole } = useScorecard();
   const [distanceUnit, setDistanceUnit] = useState<'yd' | 'm' | 'ft'>('ft');
   const [courseHoles, setCourseHoles] = useState<Hole[]>([]);
   const [resolvedCurrentUserId, setResolvedCurrentUserId] = useState<string | undefined>(currentUserId);
@@ -364,17 +366,8 @@ export default function Scorecard({
     // Keep playerId as string (Score interface expects string UUID)
     const stringPlayerId = typeof playerId === 'string' ? playerId : String(playerId);
     
-    console.log('[Scorecard] handleScoreChange called:', {
-      playerId: stringPlayerId,
-      holeNumber,
-      score,
-      editModalHoleNumber: editModal.holeNumber
-    });
-    
     // Use the holeNumber passed directly from the modal
     onScoreChange(stringPlayerId, holeNumber, score);
-    
-    console.log('[Scorecard] onScoreChange called, checking if score was saved...');
   };
 
   const getHoleDistance = (holeNumber: number): number | undefined => {
@@ -495,6 +488,187 @@ export default function Scorecard({
       }
     }
   }, [autoOpenNextHole, readOnly, players, holes, getNextHole, openEditModal, editModal.visible]);
+
+  // Scroll detection for navigating back when hole 1 is at top
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewLayoutRef = useRef<{ y: number; height: number } | null>(null);
+  const hole1RowRef = useRef<View>(null);
+  const hole1LayoutRef = useRef<{ y: number; height: number } | null>(null);
+  const lastScrollY = useRef<number>(0);
+  const hasNavigatedBackRef = useRef(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isHole1VisibleRef = useRef<boolean>(false);
+  const wasHole1VisibleAtScrollStartRef = useRef<boolean>(false);
+  const lastScrollDirectionRef = useRef<'up' | 'down' | null>(null);
+  const scrollStartYRef = useRef<number | null>(null);
+  const hasScrolledDownRef = useRef<boolean>(false);
+  const minScrollUpDistance = 100; // Minimum 100px scroll up required
+  const [pullProgress, setPullProgress] = useState<number>(0); // 0 to 1, tracks pull progress
+  
+  // Touch tracking for pull-down gesture
+  const touchStartYRef = useRef<number | null>(null);
+  const touchCurrentYRef = useRef<number | null>(null);
+  const isPullingRef = useRef<boolean>(false);
+  const [pullDistance, setPullDistance] = useState<number>(0);
+
+  // Check if hole 1 is visible in the viewport
+  const checkHole1Visibility = useCallback((scrollY: number) => {
+    if (!hole1LayoutRef.current || !scrollViewLayoutRef.current) {
+      return false;
+    }
+
+    const hole1Top = hole1LayoutRef.current.y;
+    const hole1Bottom = hole1Top + hole1LayoutRef.current.height;
+    const viewportTop = scrollY;
+    const viewportBottom = scrollY + scrollViewLayoutRef.current.height;
+
+    // Hole 1 is visible if any part of it is within the viewport
+    const isVisible = hole1Bottom > viewportTop && hole1Top < viewportBottom;
+    isHole1VisibleRef.current = isVisible;
+    return isVisible;
+  }, []);
+
+  const handleScroll = useCallback((event: any) => {
+    const currentScrollY = event.nativeEvent.contentOffset.y;
+    
+    if (!onScrollToTop || hasNavigatedBackRef.current) {
+      return;
+    }
+    const isScrollingUp = currentScrollY < lastScrollY.current;
+    const isScrollingDown = currentScrollY > lastScrollY.current;
+    
+    // Track scroll direction change to detect start of new scroll gesture
+    const currentDirection = isScrollingUp ? 'up' : (isScrollingDown ? 'down' : null);
+    const directionChanged = currentDirection !== null && currentDirection !== lastScrollDirectionRef.current;
+    
+    // Update visibility check
+    const isCurrentlyVisible = checkHole1Visibility(currentScrollY);
+    
+    // When scroll direction changes to 'up' (new upward scroll gesture starts), start tracking
+    if (directionChanged && currentDirection === 'up') {
+      // New upward scroll gesture starting - only track upward gestures
+      wasHole1VisibleAtScrollStartRef.current = isCurrentlyVisible;
+      scrollStartYRef.current = currentScrollY;
+      hasScrolledDownRef.current = false;
+    }
+    
+    // If we're scrolling down during an active upward gesture, mark it and reset tracking
+    if (isScrollingDown && scrollStartYRef.current !== null) {
+      // User scrolled down during upward gesture - invalidate it
+      hasScrolledDownRef.current = true;
+      scrollStartYRef.current = null;
+      wasHole1VisibleAtScrollStartRef.current = false;
+    }
+    
+    lastScrollDirectionRef.current = currentDirection;
+    lastScrollY.current = currentScrollY;
+
+    // Calculate pull progress for visual feedback
+    // Show feedback when scrolling up and hole 1 was visible at start
+    if (isScrollingUp && scrollStartYRef.current !== null && !hasScrolledDownRef.current) {
+      const scrollUpDistance = scrollStartYRef.current - currentScrollY;
+      if (scrollUpDistance > 0 && wasHole1VisibleAtScrollStartRef.current) {
+        // Progress from 0 to 1, capped at 100px (minScrollUpDistance)
+              const progress = Math.min(scrollUpDistance / minScrollUpDistance, 1);
+              setPullProgress(progress);
+            } else {
+        setPullProgress(0);
+      }
+    } else {
+      setPullProgress(0);
+    }
+
+    // Only proceed if:
+    // 1. Scrolling up
+    // 2. Hole 1 was visible at the start of this scroll gesture
+    // 3. Hole 1 is currently visible
+    // 4. We've never scrolled down during this gesture
+    // 5. We've scrolled up by at least 100px
+    if (!isScrollingUp || !wasHole1VisibleAtScrollStartRef.current || !isCurrentlyVisible || hasScrolledDownRef.current) {
+      return;
+    }
+
+    // Check if we've scrolled up by at least 100px
+    if (scrollStartYRef.current === null) {
+      return;
+    }
+    const scrollUpDistance = scrollStartYRef.current - currentScrollY;
+    if (scrollUpDistance < minScrollUpDistance) {
+      return;
+    }
+
+    // Clear any existing timeout
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    // Use a small delay to check if we're at the top after scroll settles
+    scrollTimeoutRef.current = setTimeout(() => {
+      // Check if we're at the top (scrollY is 0 or very close to 0)
+      // and hole 1 is still visible and was visible at scroll start
+      // and we never scrolled down
+      const threshold = 20; // Allow 20px threshold
+      if (currentScrollY <= threshold && isHole1VisibleRef.current && wasHole1VisibleAtScrollStartRef.current && !hasScrolledDownRef.current) {
+        // Verify hole 1 is actually at the top of the viewport
+        if (hole1LayoutRef.current && scrollViewLayoutRef.current) {
+          const hole1Top = hole1LayoutRef.current.y;
+          const viewportTop = currentScrollY;
+          // Check if hole 1 is at the top (within threshold)
+          if (hole1Top <= viewportTop + threshold && hole1Top >= viewportTop - threshold) {
+            hasNavigatedBackRef.current = true;
+            onScrollToTop();
+            // Reset after a delay to allow re-navigation if needed
+            setTimeout(() => {
+              hasNavigatedBackRef.current = false;
+            }, 1000);
+          }
+        }
+      }
+    }, 100); // Small delay to let scroll settle
+  }, [onScrollToTop, checkHole1Visibility]);
+
+  // Handle ScrollView layout to get viewport dimensions
+  const handleScrollViewLayout = useCallback((event: any) => {
+    const { y, height } = event.nativeEvent.layout;
+    scrollViewLayoutRef.current = { y, height };
+  }, []);
+
+  // Handle hole 1 row layout to track its position
+  const handleHole1Layout = useCallback((event: any) => {
+    if (!scrollViewRef.current || !hole1RowRef.current) return;
+    
+    hole1RowRef.current.measureLayout(
+      scrollViewRef.current as any,
+      (x, measuredY, width, measuredHeight) => {
+        hole1LayoutRef.current = { y: measuredY, height: measuredHeight };
+        // Check initial visibility
+        if (scrollViewLayoutRef.current) {
+          checkHole1Visibility(lastScrollY.current);
+        }
+      },
+      () => {
+        // Error callback - ignore measurement errors
+      }
+    );
+  }, [checkHole1Visibility]);
+
+  // Check initial visibility when component mounts or holes change
+  useEffect(() => {
+    if (holes.length > 0 && holes[0] === 1 && scrollViewLayoutRef.current && hole1LayoutRef.current) {
+      checkHole1Visibility(lastScrollY.current);
+    }
+  }, [holes, checkHole1Visibility]);
+
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const h = 42;
   const op = readOnly ? 1 : 0.7;
 
@@ -599,22 +773,98 @@ export default function Scorecard({
       <View style={{ flex: 1, paddingBottom: 10 }}>
         {/* Scrollable Hole Rows */}
         <ScrollView 
+          ref={scrollViewRef}
           style={scorecardTableStyles.scrollableContent}
+          onScroll={handleScroll}
+          onLayout={handleScrollViewLayout}
+          scrollEventThrottle={16}
+          onTouchStart={(event) => {
+            // React Native touch events use touches array
+            const touch = event.nativeEvent.touches?.[0] || event.nativeEvent;
+            const touchY = touch.pageY || touch.locationY || 0;
+            touchStartYRef.current = touchY;
+            touchCurrentYRef.current = touchY;
+            
+            // Check if we're at the top and hole 1 is visible
+            if (lastScrollY.current <= 5 && isHole1VisibleRef.current) {
+              isPullingRef.current = true;
+            }
+          }}
+          onTouchMove={(event) => {
+            const touch = event.nativeEvent.touches?.[0] || event.nativeEvent;
+            const touchY = touch.pageY || touch.locationY || 0;
+            
+            if (!isPullingRef.current || touchStartYRef.current === null || touchStartYRef.current === undefined) {
+              return;
+            }
+            
+            touchCurrentYRef.current = touchY;
+            const pullDownDistance = touchStartYRef.current - touchY; // Negative when pulling down
+            
+            // Only allow pulling down (negative distance means finger moved down)
+            if (pullDownDistance < 0) {
+              const absDistance = Math.abs(pullDownDistance);
+              const progress = Math.min(absDistance / minScrollUpDistance, 1);
+              setPullDistance(absDistance);
+              setPullProgress(progress);
+            } else {
+              // User pulled up, cancel
+              isPullingRef.current = false;
+              setPullDistance(0);
+              setPullProgress(0);
+            }
+          }}
+          onTouchEnd={() => {
+            if (!isPullingRef.current) return;
+            
+            // If pulled down enough, navigate back
+            if (pullDistance >= minScrollUpDistance && isHole1VisibleRef.current) {
+              if (onScrollToTop) {
+                onScrollToTop();
+              }
+            }
+            
+            // Reset
+            isPullingRef.current = false;
+            touchStartYRef.current = null;
+            touchCurrentYRef.current = null;
+            setPullDistance(0);
+            setPullProgress(0);
+          }}
+          onTouchCancel={() => {
+            isPullingRef.current = false;
+            touchStartYRef.current = null;
+            touchCurrentYRef.current = null;
+            setPullDistance(0);
+            setPullProgress(0);
+          }}
         >
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={scorecardTableStyles.table}>
+          <View
+            style={pullProgress > 0 ? {
+              transform: [{ translateY: pullProgress * 20 }], // Pull down effect
+              opacity: 1 - (pullProgress * 0.3), // Slight fade as pulling
+            } : {}}
+          >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={scorecardTableStyles.table}>
               {/* Hole Rows */}
               {holes.map((hole) => {
                 const isNextHole = getNextHole() === hole;
                 const nextHole = getNextHole();
                 const hasNextHole = nextHole !== null;
+                const isHole1 = hole === 1;
                 return (
-              <View key={hole} style={[
-                scorecardTableStyles.row,
-                isNextHole && scorecardTableStyles.nextHoleRow,
-                isNextHole && scorecardTableStyles.nextHoleRowOverride,
-                hasNextHole && !isNextHole && { opacity: 0.95 }
-              ]}>
+              <View 
+                key={hole} 
+                ref={isHole1 ? hole1RowRef : undefined}
+                onLayout={isHole1 ? handleHole1Layout : undefined}
+                style={[
+                  scorecardTableStyles.row,
+                  isNextHole && scorecardTableStyles.nextHoleRow,
+                  isNextHole && scorecardTableStyles.nextHoleRowOverride,
+                  hasNextHole && !isNextHole && { opacity: 0.95 }
+                ]}
+              >
                 <TouchableOpacity
                   style={[
                     scorecardTableStyles.cell, 
@@ -866,10 +1116,11 @@ export default function Scorecard({
             )}
           </View>
         </ScrollView>
+          </View>
       </ScrollView>
 
         {/* Fixed Total Row */}
-        <View style={scorecardTableStyles.fixedTotalRow}>
+        <View style={[scorecardTableStyles.fixedTotalRow, hasNextHole && scorecardTableStyles.fixedTotalRowHasNext]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={scorecardTableStyles.totalRowContent}>
             <View style={[scorecardTableStyles.cell, scorecardTableStyles.totalRowCell, scorecardTableStyles.holeHeaderCell]}>
