@@ -3,10 +3,10 @@
  * Uses GenericStorageService for common operations
  */
 
-import { getItem, setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import { User, userSchema } from '@/types';
 import { setCurrentUserId, getCurrentUserId, saveCurrentUserName as saveLegacyCurrentUserName } from './currentUserStorage';
-import { GenericStorageService } from './GenericStorageService';
+import { TableDriver } from '@services/storage/relations/TableDriver';
 
 // Re-export User type from types
 export type { User };
@@ -17,7 +17,7 @@ const USERS_MIGRATION_VERSION_KEY = '@gulfer_users_migration_version';
 const CURRENT_USERS_MIGRATION_VERSION = 1; // Increment when adding new migrations
 
 // Create generic storage service instance for users
-const userStorage = new GenericStorageService<User>({
+const userStorage = new TableDriver<User>({
   storageKey: USERS_STORAGE_KEY,
   schema: userSchema,
   entityName: 'User',
@@ -137,7 +137,7 @@ export async function deleteUser(userId: string): Promise<void> {
 }
 
 /**
- * Generate a new unique user ID (8 hex characters)
+ * Generate a new unique user ID (16 hex characters)
  */
 export async function generateUserId(): Promise<string> {
   return userStorage.generateId();
@@ -182,7 +182,7 @@ export async function getUserIdForPlayerName(playerName: string): Promise<string
  */
 export async function getProfileImageHash(): Promise<string | null> {
   try {
-    const hash = await getItem(PROFILE_IMAGE_KEY);
+    const hash = await defaultStorageDriver.getItem(PROFILE_IMAGE_KEY);
     return hash;
   } catch (error) {
     console.error('Error loading profile image hash:', error);
@@ -195,7 +195,7 @@ export async function getProfileImageHash(): Promise<string | null> {
  */
 export async function saveProfileImageHash(hash: string): Promise<void> {
   try {
-    await setItem(PROFILE_IMAGE_KEY, hash);
+    await defaultStorageDriver.setItem(PROFILE_IMAGE_KEY, hash);
   } catch (error) {
     console.error('Error saving profile image hash:', error);
     throw error;
@@ -212,16 +212,16 @@ export async function saveProfileImageHash(hash: string): Promise<void> {
 export async function migrateUsersRemoveIsCurrentUser(): Promise<{ migrated: number; failed: number }> {
   try {
     // Check if migration has already been run
-    const migrationVersion = await getItem(USERS_MIGRATION_VERSION_KEY);
+    const migrationVersion = await defaultStorageDriver.getItem(USERS_MIGRATION_VERSION_KEY);
     if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_USERS_MIGRATION_VERSION) {
       console.log('[Migration] Users isCurrentUser removal migration already completed');
       return { migrated: 0, failed: 0 };
     }
     
     console.log('[Migration] Starting users isCurrentUser removal migration...');
-    const data = await getItem(USERS_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(USERS_STORAGE_KEY);
     if (!data) {
-      await setItem(USERS_MIGRATION_VERSION_KEY, CURRENT_USERS_MIGRATION_VERSION.toString());
+      await defaultStorageDriver.setItem(USERS_MIGRATION_VERSION_KEY, CURRENT_USERS_MIGRATION_VERSION.toString());
       return { migrated: 0, failed: 0 };
     }
     
@@ -261,12 +261,12 @@ export async function migrateUsersRemoveIsCurrentUser(): Promise<{ migrated: num
     
     // Save all migrated users (with isCurrentUser removed)
     if (needsSave) {
-      await setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+      await defaultStorageDriver.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
       console.log(`[Migration] Moved ${migrated} current user(s) to current user table and removed isCurrentUser from users`);
     }
     
     // Mark migration as complete
-    await setItem(USERS_MIGRATION_VERSION_KEY, CURRENT_USERS_MIGRATION_VERSION.toString());
+    await defaultStorageDriver.setItem(USERS_MIGRATION_VERSION_KEY, CURRENT_USERS_MIGRATION_VERSION.toString());
     
     console.log(`[Migration] Users isCurrentUser removal complete: ${migrated} migrated, ${failed} failed`);
     return { migrated, failed };

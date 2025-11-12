@@ -17,6 +17,17 @@ export function eq(field: string, value: any): SingleCondition {
 }
 
 /**
+ * Create a not equal condition
+ */
+export function ne(field: string, value: any): SingleCondition {
+  return {
+    field,
+    operator: ConditionOperator.NotEqual,
+    value,
+  };
+}
+
+/**
  * Create a less than condition
  */
 export function lt(field: string, value: number | string | Date): SingleCondition {

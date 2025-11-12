@@ -5,13 +5,13 @@
  */
 
 import { Score, scoreSchema } from '@/types';
-import { GenericStorageService } from './GenericStorageService';
+import { TableDriver } from '@services/storage/relations/TableDriver';
 
 const SCORES_STORAGE_KEY = '@gulfer_scores';
 
 // Create generic storage service instance for scores
 // Note: Scores don't have a name field, so we disable name uniqueness checking
-const scoreStorage = new GenericStorageService<Score>({
+const scoreStorage = new TableDriver<Score>({
   storageKey: SCORES_STORAGE_KEY,
   schema: scoreSchema,
   entityName: 'Score',

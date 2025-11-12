@@ -5,7 +5,7 @@
  * Used for merging imported data with existing data
  */
 
-import { getItem, setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import { getStorageId } from './storageId';
 
 const MERGE_TABLE_KEY = '@gulfer_uuid_merges';
@@ -86,7 +86,7 @@ export async function mapForeignToLocal(
       mergedAt: Date.now(),
     };
     
-    await setItem(MERGE_TABLE_KEY, JSON.stringify(mergeTable));
+    await defaultStorageDriver.setItem(MERGE_TABLE_KEY, JSON.stringify(mergeTable));
   } catch (error) {
     console.error('Error mapping foreign to local UUID:', error);
     throw error;
@@ -127,7 +127,7 @@ export async function getForeignEntitiesForLocal(
  */
 async function getMergeTable(): Promise<MergeTable> {
   try {
-    const data = await getItem(MERGE_TABLE_KEY);
+    const data = await defaultStorageDriver.getItem(MERGE_TABLE_KEY);
     if (data) {
       return JSON.parse(data);
     }

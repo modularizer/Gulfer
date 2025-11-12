@@ -5,7 +5,7 @@
  * On web: Uses blob URLs (stored in IndexedDB for persistence)
  */
 
-import { getItem, setItem, removeItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import * as FileSystem from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
@@ -84,7 +84,7 @@ export async function storeImage(uri: string): Promise<{ hash: string; fileUri: 
     
     if (Platform.OS === 'web') {
       // On web, check if already stored in IndexedDB
-      const existing = await getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
+      const existing = await defaultStorageDriver.getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
       if (existing) {
         // Return existing data URI
         const dataUri = `data:image/jpeg;base64,${existing}`;
@@ -112,7 +112,7 @@ export async function storeImage(uri: string): Promise<{ hash: string; fileUri: 
       const cleanBase64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
       
       // Store in IndexedDB
-      await setItem(`${IMAGE_STORAGE_PREFIX}${hash}`, cleanBase64);
+      await defaultStorageDriver.setItem(`${IMAGE_STORAGE_PREFIX}${hash}`, cleanBase64);
       const dataUri = `data:image/jpeg;base64,${cleanBase64}`;
       return { hash, fileUri: dataUri };
     } else {
@@ -149,7 +149,7 @@ export async function storeImage(uri: string): Promise<{ hash: string; fileUri: 
 export async function getImageByHash(hash: string): Promise<string | null> {
   try {
     if (Platform.OS === 'web') {
-      const base64 = await getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
+      const base64 = await defaultStorageDriver.getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
       if (!base64) {
         return null;
       }
@@ -175,7 +175,7 @@ export async function getImageByHash(hash: string): Promise<string | null> {
 export async function deleteImageByHash(hash: string): Promise<void> {
   try {
     if (Platform.OS === 'web') {
-      await removeItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
+      await defaultStorageDriver.removeItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
     } else {
       const fileUri = `${IMAGE_DIR}${hash}.jpg`;
       const fileInfo = await FileSystem.getInfoAsync(fileUri);
@@ -195,7 +195,7 @@ export async function deleteImageByHash(hash: string): Promise<void> {
 export async function imageExists(hash: string): Promise<boolean> {
   try {
     if (Platform.OS === 'web') {
-      const data = await getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
+      const data = await defaultStorageDriver.getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
       return data !== null;
     } else {
       const fileUri = `${IMAGE_DIR}${hash}.jpg`;

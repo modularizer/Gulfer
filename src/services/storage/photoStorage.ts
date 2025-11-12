@@ -4,16 +4,16 @@
  * Uses GenericStorageService for common operations
  */
 
-import { setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import { Photo, photoSchema } from '@/types';
 import { generateUniqueUUID } from '../../utils/uuid';
-import { GenericStorageService } from './GenericStorageService';
+import { TableDriver } from '@services/storage/relations/TableDriver';
 
 const PHOTOS_STORAGE_KEY = '@gulfer_photos';
 
 // Create generic storage service instance for photos
 // Note: Photos don't have a name field, so we disable name uniqueness checking
-const photoStorage = new GenericStorageService<Photo>({
+const photoStorage = new TableDriver<Photo>({
   storageKey: PHOTOS_STORAGE_KEY,
   schema: photoSchema,
   entityName: 'Photo',
@@ -88,7 +88,7 @@ export async function savePhotos(photos: Photo[]): Promise<void> {
       }
     }
     
-    await setItem(PHOTOS_STORAGE_KEY, JSON.stringify(allPhotos));
+    await defaultStorageDriver.setItem(PHOTOS_STORAGE_KEY, JSON.stringify(allPhotos));
   } catch (error: any) {
     console.error('Error saving photos:', error);
     
@@ -120,7 +120,7 @@ export async function deletePhotosByRefId(refId: string): Promise<void> {
 }
 
 /**
- * Generate a new unique photo ID (8 hex characters)
+ * Generate a new unique photo ID (16 hex characters)
  */
 export async function generatePhotoId(): Promise<string> {
   return photoStorage.generateId();
@@ -152,11 +152,9 @@ export async function addPhotosToEntity(refId: string, hashes: string[]): Promis
   try {
     const photos: Photo[] = [];
     const photoId = await generatePhotoId();
-    const existingIds = new Set((await getAllPhotos()).map(p => p.id));
     
     for (const hash of hashes) {
-      const id = await generateUniqueUUID(existingIds);
-      existingIds.add(id);
+      const id = await generateUniqueUUID();
       photos.push({
         id,
         refId,

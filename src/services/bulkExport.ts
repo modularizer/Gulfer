@@ -530,7 +530,7 @@ export async function importAllData(
           resolvedRound.scores?.map((s: any) => s.playerId)
         );
         
-        await saveRound(resolvedRound, true); // allowRestore=true for imports
+        await saveRound(resolvedRound);
         
         // Verify the round was saved correctly
         const savedRound = await getAllRounds();

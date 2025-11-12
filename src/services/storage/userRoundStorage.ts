@@ -4,15 +4,15 @@
  * Uses GenericStorageService for common operations
  */
 
-import { setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import { UserRound, userRoundSchema } from '@/types';
 import { generateUniqueUUID } from '../../utils/uuid';
-import { GenericStorageService } from './GenericStorageService';
+import { TableDriver } from '@services/storage/relations/TableDriver';
 
 const USER_ROUNDS_STORAGE_KEY = '@gulfer_user_rounds';
 
 // Create generic storage service instance for user rounds
-const userRoundStorage = new GenericStorageService<UserRound>({
+const userRoundStorage = new TableDriver<UserRound>({
   storageKey: USER_ROUNDS_STORAGE_KEY,
   schema: userRoundSchema,
   entityName: 'UserRound',
@@ -141,12 +141,10 @@ export async function deleteUserRoundsByUserId(userId: string): Promise<void> {
 }
 
 /**
- * Generate a new unique UserRound ID (8 hex characters)
+ * Generate a new unique UserRound ID (16 hex characters)
  */
 export async function generateUserRoundId(): Promise<string> {
-  const userRounds = await getAllUserRounds();
-  const existingIds = new Set(userRounds.map(ur => ur.id));
-  return generateUniqueUUID(existingIds);
+  return generateUniqueUUID();
 }
 
 // Note: Score-related helper functions have been moved to scoreStorage.ts

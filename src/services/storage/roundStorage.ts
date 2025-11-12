@@ -3,7 +3,7 @@
  * Uses GenericStorageService for common operations
  */
 
-import { getItem, setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import { Round, roundSchema, Score, Player } from '@/types';
 import { generateUniqueUUID } from '../../utils/uuid';
 import { getAllCourses, getCourseById, getCourseByName } from './courseStorage';
@@ -11,14 +11,14 @@ import { saveUserRoundByUserAndRound, getUserRoundsByRoundId } from './userRound
 import { saveScores } from './scoreStorage';
 import { getAllUsers } from './userStorage';
 import { addPhotosToEntity } from './photoStorage';
-import { GenericStorageService } from './GenericStorageService';
+import { TableDriver } from '@services/storage/relations/TableDriver';
 
 const ROUNDS_STORAGE_KEY = '@gulfer_rounds';
 const ROUNDS_MIGRATION_VERSION_KEY = '@gulfer_rounds_migration_version';
 const CURRENT_MIGRATION_VERSION = 5; // Increment when adding new migrations (2 = courseName removal, 3 = scores removal, 4 = players removal, 5 = photos removal)
 
 // Create generic storage service instance for rounds
-const roundStorage = new GenericStorageService<Round>({
+const roundStorage = new TableDriver<Round>({
   storageKey: ROUNDS_STORAGE_KEY,
   schema: roundSchema,
   entityName: 'Round',
@@ -65,16 +65,16 @@ const roundStorage = new GenericStorageService<Round>({
 export async function migrateRoundsRemovePlayers(): Promise<{ migrated: number; failed: number }> {
   try {
     // Check if migration has already been run
-    const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
+    const migrationVersion = await defaultStorageDriver.getItem(ROUNDS_MIGRATION_VERSION_KEY);
     if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
       console.log('[Migration] Rounds players removal migration already completed');
       return { migrated: 0, failed: 0 };
     }
     
     console.log('[Migration] Starting rounds players removal migration...');
-    const data = await getItem(ROUNDS_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(ROUNDS_STORAGE_KEY);
     if (!data) {
-      await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+      await defaultStorageDriver.setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
       return { migrated: 0, failed: 0 };
     }
     
@@ -93,12 +93,12 @@ export async function migrateRoundsRemovePlayers(): Promise<{ migrated: number; 
     
     // Save all migrated rounds (with players removed)
     if (needsSave) {
-      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
+      await defaultStorageDriver.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
       console.log(`[Migration] Removed players from ${migrated} rounds`);
     }
     
     // Mark migration as complete
-    await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+    await defaultStorageDriver.setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
     
     console.log(`[Migration] Rounds players removal complete: ${migrated} rounds migrated`);
     return { migrated, failed: 0 };
@@ -176,13 +176,11 @@ async function populateCourseIdFromLegacyName(round: any): Promise<Round> {
 
 /**
  * Save a round to local storage
- * Note: This function will NOT restore a round that was deleted. If a round doesn't exist,
- * it will only add it if it's a new round (not a deleted one being restored).
  * Validates the round against schema before saving.
  * Removes any legacy courseName and scores fields if present.
  */
-export async function saveRound(round: Round, allowRestore: boolean = true): Promise<void> {
-  return roundStorage.save(round, allowRestore);
+export async function saveRound(round: Round): Promise<void> {
+  return roundStorage.save(round);
 }
 
 /**
@@ -235,7 +233,7 @@ export async function deleteRound(roundId: string): Promise<void> {
       }
       
       // Write the filtered list
-      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
+      await defaultStorageDriver.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
       
       // Verify the write succeeded by reading back
       // This ensures the IndexedDB transaction is fully committed
@@ -305,7 +303,7 @@ export async function deleteRounds(roundIds: string[]): Promise<void> {
       }
       
       // Write the filtered list
-      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
+      await defaultStorageDriver.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(filtered));
       
       // Verify the write succeeded by reading back
       // This ensures the IndexedDB transaction is fully committed
@@ -342,7 +340,7 @@ export async function deleteRounds(roundIds: string[]): Promise<void> {
 }
 
 /**
- * Generate a new unique round ID (8 hex characters)
+ * Generate a new unique round ID (16 hex characters)
  */
 export async function generateRoundId(): Promise<string> {
   return roundStorage.generateId();
@@ -403,16 +401,16 @@ export async function createNewRound(initialData: {
 export async function migrateRoundsRemoveCourseName(): Promise<{ migrated: number; failed: number }> {
   try {
     // Check if migration has already been run
-    const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
+    const migrationVersion = await defaultStorageDriver.getItem(ROUNDS_MIGRATION_VERSION_KEY);
     if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
       console.log('[Migration] Rounds courseName removal migration already completed');
       return { migrated: 0, failed: 0 };
     }
     
     console.log('[Migration] Starting rounds courseName removal migration...');
-    const data = await getItem(ROUNDS_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(ROUNDS_STORAGE_KEY);
     if (!data) {
-      await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+      await defaultStorageDriver.setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
       return { migrated: 0, failed: 0 };
     }
     
@@ -467,12 +465,12 @@ export async function migrateRoundsRemoveCourseName(): Promise<{ migrated: numbe
     
     // Save all migrated rounds
     if (needsSave) {
-      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
+      await defaultStorageDriver.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
       console.log(`[Migration] Saved ${migrated} migrated rounds`);
     }
     
     // Mark migration as complete
-    await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+    await defaultStorageDriver.setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
     
     console.log(`[Migration] Rounds courseName removal complete: ${migrated} migrated, ${failed} failed`);
     return { migrated, failed };
@@ -492,16 +490,16 @@ export async function migrateRoundsRemoveCourseName(): Promise<{ migrated: numbe
 export async function migrateRoundsSplitScores(): Promise<{ migrated: number; failed: number }> {
   try {
     // Check if migration has already been run
-    const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
+    const migrationVersion = await defaultStorageDriver.getItem(ROUNDS_MIGRATION_VERSION_KEY);
     if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
       console.log('[Migration] Rounds scores split migration already completed');
       return { migrated: 0, failed: 0 };
     }
     
     console.log('[Migration] Starting rounds scores split migration...');
-    const data = await getItem(ROUNDS_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(ROUNDS_STORAGE_KEY);
     if (!data) {
-      await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+      await defaultStorageDriver.setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
       return { migrated: 0, failed: 0 };
     }
     
@@ -562,12 +560,12 @@ export async function migrateRoundsSplitScores(): Promise<{ migrated: number; fa
     
     // Save all migrated rounds (with scores removed)
     if (needsSave) {
-      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
+      await defaultStorageDriver.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
       console.log(`[Migration] Saved ${migrated} user rounds and removed scores from rounds`);
     }
     
     // Mark migration as complete
-    await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+    await defaultStorageDriver.setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
     
     console.log(`[Migration] Rounds scores split complete: ${migrated} user rounds created, ${failed} failed`);
     return { migrated, failed };
@@ -584,16 +582,16 @@ export async function migrateRoundsSplitScores(): Promise<{ migrated: number; fa
 export async function migrateRoundsRemovePhotos(): Promise<{ migrated: number; failed: number }> {
   try {
     // Check if migration has already been run
-    const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
+    const migrationVersion = await defaultStorageDriver.getItem(ROUNDS_MIGRATION_VERSION_KEY);
     if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
       console.log('[Migration] Rounds photos removal migration already completed');
       return { migrated: 0, failed: 0 };
     }
     
     console.log('[Migration] Starting rounds photos removal migration...');
-    const data = await getItem(ROUNDS_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(ROUNDS_STORAGE_KEY);
     if (!data) {
-      await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+      await defaultStorageDriver.setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
       return { migrated: 0, failed: 0 };
     }
     
@@ -626,12 +624,12 @@ export async function migrateRoundsRemovePhotos(): Promise<{ migrated: number; f
     
     // Save all migrated rounds (with photos removed)
     if (needsSave) {
-      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
+      await defaultStorageDriver.setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
       console.log(`[Migration] Moved ${migrated} photos to photos table and removed photos from rounds`);
     }
     
     // Mark migration as complete
-    await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+    await defaultStorageDriver.setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
     
     console.log(`[Migration] Rounds photos removal complete: ${migrated} photos migrated, ${failed} failed`);
     return { migrated, failed };

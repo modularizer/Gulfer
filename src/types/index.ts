@@ -21,7 +21,7 @@ export type {
   ColumnVisibilityConfig,
 } from './schema';
 
-// Re-export schemas and validation utilities
+// Re-export relations and validation utilities
 export {
   baseEntitySchema,
   playerSchema,

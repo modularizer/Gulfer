@@ -4,14 +4,14 @@
  * Uses GenericStorageService for common operations
  */
 
-import { setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import { Hole, holeSchema } from '@/types';
-import { GenericStorageService } from './GenericStorageService';
+import { TableDriver } from '@services/storage/relations/TableDriver';
 
 const HOLES_STORAGE_KEY = '@gulfer_holes';
 
 // Create generic storage service instance for holes
-const holeStorage = new GenericStorageService<Hole>({
+const holeStorage = new TableDriver<Hole>({
   storageKey: HOLES_STORAGE_KEY,
   schema: holeSchema,
   entityName: 'Hole',
@@ -106,7 +106,7 @@ export async function deleteHoleByCourseAndNumber(
     const filtered = holes.filter((h) => 
       !(h.courseId === courseId && h.number === holeNumber)
     );
-    await setItem(HOLES_STORAGE_KEY, JSON.stringify(filtered));
+    await defaultStorageDriver.setItem(HOLES_STORAGE_KEY, JSON.stringify(filtered));
   } catch (error) {
     console.error('Error deleting hole:', error);
     throw error;
@@ -120,7 +120,7 @@ export async function deleteHolesByCourseId(courseId: string): Promise<void> {
   try {
     const holes = await getAllHoles();
     const filtered = holes.filter((h) => h.courseId !== courseId);
-    await setItem(HOLES_STORAGE_KEY, JSON.stringify(filtered));
+    await defaultStorageDriver.setItem(HOLES_STORAGE_KEY, JSON.stringify(filtered));
   } catch (error) {
     console.error('Error deleting holes for course:', error);
     throw error;
@@ -128,7 +128,7 @@ export async function deleteHolesByCourseId(courseId: string): Promise<void> {
 }
 
 /**
- * Generate a new unique hole ID (8 hex characters)
+ * Generate a new unique hole ID (16 hex characters)
  */
 export async function generateHoleId(): Promise<string> {
   return holeStorage.generateId();

@@ -3,7 +3,7 @@
  * Stores the current user ID in a separate table
  */
 
-import { getItem, setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import { CurrentUser, currentUserSchema } from '@/types';
 import { generateUniqueUUID } from '../../utils/uuid';
 
@@ -15,7 +15,7 @@ const CURRENT_USER_NAME_KEY = '@gulfer_current_user_name'; // Legacy: keep for b
  */
 export async function getCurrentUserId(): Promise<string | null> {
   try {
-    const data = await getItem(CURRENT_USER_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(CURRENT_USER_STORAGE_KEY);
     if (data) {
       const parsed = JSON.parse(data);
       const validation = currentUserSchema.safeParse(parsed);
@@ -36,7 +36,7 @@ export async function getCurrentUserId(): Promise<string | null> {
 export async function setCurrentUserId(playerId: string): Promise<void> {
   try {
     // Get existing current user record if it exists
-    const data = await getItem(CURRENT_USER_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(CURRENT_USER_STORAGE_KEY);
     let currentUser: CurrentUser;
     
     if (data) {
@@ -50,7 +50,7 @@ export async function setCurrentUserId(playerId: string): Promise<void> {
         };
       } else {
         // Invalid data, create new
-        const id = await generateUniqueUUID(new Set());
+        const id = await generateUniqueUUID();
         currentUser = {
           id,
           playerId,
@@ -74,7 +74,7 @@ export async function setCurrentUserId(playerId: string): Promise<void> {
       throw new Error(`Invalid current user data: ${errorMessage}`);
     }
     
-    await setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(validation.data));
+    await defaultStorageDriver.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(validation.data));
   } catch (error) {
     console.error('Error saving current user ID:', error);
     throw error;
@@ -86,7 +86,7 @@ export async function setCurrentUserId(playerId: string): Promise<void> {
  */
 export async function clearCurrentUserId(): Promise<void> {
   try {
-    await setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(null));
+    await defaultStorageDriver.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(null));
   } catch (error) {
     console.error('Error clearing current user ID:', error);
     throw error;
@@ -99,7 +99,7 @@ export async function clearCurrentUserId(): Promise<void> {
  */
 export async function getCurrentUserName(): Promise<string | null> {
   try {
-    const name = await getItem(CURRENT_USER_NAME_KEY);
+    const name = await defaultStorageDriver.getItem(CURRENT_USER_NAME_KEY);
     return name;
   } catch (error) {
     console.error('Error loading current user name:', error);
@@ -113,7 +113,7 @@ export async function getCurrentUserName(): Promise<string | null> {
  */
 export async function saveCurrentUserName(name: string): Promise<void> {
   try {
-    await setItem(CURRENT_USER_NAME_KEY, name);
+    await defaultStorageDriver.setItem(CURRENT_USER_NAME_KEY, name);
   } catch (error) {
     console.error('Error saving current user name:', error);
     throw error;

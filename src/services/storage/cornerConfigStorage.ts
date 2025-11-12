@@ -2,7 +2,7 @@
  * Storage service for corner statistics configuration
  */
 
-import { getItem, setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 import { CornerStatisticsConfig } from '../cornerStatistics';
 
 const CORNER_CONFIG_STORAGE_KEY = '@gulfer_corner_config';
@@ -23,7 +23,7 @@ export interface ColumnVisibilityConfig {
  */
 export async function getColumnVisibility(): Promise<ColumnVisibilityConfig | null> {
   try {
-    const data = await getItem(COLUMN_VISIBILITY_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(COLUMN_VISIBILITY_STORAGE_KEY);
     if (data) {
       return JSON.parse(data);
     }
@@ -40,7 +40,7 @@ export async function getColumnVisibility(): Promise<ColumnVisibilityConfig | nu
  */
 export async function saveColumnVisibility(config: ColumnVisibilityConfig): Promise<void> {
   try {
-    await setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(config));
+    await defaultStorageDriver.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(config));
   } catch (error) {
     console.error('Error saving column visibility:', error);
     throw error;
@@ -52,7 +52,7 @@ export async function saveColumnVisibility(config: ColumnVisibilityConfig): Prom
  */
 export async function getCornerConfig(): Promise<CornerStatisticsConfig | null> {
   try {
-    const data = await getItem(CORNER_CONFIG_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(CORNER_CONFIG_STORAGE_KEY);
     if (data) {
       return JSON.parse(data);
     }
@@ -68,7 +68,7 @@ export async function getCornerConfig(): Promise<CornerStatisticsConfig | null> 
  */
 export async function saveCornerConfig(config: CornerStatisticsConfig): Promise<void> {
   try {
-    await setItem(CORNER_CONFIG_STORAGE_KEY, JSON.stringify(config));
+    await defaultStorageDriver.setItem(CORNER_CONFIG_STORAGE_KEY, JSON.stringify(config));
   } catch (error) {
     console.error('Error saving corner config:', error);
     throw error;

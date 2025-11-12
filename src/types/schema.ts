@@ -6,10 +6,9 @@
 import { z } from 'zod';
 
 /**
- * UUID validation - 8 hex characters (with backward compatibility for 6-character UUIDs)
- * New UUIDs are 8 characters, but we accept 6-character UUIDs for existing data
+ * UUID validation - 16 hex characters
  */
-const uuidSchema = z.string().regex(/^[0-9a-f]{6,8}$/i, 'Must be a 6-8 character hex UUID');
+const uuidSchema = z.string().regex(/^[0-9a-f]{16}$/i, 'Must be a 16 character hex UUID');
 
 /**
  * Base entity schema
@@ -79,7 +78,7 @@ export const userRoundSchema = baseEntitySchema.extend({
 export type UserRound = z.infer<typeof userRoundSchema>;
 
 // Note: GPS and gesture tracking features (Phase 2 & 3) are not yet implemented.
-// These schemas can be added back when those features are implemented.
+// These relations can be added back when those features are implemented.
 
 /**
  * Round schema

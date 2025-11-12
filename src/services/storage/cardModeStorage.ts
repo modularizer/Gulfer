@@ -1,5 +1,5 @@
 import { CardMode } from '@/components/common/CardModeToggle';
-import { getItem, setItem } from './drivers';
+import { defaultStorageDriver } from './drivers';
 
 const STORAGE_PREFIX = '@gulfer_card_mode_';
 const cache = new Map<string, CardMode>();
@@ -22,7 +22,7 @@ export async function loadCardMode(page: string, fallback: CardMode = 'medium'):
   }
 
   try {
-    const stored = await getItem(makeKey(page));
+    const stored = await defaultStorageDriver.getItem(makeKey(page));
     if (isValidMode(stored)) {
       cache.set(page, stored);
       return stored;
@@ -38,7 +38,7 @@ export async function loadCardMode(page: string, fallback: CardMode = 'medium'):
 export async function saveCardMode(page: string, mode: CardMode): Promise<void> {
   cache.set(page, mode);
   try {
-    await setItem(makeKey(page), mode);
+    await defaultStorageDriver.setItem(makeKey(page), mode);
   } catch (error) {
     console.error('Error saving card mode', page, error);
     throw error;

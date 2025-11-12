@@ -6,8 +6,8 @@
 import { Course, courseSchema } from '@/types';
 import { getAllRounds } from './roundStorage';
 import { saveHoles, generateHoleId } from './holeStorage';
-import { GenericStorageService } from './GenericStorageService';
-import { getItem, setItem } from './drivers';
+import { TableDriver } from '@services/storage/relations/TableDriver';
+import { defaultStorageDriver } from './drivers';
 
 // Re-export Course type from types
 export type { Course };
@@ -15,7 +15,7 @@ export type { Course };
 const COURSES_STORAGE_KEY = '@gulfer_courses';
 
 // Create generic storage service instance for courses
-const courseStorage = new GenericStorageService<Course>({
+const courseStorage = new TableDriver<Course>({
   storageKey: COURSES_STORAGE_KEY,
   schema: courseSchema,
   entityName: 'Course',
@@ -75,7 +75,7 @@ export async function deleteCourse(courseId: string): Promise<void> {
 }
 
 /**
- * Generate a new unique course ID (8 hex characters)
+ * Generate a new unique course ID (16 hex characters)
  */
 export async function generateCourseId(): Promise<string> {
   return courseStorage.generateId();
@@ -149,16 +149,16 @@ const CURRENT_COURSES_MIGRATION_VERSION = 1; // Increment when adding new migrat
 export async function migrateCoursesSplitHoles(): Promise<{ migrated: number; failed: number }> {
   try {
     // Check if migration has already been run
-    const migrationVersion = await getItem(COURSES_MIGRATION_VERSION_KEY);
+    const migrationVersion = await defaultStorageDriver.getItem(COURSES_MIGRATION_VERSION_KEY);
     if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_COURSES_MIGRATION_VERSION) {
       console.log('[Migration] Courses holes split migration already completed');
       return { migrated: 0, failed: 0 };
     }
     
     console.log('[Migration] Starting courses holes split migration...');
-    const data = await getItem(COURSES_STORAGE_KEY);
+    const data = await defaultStorageDriver.getItem(COURSES_STORAGE_KEY);
     if (!data) {
-      await setItem(COURSES_MIGRATION_VERSION_KEY, CURRENT_COURSES_MIGRATION_VERSION.toString());
+      await defaultStorageDriver.setItem(COURSES_MIGRATION_VERSION_KEY, CURRENT_COURSES_MIGRATION_VERSION.toString());
       return { migrated: 0, failed: 0 };
     }
     
@@ -203,12 +203,12 @@ export async function migrateCoursesSplitHoles(): Promise<{ migrated: number; fa
     
     // Save all migrated courses (with holes removed)
     if (needsSave) {
-      await setItem(COURSES_STORAGE_KEY, JSON.stringify(courses));
+      await defaultStorageDriver.setItem(COURSES_STORAGE_KEY, JSON.stringify(courses));
       console.log(`[Migration] Saved ${migrated} holes and removed holes from courses`);
     }
     
     // Mark migration as complete
-    await setItem(COURSES_MIGRATION_VERSION_KEY, CURRENT_COURSES_MIGRATION_VERSION.toString());
+    await defaultStorageDriver.setItem(COURSES_MIGRATION_VERSION_KEY, CURRENT_COURSES_MIGRATION_VERSION.toString());
     
     console.log(`[Migration] Courses holes split complete: ${migrated} holes migrated, ${failed} failed`);
     return { migrated, failed };

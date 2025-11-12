@@ -535,7 +535,7 @@ export async function importRound(
       notes,
     };
 
-    await saveRound(newRound, true); // allowRestore=true for new rounds
+    await saveRound(newRound);
     
     // If we had a foreign round ID, we could optionally track it, but rounds aren't merged
     // so we just create new ones
