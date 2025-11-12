@@ -244,7 +244,7 @@ export default function Footer({}: FooterProps) {
   const getButtonLabel = useCallback(async () => {
     // Check if we're on a holes page
     if (isHolesPage) {
-      return 'Next Hole';
+      return 'Record Score';
     }
     
     // Check if we're on the about page

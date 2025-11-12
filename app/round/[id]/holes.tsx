@@ -10,6 +10,7 @@ import CornerStatisticsSettingsDialog from '@/components/common/CornerStatistics
 import { CornerStatisticsConfig } from '@/services/cornerStatistics';
 import { getCornerConfig, saveCornerConfig, getColumnVisibility, saveColumnVisibility, ColumnVisibilityConfig } from '@/services/storage/cornerConfigStorage';
 import { getCurrentUserName } from '@/services/storage/userStorage';
+import { useAppFocusState } from '@/hooks';
 
 export default function ScorecardPlayScreen() {
   const { id: roundIdParam } = useLocalSearchParams<{ id: string }>();
@@ -26,9 +27,52 @@ export default function ScorecardPlayScreen() {
   const [cornerConfig, setCornerConfig] = useState<CornerStatisticsConfig | null>(null);
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityConfig | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | undefined>(undefined);
+  const [autoOpenNextHole, setAutoOpenNextHole] = useState(false);
 
   // Track if initial load is complete - don't save during initial load or reload
   const initialLoadCompleteRef = useRef(false);
+  // Track if we've already attempted to auto-open on this focus
+  const hasAutoOpenedRef = useRef(false);
+
+  // Track if app was focused within last 5 seconds
+  const isRecentlyFocused = useAppFocusState(5000);
+
+  // Check if we should auto-open the next hole modal when navigating to this page
+  useFocusEffect(
+    useCallback(() => {
+      // Reset the auto-open flag when screen comes into focus
+      hasAutoOpenedRef.current = false;
+
+      // Only proceed if round is loaded and app was recently focused
+      if (!round || !isRecentlyFocused || players.length === 0 || holes.length === 0) {
+        return;
+      }
+
+      // Only auto-open once per focus
+      if (hasAutoOpenedRef.current) {
+        return;
+      }
+
+      // Find the first hole where at least one player has 0 or no score
+      const nextHole = holes.find(hole => {
+        return players.some(player => {
+          const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
+          return !score || score.throws === 0;
+        });
+      });
+
+      if (nextHole !== undefined) {
+        // There's a next hole with at least one 0 score
+        hasAutoOpenedRef.current = true;
+        setAutoOpenNextHole(true);
+        // Reset after a short delay to prevent re-opening
+        const timeout = setTimeout(() => {
+          setAutoOpenNextHole(false);
+        }, 500);
+        return () => clearTimeout(timeout);
+      }
+    }, [round, isRecentlyFocused, players, holes, scores])
+  );
 
   // Load corner config, column visibility, and current user ID
   useEffect(() => {
@@ -299,6 +343,7 @@ export default function ScorecardPlayScreen() {
         onSettingsPress={() => setSettingsDialogVisible(true)}
         columnVisibility={columnVisibility || undefined}
         currentRoundDate={round.date}  // Exclude rounds that started at the same time or after
+        autoOpenNextHole={autoOpenNextHole}
       />
 
       {/* Corner Statistics Settings Dialog */}

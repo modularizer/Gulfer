@@ -50,6 +50,7 @@ interface ScorecardProps {
     [key: string]: boolean | undefined;
   };
   currentRoundDate?: number; // Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
+  autoOpenNextHole?: boolean; // If true, automatically open the edit modal for the next hole
 }
 
 
@@ -82,6 +83,7 @@ export default function Scorecard({
   onSettingsPress,
   columnVisibility,
   currentRoundDate,
+  autoOpenNextHole = false,
 }: ScorecardProps) {
   const theme = useTheme();
   const [editModal, setEditModal] = useState<{
@@ -479,6 +481,20 @@ export default function Scorecard({
       registerOpenNextHole(openNextHole);
     }
   }, [readOnly, players, holes, scores, registerOpenNextHole, openEditModal, getNextHole, setHasNextHole]);
+
+  // Auto-open next hole modal if requested
+  useEffect(() => {
+    if (autoOpenNextHole && !readOnly && players.length > 0 && holes.length > 0) {
+      const nextHole = getNextHole();
+      if (nextHole !== null && !editModal.visible) {
+        // Use a small delay to ensure the component is fully mounted
+        const timeout = setTimeout(() => {
+          openEditModal(players[0].id, nextHole);
+        }, 100);
+        return () => clearTimeout(timeout);
+      }
+    }
+  }, [autoOpenNextHole, readOnly, players, holes, getNextHole, openEditModal, editModal.visible]);
   const h = 42;
   const op = readOnly ? 1 : 0.7;
 
