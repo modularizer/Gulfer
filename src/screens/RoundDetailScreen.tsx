@@ -110,7 +110,7 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
         <Card.Content>
           <View style={styles.headerRow}>
             <View style={styles.headerContent}>
-              <Title style={styles.title}>{round.title}</Title>
+              <Title style={styles.title}>{round.name}</Title>
               {round.courseName && (
                 <Paragraph style={styles.courseName}>{round.courseName}</Paragraph>
               )}
@@ -179,7 +179,7 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
           <Dialog.Title>Delete Round</Dialog.Title>
           <Dialog.Content>
             <Paragraph>
-              Are you sure you want to delete "{round.title}"? This action cannot be
+              Are you sure you want to delete "{round.name}"? This action cannot be
               undone.
             </Paragraph>
           </Dialog.Content>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Platform, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Platform, Alert, Share } from 'react-native';
 import { useTheme, Text, Card, Chip, Button, Dialog, Portal } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
 import { getAllUsers, getUserById, getUserByName, User, saveUser } from '@/services/storage/userStorage';
@@ -340,7 +340,6 @@ export default function PlayerDetailScreen() {
         Alert.alert('Success', 'All data exported successfully');
       } else {
         // On mobile, use share API
-        const { Share } = require('react-native');
         await Share.share({
           message: jsonData,
           title: 'Gulfer Data Export',

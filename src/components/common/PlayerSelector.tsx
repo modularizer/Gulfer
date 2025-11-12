@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { IconButton, Text, Menu, Dialog, Portal, Button, useTheme, Surface } from 'react-native-paper';
 import { Player } from '@/types';
-import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
+import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, getUserIdForPlayerName, getUserById } from '@/services/storage/userStorage';
+import { getCurrentUserId } from '@/services/storage/currentUserStorage';
 import { getShadowStyle } from '../../utils';
 import NameUsernameDialog from './NameUsernameDialog';
 
@@ -19,6 +20,7 @@ export default function PlayerSelector({
 }: PlayerSelectorProps) {
   const theme = useTheme();
   const [knownUsers, setKnownUsers] = useState<User[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [addPlayerMenuVisible, setAddPlayerMenuVisible] = useState(false);
   const [playerDialog, setPlayerDialog] = useState({ visible: false, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined as string | undefined });
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
@@ -30,6 +32,8 @@ export default function PlayerSelector({
       try {
         const loadedUsers = await getAllUsers();
         setKnownUsers(loadedUsers);
+        const currentId = await getCurrentUserId();
+        setCurrentUserId(currentId);
       } catch (error) {
         console.error('Error loading users:', error);
       }
@@ -57,11 +61,9 @@ export default function PlayerSelector({
     if (playerDialog.isEditing && playerDialog.playerId) {
       const player = players.find((p) => p.id === parseInt(playerDialog.playerId, 10));
       
-      // Check if this is the "You" player (name matches current user)
-      const currentUserName = await getCurrentUserName();
-      const isCurrentUser = 
-        player?.name === 'You' || 
-        (currentUserName && player?.name === currentUserName);
+      // Check if this is the current user (by ID)
+      const currentUserId = await getCurrentUserId();
+      const isCurrentUser = currentUserId && player?.id === currentUserId;
       
       if (isCurrentUser) {
         // Save to current user storage
@@ -106,10 +108,12 @@ export default function PlayerSelector({
     onPlayersChange(players.filter((p) => p.id !== playerId));
   }, [players, onPlayersChange]);
 
-  const handleAddPlayerPress = useCallback(() => {
+  const handleAddPlayerPress = useCallback(async () => {
+    // Get current user ID to filter it out
+    const currentUserId = await getCurrentUserId();
     // Filter out current user and players already in the current round
     const unusedUsers = knownUsers.filter(
-      (user) => !user.isCurrentUser && !players.some((p) => p.name === user.name)
+      (user) => user.id !== currentUserId && !players.some((p) => p.name === user.name)
     );
 
     // If there are no unused known players, directly open the dialog
@@ -138,7 +142,7 @@ export default function PlayerSelector({
       }
     >
       {knownUsers
-        .filter((user) => !user.isCurrentUser && !players.some((p) => p.name === user.name)) // Exclude current user and players already in round
+        .filter((user) => user.id !== currentUserId && !players.some((p) => p.name === user.name)) // Exclude current user and players already in round
         .map((user) => (
           <Menu.Item
             key={user.id}

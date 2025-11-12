@@ -2,7 +2,7 @@
  * Storage service for corner statistics configuration
  */
 
-import { getItem, setItem } from './storageAdapter';
+import { getItem, setItem } from './drivers';
 import { CornerStatisticsConfig } from '../cornerStatistics';
 
 const CORNER_CONFIG_STORAGE_KEY = '@gulfer_corner_config';

@@ -6,11 +6,12 @@
 import { getAllRounds, saveRound, getRoundById } from './storage/roundStorage';
 import { getAllUsers, saveUser, getUserByName, getUserIdForPlayerName } from './storage/userStorage';
 import { getAllCourses, saveCourse, getCourseByName, getCourseById } from './storage/courseStorage';
-import { getAllKeys, getItem, setItem } from './storage/storageAdapter';
+import { getAllKeys, getItem, setItem } from './storage/drivers';
 import { getImageByHash } from './storage/imageStorage';
 import { loadPhotosByStorageKey, savePhotosByStorageKey } from '../utils/photoStorage';
 import { getStorageId } from './storage/storageId';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
+import { setCurrentUserId } from './storage/currentUserStorage';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 
@@ -309,12 +310,11 @@ export async function importAllData(
             await mapForeignToLocal(foreignStorageId, player.id, existingUserByName.id, 'player');
           }
           
-          // Merge data but preserve isCurrentUser flag and local name
+          // Merge data but preserve local name
           const mergedPlayer = {
             ...existingUserByName,
             name: existingUserByName.name, // Always keep local name
             notes: existingUserByName.notes || player.notes, // Merge notes
-            isCurrentUser: existingUserByName.isCurrentUser, // Preserve current user flag
           };
           await saveUser(mergedPlayer);
           summary.players.skipped++; // Skipped because we're using existing
@@ -330,12 +330,11 @@ export async function importAllData(
             // Use existing mapping - update the player data but keep local ID
             const existingUser = localUsers.find(u => u.id === mappedPlayerId);
             if (existingUser) {
-              // Merge data but preserve isCurrentUser flag
+              // Merge data but preserve local name
               const mergedPlayer = {
                 ...existingUser,
                 name: existingUser.name, // Keep local name
                 notes: existingUser.notes || player.notes, // Merge notes
-                isCurrentUser: existingUser.isCurrentUser, // Preserve current user flag
               };
               await saveUser(mergedPlayer);
               summary.players.skipped++; // Skipped because we're using existing
@@ -347,24 +346,21 @@ export async function importAllData(
         // STEP 3: Check if player already exists locally by ID (same storage)
         const exists = localUserIds.has(player.id);
         if (exists && opts.skipDuplicates && !opts.overwriteExisting) {
-          // Don't overwrite current user flag
-          const existingUser = localUsers.find(u => u.id === player.id);
-          if (existingUser && existingUser.isCurrentUser) {
-            player.isCurrentUser = true;
-            await saveUser(player);
-          }
           summary.players.skipped++;
           continue;
         }
         
         // STEP 4: Create new player
-        // Don't overwrite current user flag if it already exists
-        const existingUser = localUsers.find(u => u.id === player.id);
-        if (existingUser && existingUser.isCurrentUser) {
-          player.isCurrentUser = true;
-        }
+        // Remove isCurrentUser if present (now handled by separate table)
+        const cleanedPlayer = { ...player };
+        delete (cleanedPlayer as any).isCurrentUser;
         
-        await saveUser(player);
+        await saveUser(cleanedPlayer);
+        
+        // If this was marked as current user, set it in the current user table
+        if ((player as any).isCurrentUser) {
+          await setCurrentUserId(player.id);
+        }
         
         // If this was a foreign player, map it
         if (foreignStorageId && foreignStorageId !== localStorageId && player.id) {

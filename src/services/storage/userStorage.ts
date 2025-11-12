@@ -1,45 +1,77 @@
 /**
  * Storage service for managing users/players locally
- * Uses localforage (IndexedDB on web, native storage on mobile)
+ * Uses GenericStorageService for common operations
  */
 
-import { getItem, setItem } from './storageAdapter';
-import { generateUniqueUUID } from '../../utils/uuid';
+import { getItem, setItem } from './drivers';
+import { User, userSchema } from '@/types';
+import { setCurrentUserId, getCurrentUserId, saveCurrentUserName as saveLegacyCurrentUserName } from './currentUserStorage';
+import { GenericStorageService } from './GenericStorageService';
 
-export interface User {
-  id: string; // UUID for global uniqueness
-  name: string; // Locally unique name
-  isCurrentUser?: boolean; // Flag to identify the current user
-  notes?: string;
-}
+// Re-export User type from types
+export type { User };
 
 const USERS_STORAGE_KEY = '@gulfer_users';
-const CURRENT_USER_KEY = '@gulfer_current_user';
 const PROFILE_IMAGE_KEY = '@gulfer_profile_image';
+const USERS_MIGRATION_VERSION_KEY = '@gulfer_users_migration_version';
+const CURRENT_USERS_MIGRATION_VERSION = 1; // Increment when adding new migrations
+
+// Create generic storage service instance for users
+const userStorage = new GenericStorageService<User>({
+  storageKey: USERS_STORAGE_KEY,
+  schema: userSchema,
+  entityName: 'User',
+  generatedFields: [
+    { field: 'id' },
+  ],
+  uniqueFields: ['id', 'name'],
+  cleanupBeforeSave: (user: User) => {
+    // Remove legacy isCurrentUser field if present (now stored in separate table)
+    const cleaned = { ...user };
+    delete (cleaned as any).isCurrentUser;
+    return cleaned;
+  },
+  foreignKeys: [
+    {
+      field: 'userId',
+      referencesStorageKey: '@gulfer_user_rounds',
+      cascadeDelete: true, // Delete all UserRounds when user is deleted
+    },
+    {
+      field: 'userId',
+      referencesStorageKey: '@gulfer_scores',
+      cascadeDelete: true, // Delete all Scores when user is deleted
+    },
+    {
+      field: 'refId',
+      referencesStorageKey: '@gulfer_photos',
+      cascadeDelete: true, // Delete all Photos when user is deleted (polymorphic)
+      findChildren: (userId: string, allPhotos: any[]) => {
+        return allPhotos.filter(photo => photo.refId === userId);
+      },
+    },
+  ],
+});
 
 /**
  * Get all saved users
  */
 export async function getAllUsers(): Promise<User[]> {
-  try {
-    const data = await getItem(USERS_STORAGE_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-    return [];
-  } catch (error) {
-    console.error('Error loading users:', error);
-    return [];
-  }
+  return userStorage.getAll();
 }
 
 /**
  * Get the current user's name
+ * Looks up the current user ID and returns the user's name
  */
 export async function getCurrentUserName(): Promise<string | null> {
   try {
-    const name = await getItem(CURRENT_USER_KEY);
-    return name;
+    const currentUserId = await getCurrentUserId();
+    if (!currentUserId) {
+      return null;
+    }
+    const user = await getUserById(currentUserId);
+    return user?.name || null;
   } catch (error) {
     console.error('Error loading current user name:', error);
     return null;
@@ -48,28 +80,34 @@ export async function getCurrentUserName(): Promise<string | null> {
 
 /**
  * Save the current user's name
+ * Creates or updates a user with the given name and sets it as current user
  */
 export async function saveCurrentUserName(name: string): Promise<void> {
   try {
-    await setItem(CURRENT_USER_KEY, name);
+    // Find or create user with this name
+    let user = await getUserByName(name);
     
-    // Also save to users list if not already there
-    const users = await getAllUsers();
-    const existingUser = users.find(u => u.isCurrentUser);
-    
-    if (existingUser) {
-      existingUser.name = name;
-      await setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-    } else {
+    if (!user) {
+      // Create new user
       const newUserId = await generateUserId();
-      const newUser: User = {
+      user = {
         id: newUserId,
         name,
-        isCurrentUser: true,
       };
-      users.push(newUser);
-      await setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+      await saveUser(user);
+    } else {
+      // Update existing user name if different
+      if (user.name !== name) {
+        user.name = name;
+        await saveUser(user);
+      }
     }
+    
+    // Set as current user
+    await setCurrentUserId(user.id);
+    
+    // Also save to legacy name storage for backward compatibility
+    await saveLegacyCurrentUserName(name);
   } catch (error) {
     console.error('Error saving current user name:', error);
     throw error;
@@ -81,83 +119,35 @@ export async function saveCurrentUserName(name: string): Promise<void> {
  * Enforces local uniqueness of user names
  */
 export async function saveUser(user: User): Promise<void> {
-  try {
-    const users = await getAllUsers();
-    const existingIndex = users.findIndex((u) => u.id === user.id);
-    
-    // Check for name uniqueness (case-insensitive, excluding current user)
-    const trimmedName = user.name.trim();
-    const nameConflict = users.find(u => 
-      u.id !== user.id && 
-      u.name.trim().toLowerCase() === trimmedName.toLowerCase()
-    );
-    
-    if (nameConflict) {
-      throw new Error(`A user with the name "${trimmedName}" already exists`);
-    }
-    
-    if (existingIndex >= 0) {
-      users[existingIndex] = user;
-    } else {
-      users.push(user);
-    }
-    
-    await setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-  } catch (error) {
-    console.error('Error saving user:', error);
-    throw error;
-  }
+  return userStorage.save(user);
 }
 
 /**
  * Get a user by ID
  */
 export async function getUserById(userId: string): Promise<User | null> {
-  try {
-    const users = await getAllUsers();
-    return users.find((u) => u.id === userId) || null;
-  } catch (error) {
-    console.error('Error loading user by ID:', error);
-    return null;
-  }
+  return userStorage.getById(userId);
 }
 
 /**
  * Delete a user by ID
  */
 export async function deleteUser(userId: string): Promise<void> {
-  try {
-    const users = await getAllUsers();
-    const filtered = users.filter((u) => u.id !== userId);
-    await setItem(USERS_STORAGE_KEY, JSON.stringify(filtered));
-  } catch (error) {
-    console.error('Error deleting user:', error);
-    throw error;
-  }
+  return userStorage.delete(userId);
 }
 
 /**
- * Generate a new unique user ID (6 hex characters)
- * Ensures local uniqueness by checking existing users
+ * Generate a new unique user ID (8 hex characters)
  */
 export async function generateUserId(): Promise<string> {
-  const users = await getAllUsers();
-  const existingIds = new Set(users.map(u => u.id));
-  return generateUniqueUUID(existingIds);
+  return userStorage.generateId();
 }
 
 /**
  * Get a user by name (case-insensitive)
  */
 export async function getUserByName(name: string): Promise<User | null> {
-  try {
-    const users = await getAllUsers();
-    const trimmedName = name.trim();
-    return users.find((u) => u.name.trim().toLowerCase() === trimmedName.toLowerCase()) || null;
-  } catch (error) {
-    console.error('Error loading user by name:', error);
-    return null;
-  }
+  return userStorage.getByName(name);
 }
 
 /**
@@ -208,6 +198,80 @@ export async function saveProfileImageHash(hash: string): Promise<void> {
     await setItem(PROFILE_IMAGE_KEY, hash);
   } catch (error) {
     console.error('Error saving profile image hash:', error);
+    throw error;
+  }
+}
+
+/**
+ * Migration: Move isCurrentUser from users table to current user table
+ * This migration:
+ * 1. Finds users with isCurrentUser = true
+ * 2. Sets them as current user in the current user table
+ * 3. Removes isCurrentUser field from users
+ */
+export async function migrateUsersRemoveIsCurrentUser(): Promise<{ migrated: number; failed: number }> {
+  try {
+    // Check if migration has already been run
+    const migrationVersion = await getItem(USERS_MIGRATION_VERSION_KEY);
+    if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_USERS_MIGRATION_VERSION) {
+      console.log('[Migration] Users isCurrentUser removal migration already completed');
+      return { migrated: 0, failed: 0 };
+    }
+    
+    console.log('[Migration] Starting users isCurrentUser removal migration...');
+    const data = await getItem(USERS_STORAGE_KEY);
+    if (!data) {
+      await setItem(USERS_MIGRATION_VERSION_KEY, CURRENT_USERS_MIGRATION_VERSION.toString());
+      return { migrated: 0, failed: 0 };
+    }
+    
+    const users = JSON.parse(data);
+    let migrated = 0;
+    let failed = 0;
+    let needsSave = false;
+    let currentUserIdToSet: string | null = null;
+    
+    for (const user of users) {
+      // Check if this user has isCurrentUser = true
+      if (user.isCurrentUser === true) {
+        try {
+          // Set as current user in the new table
+          if (!currentUserIdToSet) {
+            currentUserIdToSet = user.id;
+            await setCurrentUserId(user.id);
+            migrated++;
+          } else {
+            // Multiple users with isCurrentUser = true, only keep the first one
+            console.warn(`[Migration] Multiple users with isCurrentUser=true, keeping first: ${currentUserIdToSet}, skipping: ${user.id}`);
+          }
+          
+          // Remove isCurrentUser from user
+          delete user.isCurrentUser;
+          needsSave = true;
+        } catch (error) {
+          console.error(`[Migration] Error migrating user ${user.id}:`, error);
+          failed++;
+        }
+      } else if (user.isCurrentUser !== undefined) {
+        // Remove isCurrentUser field even if it's false
+        delete user.isCurrentUser;
+        needsSave = true;
+      }
+    }
+    
+    // Save all migrated users (with isCurrentUser removed)
+    if (needsSave) {
+      await setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+      console.log(`[Migration] Moved ${migrated} current user(s) to current user table and removed isCurrentUser from users`);
+    }
+    
+    // Mark migration as complete
+    await setItem(USERS_MIGRATION_VERSION_KEY, CURRENT_USERS_MIGRATION_VERSION.toString());
+    
+    console.log(`[Migration] Users isCurrentUser removal complete: ${migrated} migrated, ${failed} failed`);
+    return { migrated, failed };
+  } catch (error) {
+    console.error('[Migration] Error migrating users isCurrentUser:', error);
     throw error;
   }
 }

@@ -71,18 +71,30 @@ async function getRoundsForCourse(courseId: string | undefined): Promise<Round[]
 }
 
 /**
- * Check if a round is complete for a user (has score >= 1 on all holes)
+ * Check if a score represents a completed hole
+ * Uses the complete field if available, otherwise falls back to throws >= 1 for backward compatibility
+ */
+function isScoreComplete(score: any): boolean {
+  if (score.complete !== undefined) {
+    return score.complete === true;
+  }
+  // Backward compatibility: if complete field is missing, infer from throws
+  return score.throws >= 1;
+}
+
+/**
+ * Check if a round is complete for a user (has all holes marked as complete)
  */
 function isRoundComplete(round: Round, userId: string, expectedHoleCount: number): boolean {
   const userScores = round.scores?.filter(s => s.playerId === userId) || [];
   if (userScores.length === 0) return false;
   
-  // Get unique hole numbers with scores >= 1
+  // Get unique hole numbers with completed scores
   const completedHoles = new Set(
-    userScores.filter(s => s.throws >= 1).map(s => s.holeNumber)
+    userScores.filter(s => isScoreComplete(s)).map(s => s.holeNumber)
   );
   
-  // Check if we have scores for all expected holes
+  // Check if we have completed scores for all expected holes
   return completedHoles.size >= expectedHoleCount;
 }
 
@@ -244,7 +256,7 @@ export async function selectRoundsByCriteria(
     const roundsWithScores = rounds
       .filter(round => isRoundComplete(round, currentUserId, expectedHoleCount)) // Only completed rounds
       .map(round => {
-        const userScores = round.scores?.filter(s => s.playerId === currentUserId && s.throws >= 1) || [];
+        const userScores = round.scores?.filter(s => s.playerId === currentUserId && isScoreComplete(s)) || [];
         const totalScore = userScores.reduce((sum, score) => sum + score.throws, 0);
         return { round, totalScore, scoreCount: userScores.length };
       })
@@ -435,13 +447,13 @@ function collectScoresFromUserRounds(
       const allUsersHaveScores = config.scoreUserFilter.every(userId => {
         if (!isRoundComplete(userRound.round, userId, expectedHoleCount)) return false;
         const score = userRound.round.scores?.find(s => s.holeNumber === holeNumber && s.playerId === userId);
-        return score && score.throws >= 1;
+        return score && isScoreComplete(score);
       });
       if (allUsersHaveScores) {
         // Collect scores from all selected users
         for (const userId of config.scoreUserFilter) {
           const score = userRound.round.scores?.find(s => s.holeNumber === holeNumber && s.playerId === userId);
-          if (score && score.throws >= 1) {
+          if (score && isScoreComplete(score)) {
             scores.push(score.throws);
           }
         }
@@ -745,7 +757,7 @@ export async function computeTotalCornerValues(
   // Get holes that have non-zero scores for this player
   const completedHoles = new Set<number>();
   for (const score of scores) {
-    if (score.throws > 0 && score.playerId === playerId) {
+    if (isScoreComplete(score) && score.playerId === playerId) {
       completedHoles.add(score.holeNumber);
     }
   }

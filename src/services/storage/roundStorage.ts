@@ -1,108 +1,202 @@
 /**
  * Storage service for managing rounds locally
- * Uses localforage (IndexedDB on web, native storage on mobile) for larger quota support
+ * Uses GenericStorageService for common operations
  */
 
-import { getItem, setItem } from './storageAdapter';
-import { Round } from '@/types';
+import { getItem, setItem } from './drivers';
+import { Round, roundSchema, Score, Player } from '@/types';
 import { generateUniqueUUID } from '../../utils/uuid';
-import { getAllCourses, getCourseByName } from './courseStorage';
+import { getAllCourses, getCourseById, getCourseByName } from './courseStorage';
+import { saveUserRoundByUserAndRound, getUserRoundsByRoundId } from './userRoundStorage';
+import { saveScores } from './scoreStorage';
+import { getAllUsers } from './userStorage';
+import { addPhotosToEntity } from './photoStorage';
+import { GenericStorageService } from './GenericStorageService';
 
 const ROUNDS_STORAGE_KEY = '@gulfer_rounds';
 const ROUNDS_MIGRATION_VERSION_KEY = '@gulfer_rounds_migration_version';
-const CURRENT_MIGRATION_VERSION = 1; // Increment when adding new migrations
+const CURRENT_MIGRATION_VERSION = 5; // Increment when adding new migrations (2 = courseName removal, 3 = scores removal, 4 = players removal, 5 = photos removal)
+
+// Create generic storage service instance for rounds
+const roundStorage = new GenericStorageService<Round>({
+  storageKey: ROUNDS_STORAGE_KEY,
+  schema: roundSchema,
+  entityName: 'Round',
+  generatedFields: [
+    { field: 'id' },
+  ],
+  uniqueFields: ['id'],
+  cleanupBeforeSave: (round: Round) => {
+    // Remove legacy fields (courseName, scores, players, photos, title) if present
+    const cleaned = { ...round };
+    delete (cleaned as any).courseName;
+    delete (cleaned as any).scores;
+    delete (cleaned as any).players;
+    delete (cleaned as any).photos;
+    delete (cleaned as any).title;
+    return cleaned;
+  },
+  foreignKeys: [
+    {
+      field: 'roundId',
+      referencesStorageKey: '@gulfer_user_rounds',
+      cascadeDelete: true, // Delete all UserRounds when round is deleted
+    },
+    {
+      field: 'roundId',
+      referencesStorageKey: '@gulfer_scores',
+      cascadeDelete: true, // Delete all Scores when round is deleted
+    },
+    {
+      field: 'refId',
+      referencesStorageKey: '@gulfer_photos',
+      cascadeDelete: true, // Delete all Photos when round is deleted (polymorphic)
+      findChildren: (roundId: string, allPhotos: any[]) => {
+        return allPhotos.filter(photo => photo.refId === roundId);
+      },
+    },
+  ],
+});
 
 /**
- * Auto-populate courseId from courseName if missing
+ * Migration: Remove players field from all rounds
+ * Players are now computed from UserRound entities
  */
-async function populateCourseId(round: Round): Promise<Round> {
-  // If courseId is already set, no need to populate
+export async function migrateRoundsRemovePlayers(): Promise<{ migrated: number; failed: number }> {
+  try {
+    // Check if migration has already been run
+    const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
+    if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
+      console.log('[Migration] Rounds players removal migration already completed');
+      return { migrated: 0, failed: 0 };
+    }
+    
+    console.log('[Migration] Starting rounds players removal migration...');
+    const data = await getItem(ROUNDS_STORAGE_KEY);
+    if (!data) {
+      await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+      return { migrated: 0, failed: 0 };
+    }
+    
+    const rounds = JSON.parse(data);
+    let migrated = 0;
+    let needsSave = false;
+    
+    for (const round of rounds) {
+      // Remove players field if present
+      if (round.players !== undefined) {
+        delete round.players;
+        migrated++;
+        needsSave = true;
+      }
+    }
+    
+    // Save all migrated rounds (with players removed)
+    if (needsSave) {
+      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
+      console.log(`[Migration] Removed players from ${migrated} rounds`);
+    }
+    
+    // Mark migration as complete
+    await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+    
+    console.log(`[Migration] Rounds players removal complete: ${migrated} rounds migrated`);
+    return { migrated, failed: 0 };
+  } catch (error) {
+    console.error('[Migration] Error migrating rounds players:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get course name from courseId
+ * Helper function to compute courseName from courseId
+ */
+export async function getCourseNameFromId(courseId: string | undefined): Promise<string | undefined> {
+  if (!courseId) {
+    return undefined;
+  }
+  const course = await getCourseById(courseId);
+  return course?.name;
+}
+
+/**
+ * Get players for a round by computing from UserRound entities
+ * This replaces the old round.players field which is now redundant
+ */
+export async function getPlayersForRound(roundId: string): Promise<Player[]> {
+  try {
+    const userRounds = await getUserRoundsByRoundId(roundId);
+    const allUsers = await getAllUsers();
+    const userMap = new Map(allUsers.map(u => [u.id, u]));
+    
+    const players: Player[] = [];
+    for (const userRound of userRounds) {
+      const user = userMap.get(userRound.userId);
+      if (user) {
+        players.push({
+          id: user.id,
+          name: user.name,
+          notes: user.notes, // Include notes from user
+        });
+      }
+    }
+    
+    return players;
+  } catch (error) {
+    console.error('Error getting players for round:', error);
+    return [];
+  }
+}
+
+/**
+ * Legacy: Auto-populate courseId from courseName if missing (for migration purposes)
+ * This handles old data that might still have courseName
+ */
+async function populateCourseIdFromLegacyName(round: any): Promise<Round> {
+  // If courseId is already set, remove courseName and return
   if (round.courseId) {
-    return round;
+    const { courseName, ...rest } = round;
+    return rest as Round;
   }
   
-  // If courseName is set but courseId is missing, look it up
+  // If courseName is set but courseId is missing, look it up (legacy data)
   if (round.courseName) {
     const course = await getCourseByName(round.courseName);
     if (course) {
-      return { ...round, courseId: course.id };
+      const { courseName, ...rest } = round;
+      return { ...rest, courseId: course.id } as Round;
     }
   }
   
-  return round;
+  // Remove courseName if present
+  const { courseName, ...rest } = round;
+  return rest as Round;
 }
 
 /**
  * Save a round to local storage
  * Note: This function will NOT restore a round that was deleted. If a round doesn't exist,
  * it will only add it if it's a new round (not a deleted one being restored).
- * Automatically populates courseId from courseName if missing.
+ * Validates the round against schema before saving.
+ * Removes any legacy courseName and scores fields if present.
  */
-export async function saveRound(round: Round, allowRestore: boolean = false): Promise<void> {
-  try {
-    // Auto-populate courseId if missing
-    const roundWithCourseId = await populateCourseId(round);
-    
-    const rounds = await getAllRounds();
-    const existingIndex = rounds.findIndex((r) => r.id === roundWithCourseId.id);
-    
-    if (existingIndex >= 0) {
-      // Round exists, update it
-      rounds[existingIndex] = roundWithCourseId;
-    } else {
-      // Round doesn't exist - only add it if explicitly allowed (for new rounds)
-      // This prevents auto-save from restoring deleted rounds
-      if (allowRestore) {
-        rounds.push(roundWithCourseId);
-      } else {
-        // Round was deleted or doesn't exist - don't restore it
-        console.warn(`Attempted to save round "${roundWithCourseId.id}" that doesn't exist. This may be a deleted round being restored by auto-save. Skipping save.`);
-        return;
-      }
-    }
-    
-    await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
-  } catch (error: any) {
-    console.error('Error saving round:', error);
-    
-    // Check if it's a quota exceeded error
-    if (error?.name === 'QuotaExceededError' || error?.message?.includes('quota') || error?.message?.includes('QuotaExceeded')) {
-      const quotaError = new Error('Storage quota exceeded. Please delete some old rounds or remove photos to free up space.');
-      (quotaError as any).name = 'QuotaExceededError';
-      throw quotaError;
-    }
-    
-    throw error;
-  }
+export async function saveRound(round: Round, allowRestore: boolean = true): Promise<void> {
+  return roundStorage.save(round, allowRestore);
 }
 
 /**
  * Get all saved rounds
  */
 export async function getAllRounds(): Promise<Round[]> {
-  try {
-    const data = await getItem(ROUNDS_STORAGE_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-    return [];
-  } catch (error) {
-    console.error('Error loading rounds:', error);
-    return [];
-  }
+  return roundStorage.getAll();
 }
 
 /**
  * Get a single round by ID
  */
 export async function getRoundById(roundId: string): Promise<Round | null> {
-  try {
-    const rounds = await getAllRounds();
-    return rounds.find((r) => r.id === roundId) || null;
-  } catch (error) {
-    console.error('Error loading round:', error);
-    return null;
-  }
+  return roundStorage.getById(roundId);
 }
 
 /**
@@ -248,19 +342,16 @@ export async function deleteRounds(roundIds: string[]): Promise<void> {
 }
 
 /**
- * Generate a new unique round ID (6 hex characters)
- * Ensures local uniqueness by checking existing rounds
+ * Generate a new unique round ID (8 hex characters)
  */
 export async function generateRoundId(): Promise<string> {
-  const rounds = await getAllRounds();
-  const existingIds = new Set(rounds.map(r => r.id));
-  return generateUniqueUUID(existingIds);
+  return roundStorage.generateId();
 }
 
 /**
- * Generate a round title from date and time
+ * Generate a round name from date and time
  */
-export function generateRoundTitle(date: number): string {
+export function generateRoundName(date: number): string {
   const d = new Date(date);
   const dateOptions: Intl.DateTimeFormatOptions = {
     weekday: 'short',
@@ -279,51 +370,53 @@ export function generateRoundTitle(date: number): string {
 }
 
 /**
- * Create a new round with auto-generated ID and title
+ * Create a new round with auto-generated ID and name
+ * Note: Players are not stored in the round - they are managed via UserRound entities
  */
 export async function createNewRound(initialData: {
-  players: Round['players'];
   notes?: string;
-  photos?: string[];
-  courseName?: string;
   courseId?: string;
   date?: number; // Optional custom date (Unix timestamp)
 }): Promise<Round> {
   const date = initialData.date || Date.now();
   const roundId = await generateRoundId();
-  const title = generateRoundTitle(date);
+  const name = generateRoundName(date);
 
   const newRound: Round = {
     id: roundId,
-    title,
+    name, // baseEntitySchema requires name
     date,
-    players: initialData.players,
-    scores: [],
     notes: initialData.notes,
-    photos: initialData.photos,
-    courseName: initialData.courseName,
     courseId: initialData.courseId,
   };
 
-  await saveRound(newRound, true); // allowRestore=true for new rounds
+  await saveRound(newRound);
   return newRound;
 }
 
 /**
- * Migration: Backfill courseId for all existing rounds
- * This should be run once to migrate existing data
+ * Migration: Remove courseName from all rounds and ensure courseId is set
+ * This migration:
+ * 1. Backfills courseId from courseName if missing
+ * 2. Removes courseName field from all rounds
  */
-export async function migrateRoundsCourseId(): Promise<{ migrated: number; failed: number }> {
+export async function migrateRoundsRemoveCourseName(): Promise<{ migrated: number; failed: number }> {
   try {
     // Check if migration has already been run
     const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
     if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
-      console.log('[Migration] Rounds courseId migration already completed');
+      console.log('[Migration] Rounds courseName removal migration already completed');
       return { migrated: 0, failed: 0 };
     }
     
-    console.log('[Migration] Starting rounds courseId migration...');
-    const rounds = await getAllRounds();
+    console.log('[Migration] Starting rounds courseName removal migration...');
+    const data = await getItem(ROUNDS_STORAGE_KEY);
+    if (!data) {
+      await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+      return { migrated: 0, failed: 0 };
+    }
+    
+    const rounds = JSON.parse(data);
     const courses = await getAllCourses();
     const courseNameToId = new Map<string, string>();
     
@@ -337,35 +430,38 @@ export async function migrateRoundsCourseId(): Promise<{ migrated: number; faile
     let needsSave = false;
     
     for (const round of rounds) {
-      // Skip if courseId is already set
-      if (round.courseId) {
-        continue;
-      }
+      let hasChanges = false;
       
-      // Try to find courseId from courseName
-      if (round.courseName) {
+      // If courseName exists but courseId doesn't, try to populate courseId
+      if (round.courseName && !round.courseId) {
         const normalizedName = round.courseName.trim().toLowerCase();
         const courseId = courseNameToId.get(normalizedName);
         
         if (courseId) {
           round.courseId = courseId;
-          migrated++;
-          needsSave = true;
+          hasChanges = true;
         } else {
-          // Course not found - try direct lookup as fallback
+          // Try direct lookup as fallback
           const course = await getCourseByName(round.courseName);
           if (course) {
             round.courseId = course.id;
-            migrated++;
-            needsSave = true;
+            hasChanges = true;
           } else {
             console.warn(`[Migration] Could not find course for round ${round.id} with courseName: ${round.courseName}`);
             failed++;
           }
         }
-      } else {
-        // No courseName, can't migrate
-        failed++;
+      }
+      
+      // Remove courseName field if present
+      if (round.courseName !== undefined) {
+        delete round.courseName;
+        hasChanges = true;
+      }
+      
+      if (hasChanges) {
+        migrated++;
+        needsSave = true;
       }
     }
     
@@ -378,10 +474,186 @@ export async function migrateRoundsCourseId(): Promise<{ migrated: number; faile
     // Mark migration as complete
     await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
     
-    console.log(`[Migration] Rounds courseId migration complete: ${migrated} migrated, ${failed} failed`);
+    console.log(`[Migration] Rounds courseName removal complete: ${migrated} migrated, ${failed} failed`);
     return { migrated, failed };
   } catch (error) {
-    console.error('[Migration] Error migrating rounds courseId:', error);
+    console.error('[Migration] Error migrating rounds:', error);
+    throw error;
+  }
+}
+
+/**
+ * Migration: Split scores from rounds into UserRound entities
+ * This migration:
+ * 1. Reads all rounds that have scores
+ * 2. Creates UserRound entities for each player's scores
+ * 3. Removes scores field from rounds
+ */
+export async function migrateRoundsSplitScores(): Promise<{ migrated: number; failed: number }> {
+  try {
+    // Check if migration has already been run
+    const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
+    if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
+      console.log('[Migration] Rounds scores split migration already completed');
+      return { migrated: 0, failed: 0 };
+    }
+    
+    console.log('[Migration] Starting rounds scores split migration...');
+    const data = await getItem(ROUNDS_STORAGE_KEY);
+    if (!data) {
+      await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+      return { migrated: 0, failed: 0 };
+    }
+    
+    const rounds = JSON.parse(data);
+    let migrated = 0;
+    let failed = 0;
+    let needsSave = false;
+    
+    for (const round of rounds) {
+      // Check if this round has scores to migrate
+      if (round.scores && Array.isArray(round.scores) && round.scores.length > 0) {
+        try {
+          // Group scores by playerId
+          const scoresByPlayer = new Map<string, Score[]>();
+          
+          for (const score of round.scores) {
+            // Legacy scores have playerId, new scores don't
+            const playerId = (score as any).playerId;
+            if (!playerId) {
+              console.warn(`[Migration] Score missing playerId in round ${round.id}, skipping`);
+              failed++;
+              continue;
+            }
+            
+            if (!scoresByPlayer.has(playerId)) {
+              scoresByPlayer.set(playerId, []);
+            }
+            
+            // Convert legacy score format (with playerId) to new format (with userId and roundId)
+            scoresByPlayer.get(playerId)!.push({
+              holeNumber: score.holeNumber,
+              throws: score.throws,
+              complete: (score as any).complete !== undefined ? (score as any).complete : true, // Default to complete for legacy
+              userId: playerId,
+              roundId: round.id,
+            });
+          }
+          
+          // Create UserRound for each player and save scores separately
+          for (const [playerId, scores] of scoresByPlayer.entries()) {
+            // Create UserRound (without scores - scores are stored separately)
+            await saveUserRoundByUserAndRound(playerId, round.id);
+            
+            // Save scores in separate table
+            await saveScores(scores);
+            migrated++;
+          }
+          
+          // Remove scores from round
+          delete round.scores;
+          needsSave = true;
+        } catch (error) {
+          console.error(`[Migration] Error migrating scores for round ${round.id}:`, error);
+          failed++;
+        }
+      }
+    }
+    
+    // Save all migrated rounds (with scores removed)
+    if (needsSave) {
+      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
+      console.log(`[Migration] Saved ${migrated} user rounds and removed scores from rounds`);
+    }
+    
+    // Mark migration as complete
+    await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+    
+    console.log(`[Migration] Rounds scores split complete: ${migrated} user rounds created, ${failed} failed`);
+    return { migrated, failed };
+  } catch (error) {
+    console.error('[Migration] Error migrating rounds scores:', error);
+    throw error;
+  }
+}
+
+/**
+ * Migration: Remove photos field from all rounds and move to photos table
+ * Photos are now stored in a separate table and referenced via refId
+ */
+export async function migrateRoundsRemovePhotos(): Promise<{ migrated: number; failed: number }> {
+  try {
+    // Check if migration has already been run
+    const migrationVersion = await getItem(ROUNDS_MIGRATION_VERSION_KEY);
+    if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_MIGRATION_VERSION) {
+      console.log('[Migration] Rounds photos removal migration already completed');
+      return { migrated: 0, failed: 0 };
+    }
+    
+    console.log('[Migration] Starting rounds photos removal migration...');
+    const data = await getItem(ROUNDS_STORAGE_KEY);
+    if (!data) {
+      await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+      return { migrated: 0, failed: 0 };
+    }
+    
+    const rounds = JSON.parse(data);
+    let migrated = 0;
+    let failed = 0;
+    let needsSave = false;
+    
+    for (const round of rounds) {
+      // Check if this round has photos to migrate
+      if (round.photos && Array.isArray(round.photos) && round.photos.length > 0) {
+        try {
+          // Move photos to photos table
+          await addPhotosToEntity(round.id, round.photos);
+          migrated += round.photos.length;
+          
+          // Remove photos from round
+          delete round.photos;
+          needsSave = true;
+        } catch (error) {
+          console.error(`[Migration] Error migrating photos for round ${round.id}:`, error);
+          failed++;
+        }
+      } else if (round.photos !== undefined) {
+        // Remove photos field even if it's empty
+        delete round.photos;
+        needsSave = true;
+      }
+    }
+    
+    // Save all migrated rounds (with photos removed)
+    if (needsSave) {
+      await setItem(ROUNDS_STORAGE_KEY, JSON.stringify(rounds));
+      console.log(`[Migration] Moved ${migrated} photos to photos table and removed photos from rounds`);
+    }
+    
+    // Mark migration as complete
+    await setItem(ROUNDS_MIGRATION_VERSION_KEY, CURRENT_MIGRATION_VERSION.toString());
+    
+    console.log(`[Migration] Rounds photos removal complete: ${migrated} photos migrated, ${failed} failed`);
+    return { migrated, failed };
+  } catch (error) {
+    console.error('[Migration] Error migrating rounds photos:', error);
+    throw error;
+  }
+}
+
+/**
+ * Run all round migrations in order
+ * This is the main entry point for migrations
+ */
+export async function migrateRoundsCourseId(): Promise<void> {
+  try {
+    // Run migrations in order (they check their own version internally)
+    await migrateRoundsRemoveCourseName();
+    await migrateRoundsSplitScores();
+    await migrateRoundsRemovePlayers();
+    await migrateRoundsRemovePhotos();
+  } catch (error) {
+    console.error('[Migration] Error running round migrations:', error);
     throw error;
   }
 }

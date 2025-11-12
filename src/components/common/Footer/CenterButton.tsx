@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, Image, Platform, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, Platform, TouchableOpacity, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import Svg, { Defs, RadialGradient, Stop, Ellipse, Path, Text, TextPath } from 'react-native-svg';
 import { useTheme } from 'react-native-paper';
+import faviconImage from '../../../../assets/favicon.png';
 
 interface CenterButtonProps {
   onPress: () => void;
@@ -200,8 +202,9 @@ export default function CenterButton({
         activeOpacity={0.7}
       >
         <Image 
-          source={require('../../../../assets/favicon.png')}
+          source={faviconImage}
           style={styles.faviconImage}
+          contentFit="contain"
         />
       </TouchableOpacity>
     </View>

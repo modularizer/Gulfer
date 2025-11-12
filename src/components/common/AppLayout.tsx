@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Platform, Image, Dimensions, useColorScheme } from 'react-native';
+import { View, StyleSheet, Platform, Dimensions, useColorScheme } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import Footer from './Footer';
-import { getAllUsers, saveUser, saveCurrentUserName, generateUserId, User } from '@/services/storage/userStorage';
+import { getAllUsers, saveUser, saveCurrentUserName, generateUserId, getUserById } from '@/services/storage/userStorage';
+import { getCurrentUserId, setCurrentUserId } from '@/services/storage/currentUserStorage';
 import { useTheme } from '../../theme/ThemeContext';
+import backgroundImage from '../../../assets/background.webp';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -47,8 +50,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     const ensureCurrentUser = async () => {
       try {
-        const users = await getAllUsers();
-        const currentUser = users.find(u => u.isCurrentUser);
+        const currentUserId = await getCurrentUserId();
+        let currentUser = currentUserId ? await getUserById(currentUserId) : null;
         
         if (!currentUser || !currentUser.name) {
           // No current user or no name set, create/update with "You"
@@ -59,12 +62,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
           } else {
             // Create new user
             const userId = await generateUserId();
-            const newUser: User = {
+            const newUser = {
               id: userId,
               name: 'You',
-              isCurrentUser: true,
             };
             await saveUser(newUser);
+            // Set as current user
+            await setCurrentUserId(userId);
             // Also save to current user name storage
             await saveCurrentUserName('You');
           }
@@ -85,9 +89,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
     ]}>
       {Platform.OS === 'web' && (
         <Image
-          source={require('../../../assets/background.webp')}
+          source={backgroundImage}
           style={styles.backgroundImage}
-          resizeMode="cover"
+          contentFit="cover"
         />
       )}
       {/* Safe area overlay - ensures correct background color for status bar area */}

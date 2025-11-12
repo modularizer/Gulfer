@@ -15,7 +15,8 @@ interface CourseSelectorProps {
   selectedCourseId: string | null;
   onCourseChange: (courseId: string | null) => void;
   onHolesChange?: (holes: number) => void; // Optional callback when holes change
-  initialCourseName?: string; // Optional: course name to match on initial load
+  initialCourseName?: string; // Optional: course name to match on initial load (legacy)
+  initialCourseId?: string; // Optional: course ID to match on initial load (preferred)
 }
 
 export default function CourseSelector({
@@ -23,6 +24,7 @@ export default function CourseSelector({
   onCourseChange,
   onHolesChange,
   initialCourseName,
+  initialCourseId,
 }: CourseSelectorProps) {
   const theme = useTheme();
   const [courses, setCourses] = useState<Course[]>([]);
@@ -38,8 +40,18 @@ export default function CourseSelector({
         const loadedCourses = await getAllCourses();
         setCourses(loadedCourses);
         
-        // If we have an initial course name but no selected course ID, try to find it
-        if (initialCourseName && !selectedCourseId && !isInitialized) {
+        // If we have an initial course ID, use it (preferred)
+        if (initialCourseId && !selectedCourseId && !isInitialized) {
+          const matchingCourse = loadedCourses.find(c => c.id === initialCourseId);
+          if (matchingCourse) {
+            onCourseChange(matchingCourse.id);
+            if (onHolesChange) {
+              onHolesChange(getHoleCount(matchingCourse));
+            }
+          }
+          setIsInitialized(true);
+        } else if (initialCourseName && !selectedCourseId && !isInitialized) {
+          // Legacy: If we have an initial course name but no selected course ID, try to find it
           const trimmedInitialName = initialCourseName.trim();
           const matchingCourse = loadedCourses.find(c => c.name.trim() === trimmedInitialName);
           if (matchingCourse) {
@@ -78,7 +90,7 @@ export default function CourseSelector({
     };
 
     loadCourses();
-  }, [initialCourseName, selectedCourseId, isInitialized, onCourseChange, onHolesChange]);
+  }, [initialCourseName, initialCourseId, selectedCourseId, isInitialized, onCourseChange, onHolesChange]);
 
   // Helper function to format course display name
   const formatCourseDisplayName = useCallback((course: Course | undefined): string => {

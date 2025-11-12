@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, Image, Platform } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
 import Footer from '../components/common/Footer';
+import faviconImage from '../../assets/favicon.png';
 
 export default function HomeScreen() {
   const theme = useTheme();
@@ -13,9 +15,9 @@ export default function HomeScreen() {
         <View style={styles.brandingContainer}>
           <View style={styles.logoWrapper}>
             <Image
-              source={require('../../assets/favicon.png')}
+              source={faviconImage}
               style={styles.logo}
-              resizeMode="contain"
+              contentFit="contain"
             />
           </View>
         </View>

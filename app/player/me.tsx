@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { IconButton, useTheme, Text, TextInput, Button } from 'react-native-paper';
 import { router } from 'expo-router';
-import { getCurrentUserName, saveCurrentUserName, getAllUsers, saveUser, generateUserId, User } from '@/services/storage/userStorage';
+import { getCurrentUserName, saveCurrentUserName, getAllUsers, saveUser, generateUserId, getUserById } from '@/services/storage/userStorage';
+import { getCurrentUserId, setCurrentUserId } from '@/services/storage/currentUserStorage';
 import { encodeNameForUrl } from '@/utils/urlEncoding';
 
 export default function YouScreen() {
@@ -14,11 +15,13 @@ export default function YouScreen() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const users = await getAllUsers();
-        const currentUser = users.find(u => u.isCurrentUser);
-        if (currentUser) {
-          // Show current name
-          setName(currentUser.name || '');
+        const currentUserId = await getCurrentUserId();
+        if (currentUserId) {
+          const currentUser = await getUserById(currentUserId);
+          if (currentUser) {
+            // Show current name
+            setName(currentUser.name || '');
+          }
         } else {
           // No current user, show name from storage
           const currentName = await getCurrentUserName();
@@ -42,8 +45,8 @@ export default function YouScreen() {
     }
 
     try {
-      const users = await getAllUsers();
-      const currentUser = users.find(u => u.isCurrentUser);
+      const currentUserId = await getCurrentUserId();
+      let currentUser = currentUserId ? await getUserById(currentUserId) : null;
 
       if (currentUser) {
         // Update existing user
@@ -52,22 +55,22 @@ export default function YouScreen() {
       } else {
         // Create new user
         const userId = await generateUserId();
-        const newUser: User = {
+        const newUser = {
           id: userId,
           name: name.trim(),
-          isCurrentUser: true,
         };
         await saveUser(newUser);
+        // Set as current user
+        await setCurrentUserId(userId);
         // Also save to current user name storage
         await saveCurrentUserName(name.trim());
+        currentUser = newUser;
       }
 
       setError('');
       // Navigate to the player page after saving
-      const usersAfterSave = await getAllUsers();
-      const savedUser = usersAfterSave.find(u => u.isCurrentUser);
-      if (savedUser) {
-        router.replace(`/player/${encodeNameForUrl(savedUser.name)}/overview`);
+      if (currentUser) {
+        router.replace(`/player/${encodeNameForUrl(currentUser.name)}/overview`);
       }
     } catch (error) {
       console.error('Error saving name:', error);

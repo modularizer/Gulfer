@@ -3,7 +3,7 @@
  * Reusable card for displaying round information
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Platform } from 'react-native';
 import { Card, Text, Chip, useTheme } from 'react-native-paper';
 import { Round, Player } from '@/types';
@@ -13,6 +13,8 @@ import HashedImage from './HashedImage';
 import { router } from 'expo-router';
 import { sharedCardStyles } from './sharedCardStyles';
 import { CardMode } from './CardModeToggle';
+import { getCourseNameFromId, getPlayersForRound } from '@/services/storage/roundStorage';
+import { getScoresByRoundId } from '@/services/storage/scoreStorage';
 
 interface RoundCardProps {
   round: Round;
@@ -23,6 +25,7 @@ interface RoundCardProps {
   showPhotos?: boolean;
   isSelected?: boolean;
   mode?: CardMode;
+  courseName?: string; // Optional: if not provided, will be fetched from courseId
 }
 
 export default function RoundCard({
@@ -34,8 +37,47 @@ export default function RoundCard({
   showPhotos = false,
   isSelected = false,
   mode = 'medium',
+  courseName: providedCourseName,
 }: RoundCardProps) {
   const theme = useTheme();
+  const [courseName, setCourseName] = useState<string | undefined>(providedCourseName);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [scores, setScores] = useState<any[]>([]);
+
+  // Fetch courseName from courseId if not provided
+  useEffect(() => {
+    if (!providedCourseName && round.courseId) {
+      getCourseNameFromId(round.courseId).then(name => {
+        setCourseName(name);
+      });
+    } else {
+      setCourseName(providedCourseName);
+    }
+  }, [providedCourseName, round.courseId]);
+
+  // Fetch players from userrounds
+  useEffect(() => {
+    getPlayersForRound(round.id).then(loadedPlayers => {
+      setPlayers(loadedPlayers);
+    });
+  }, [round.id]);
+
+  // Fetch scores from scoreStorage (legacy: round.scores may still exist for backward compatibility)
+  useEffect(() => {
+    const loadScores = async () => {
+      // Try to get scores from scoreStorage first
+      const loadedScores = await getScoresByRoundId(round.id);
+      if (loadedScores.length > 0) {
+        setScores(loadedScores);
+      } else if ((round as any).scores) {
+        // Fallback to legacy round.scores if available
+        setScores((round as any).scores);
+      } else {
+        setScores([]);
+      }
+    };
+    loadScores();
+  }, [round.id]);
 
   const date = new Date(round.date);
   const dateStr = date.toLocaleDateString('en-US', {
@@ -50,10 +92,10 @@ export default function RoundCard({
     hour12: true,
   });
 
-  const playerScores = round.players.map((player) => {
-    const total = round.scores
-      ? round.scores
-          .filter((s) => s.playerId === player.id)
+  const playerScores = players.map((player) => {
+    const total = scores
+      ? scores
+          .filter((s) => (s as any).playerId === player.id || s.userId === player.id)
           .reduce((sum, s) => sum + s.throws, 0)
       : 0;
     return { player, total };
@@ -95,7 +137,7 @@ export default function RoundCard({
           }
         ]}>
           <Text style={[{ color: theme.colors.onSurface, fontSize: 16 }]}>
-            {dateStr} {timeStr}{showCourse && round.courseName ? ` @ ${round.courseName}` : ''}
+            {dateStr} {timeStr}{showCourse && courseName ? ` @ ${courseName}` : ''}
           </Text>
         </View>
       </TouchableOpacity>
@@ -130,11 +172,11 @@ export default function RoundCard({
                 <Text style={sharedCardStyles.boldText}>
                   {dateStr} {timeStr}
                 </Text>
-                {showCourse && round.courseName && (
+                {showCourse && courseName && (
                   <>
                     {' '}
                     <Text style={sharedCardStyles.normalText}>
-                      @ {round.courseName} {courseHoleCount && courseHoleCount > 0 && `(${courseHoleCount} ⛳)`}
+                      @ {courseName} {courseHoleCount && courseHoleCount > 0 && `(${courseHoleCount} ⛳)`}
                     </Text>
                   </>
                 )}
@@ -213,11 +255,11 @@ export default function RoundCard({
                 <Text style={sharedCardStyles.boldText}>
                   {dateStr} {timeStr}
                 </Text>
-                {showCourse && round.courseName && (
+                {showCourse && courseName && (
                   <>
                     {' '}
                     <Text style={sharedCardStyles.normalText}>
-                      @ {round.courseName} {courseHoleCount && courseHoleCount > 0 && `(${courseHoleCount} ⛳)`}
+                      @ {courseName} {courseHoleCount && courseHoleCount > 0 && `(${courseHoleCount} ⛳)`}
                     </Text>
                   </>
                 )}
@@ -272,11 +314,11 @@ export default function RoundCard({
               <Text style={sharedCardStyles.boldText}>
                 {dateStr} {timeStr}
               </Text>
-              {showCourse && round.courseName && (
+              {showCourse && courseName && (
                 <>
                   {' '}
                   <Text style={sharedCardStyles.normalText}>
-                    @ {round.courseName} {courseHoleCount && courseHoleCount > 0 && `(${courseHoleCount} ⛳)`}
+                    @ {courseName} {courseHoleCount && courseHoleCount > 0 && `(${courseHoleCount} ⛳)`}
                   </Text>
                 </>
               )}

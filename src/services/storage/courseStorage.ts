@@ -1,32 +1,62 @@
 /**
  * Storage service for managing courses locally
- * Uses localforage (IndexedDB on web, native storage on mobile)
+ * Uses GenericStorageService for common operations
  */
 
-import { getItem, setItem } from './storageAdapter';
-import { Course } from '@/types';
+import { Course, courseSchema } from '@/types';
 import { getAllRounds } from './roundStorage';
-import { generateUniqueUUID } from '../../utils/uuid';
+import { saveHoles, generateHoleId } from './holeStorage';
+import { GenericStorageService } from './GenericStorageService';
+import { getItem, setItem } from './drivers';
 
 // Re-export Course type from types
 export type { Course };
 
 const COURSES_STORAGE_KEY = '@gulfer_courses';
 
+// Create generic storage service instance for courses
+const courseStorage = new GenericStorageService<Course>({
+  storageKey: COURSES_STORAGE_KEY,
+  schema: courseSchema,
+  entityName: 'Course',
+  generatedFields: [
+    { field: 'id' },
+  ],
+  uniqueFields: ['id', 'name'],
+  cleanupBeforeSave: (course: Course) => {
+    // Remove holes array if present (legacy data - holes are now in separate table)
+    const cleaned = { ...course };
+    delete (cleaned as any).holes;
+    return cleaned;
+  },
+  foreignKeys: [
+    {
+      field: 'courseId',
+      referencesStorageKey: '@gulfer_holes',
+      cascadeDelete: true, // Delete all holes when course is deleted
+    },
+  ],
+});
+
 /**
  * Get all saved courses
  */
 export async function getAllCourses(): Promise<Course[]> {
-  try {
-    const data = await getItem(COURSES_STORAGE_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-    return [];
-  } catch (error) {
-    console.error('Error loading courses:', error);
-    return [];
-  }
+  return courseStorage.getAll();
+}
+
+/**
+ * Get a course by ID
+ */
+export async function getCourseById(courseId: string): Promise<Course | null> {
+  return courseStorage.getById(courseId);
+}
+
+/**
+ * Get a course by name
+ */
+export async function getCourseByName(courseName: string): Promise<Course | null> {
+  return courseStorage.getByName(courseName);
 }
 
 /**
@@ -34,99 +64,28 @@ export async function getAllCourses(): Promise<Course[]> {
  * Enforces local uniqueness of course names
  */
 export async function saveCourse(course: Course): Promise<void> {
-  try {
-    const courses = await getAllCourses();
-    const existingIndex = courses.findIndex((c) => c.id === course.id);
-    
-    // Check for name uniqueness (case-insensitive, excluding current course)
-    const trimmedName = course.name.trim();
-    const nameConflict = courses.find(c => 
-      c.id !== course.id && 
-      c.name.trim().toLowerCase() === trimmedName.toLowerCase()
-    );
-    
-    if (nameConflict) {
-      throw new Error(`A course with the name "${trimmedName}" already exists`);
-    }
-    
-    if (existingIndex >= 0) {
-      courses[existingIndex] = course;
-    } else {
-      courses.push(course);
-    }
-    
-    await setItem(COURSES_STORAGE_KEY, JSON.stringify(courses));
-  } catch (error) {
-    console.error('Error saving course:', error);
-    throw error;
-  }
-}
-
-/**
- * Get a course by ID
- */
-export async function getCourseById(courseId: string): Promise<Course | null> {
-  try {
-    const courses = await getAllCourses();
-    return courses.find((c) => c.id === courseId) || null;
-  } catch (error) {
-    console.error('Error loading course:', error);
-    return null;
-  }
-}
-
-/**
- * Get a course by name
- */
-export async function getCourseByName(courseName: string): Promise<Course | null> {
-  try {
-    const courses = await getAllCourses();
-    return courses.find((c) => c.name === courseName) || null;
-  } catch (error) {
-    console.error('Error loading course by name:', error);
-    return null;
-  }
+  return courseStorage.save(course);
 }
 
 /**
  * Delete a course by ID
  */
 export async function deleteCourse(courseId: string): Promise<void> {
-  try {
-    const courses = await getAllCourses();
-    const filtered = courses.filter((c) => c.id !== courseId);
-    await setItem(COURSES_STORAGE_KEY, JSON.stringify(filtered));
-  } catch (error) {
-    console.error('Error deleting course:', error);
-    throw error;
-  }
+  return courseStorage.delete(courseId);
 }
 
 /**
- * Generate a new unique course ID (6 hex characters)
- * Ensures local uniqueness by checking existing courses
+ * Generate a new unique course ID (8 hex characters)
  */
 export async function generateCourseId(): Promise<string> {
-  const courses = await getAllCourses();
-  const existingIds = new Set(courses.map(c => c.id));
-  return generateUniqueUUID(existingIds);
+  return courseStorage.generateId();
 }
 
 /**
  * Check if a course name is already taken
  */
 export async function isCourseNameAvailable(name: string, excludeCourseId?: string): Promise<boolean> {
-  try {
-    const courses = await getAllCourses();
-    const trimmedName = name.trim();
-    return !courses.some(c => 
-      c.name.trim().toLowerCase() === trimmedName.toLowerCase() && 
-      c.id !== excludeCourseId
-    );
-  } catch (error) {
-    console.error('Error checking course name availability:', error);
-    return false;
-  }
+  return courseStorage.isNameAvailable(name, excludeCourseId);
 }
 
 /**
@@ -137,23 +96,22 @@ export async function getLastUsedCourse(): Promise<Course | null> {
   try {
     const rounds = await getAllRounds();
     
-    // Find the most recent round with a courseName
+    // Find the most recent round with a courseId
     const roundsWithCourse = rounds
-      .filter(r => r.courseName)
+      .filter(r => r.courseId)
       .sort((a, b) => b.date - a.date);
     
     if (roundsWithCourse.length === 0) {
       return null;
     }
     
-    const lastUsedCourseName = roundsWithCourse[0].courseName;
-    if (!lastUsedCourseName) {
+    const lastUsedCourseId = roundsWithCourse[0].courseId;
+    if (!lastUsedCourseId) {
       return null;
     }
     
-    // Find the course matching the name
-    const courses = await getAllCourses();
-    return courses.find(c => c.name === lastUsedCourseName) || null;
+    // Find the course matching the ID
+    return await getCourseById(lastUsedCourseId);
   } catch (error) {
     console.error('Error getting last used course:', error);
     return null;
@@ -175,6 +133,88 @@ export async function getLatestAddedCourse(): Promise<Course | null> {
   } catch (error) {
     console.error('Error getting latest added course:', error);
     return null;
+  }
+}
+
+const COURSES_MIGRATION_VERSION_KEY = '@gulfer_courses_migration_version';
+const CURRENT_COURSES_MIGRATION_VERSION = 1; // Increment when adding new migrations
+
+/**
+ * Migration: Split holes from courses into separate table
+ * This migration:
+ * 1. Reads all courses that have holes arrays
+ * 2. Creates Hole entities in the separate table
+ * 3. Removes holes field from courses
+ */
+export async function migrateCoursesSplitHoles(): Promise<{ migrated: number; failed: number }> {
+  try {
+    // Check if migration has already been run
+    const migrationVersion = await getItem(COURSES_MIGRATION_VERSION_KEY);
+    if (migrationVersion && parseInt(migrationVersion, 10) >= CURRENT_COURSES_MIGRATION_VERSION) {
+      console.log('[Migration] Courses holes split migration already completed');
+      return { migrated: 0, failed: 0 };
+    }
+    
+    console.log('[Migration] Starting courses holes split migration...');
+    const data = await getItem(COURSES_STORAGE_KEY);
+    if (!data) {
+      await setItem(COURSES_MIGRATION_VERSION_KEY, CURRENT_COURSES_MIGRATION_VERSION.toString());
+      return { migrated: 0, failed: 0 };
+    }
+    
+    const courses = JSON.parse(data);
+    let migrated = 0;
+    let failed = 0;
+    let needsSave = false;
+    
+    for (const course of courses) {
+      // Check if this course has holes to migrate
+      if (course.holes && Array.isArray(course.holes) && course.holes.length > 0) {
+        try {
+          const holesToSave: any[] = [];
+          
+          for (const hole of course.holes) {
+            // Create hole with courseId and ID
+            const holeId = await generateHoleId();
+            holesToSave.push({
+              id: holeId,
+              courseId: course.id,
+              number: hole.number,
+              par: hole.par,
+              distance: hole.distance,
+              location: hole.location,
+              notes: hole.notes,
+            });
+          }
+          
+          // Save all holes for this course
+          await saveHoles(holesToSave);
+          migrated += holesToSave.length;
+          
+          // Remove holes from course
+          delete course.holes;
+          needsSave = true;
+        } catch (error) {
+          console.error(`[Migration] Error migrating holes for course ${course.id}:`, error);
+          failed++;
+        }
+      }
+    }
+    
+    // Save all migrated courses (with holes removed)
+    if (needsSave) {
+      await setItem(COURSES_STORAGE_KEY, JSON.stringify(courses));
+      console.log(`[Migration] Saved ${migrated} holes and removed holes from courses`);
+    }
+    
+    // Mark migration as complete
+    await setItem(COURSES_MIGRATION_VERSION_KEY, CURRENT_COURSES_MIGRATION_VERSION.toString());
+    
+    console.log(`[Migration] Courses holes split complete: ${migrated} holes migrated, ${failed} failed`);
+    return { migrated, failed };
+  } catch (error) {
+    console.error('[Migration] Error migrating courses holes:', error);
+    throw error;
   }
 }
 

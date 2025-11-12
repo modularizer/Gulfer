@@ -4,7 +4,7 @@
  */
 
 import { Platform } from 'react-native';
-import { getItem, setItem } from './storage/storageAdapter';
+import { getItem, setItem } from './storage/drivers';
 
 const NAVIGATION_STATE_KEY = 'gulfer-navigation-state';
 const MODAL_STATE_KEY_PREFIX = 'gulfer-modal-state-';

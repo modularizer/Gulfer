@@ -7,6 +7,7 @@ import React, { useRef, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import PhotoGallery, { PhotoGalleryHandle } from './PhotoGallery';
+import faviconImage from '../../../assets/favicon.png';
 
 interface HeroSectionProps {
   photos: string[];
@@ -39,9 +40,9 @@ export default function HeroSection({
         >
           <View style={styles.logoWrapper}>
             <Image 
-              source={require('../../../assets/favicon.png')} 
+              source={faviconImage} 
               style={styles.logoImage}
-              resizeMode="contain"
+              contentFit="contain"
             />
           </View>
         </TouchableOpacity>

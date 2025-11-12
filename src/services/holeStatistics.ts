@@ -92,13 +92,19 @@ export async function computeHoleStatistics(
       return true;
     });
 
-    // Collect all non-zero scores for this hole
+    // Collect all completed scores for this hole
+    // TODO: Update to use UserRounds instead of round.scores
     const scores: number[] = [];
     for (const round of courseRounds) {
-      if (round.scores) {
-        for (const score of round.scores) {
-          if (score.holeNumber === holeNumber && score.throws > 0) {
-            scores.push(score.throws);
+      const roundScores = (round as any).scores;
+      if (roundScores) {
+        for (const score of roundScores) {
+          if (score.holeNumber === holeNumber) {
+            // Use complete field if available, otherwise fall back to throws > 0 for backward compatibility
+            const isComplete = score.complete !== undefined ? score.complete : score.throws > 0;
+            if (isComplete) {
+              scores.push(score.throws);
+            }
           }
         }
       }
@@ -192,11 +198,13 @@ export async function computeTotalRoundStatistics(
     // Collect total scores for each user round (user + round combination)
     const totalScores: number[] = [];
     
+    // TODO: Update to use UserRounds instead of round.scores
     for (const round of courseRounds) {
-      if (round.scores && round.players) {
+      const roundScores = (round as any).scores;
+      if (roundScores && round.players) {
         for (const player of round.players) {
-          const playerScores = round.scores.filter(s => s.playerId === player.id);
-          const total = playerScores.reduce((sum, s) => sum + s.throws, 0);
+          const playerScores = roundScores.filter((s: any) => s.playerId === player.id);
+          const total = playerScores.reduce((sum: number, s: any) => sum + s.throws, 0);
           
           // Only include if total is > 0 (has at least one score)
           if (total > 0) {

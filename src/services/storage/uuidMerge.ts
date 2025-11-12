@@ -5,7 +5,7 @@
  * Used for merging imported data with existing data
  */
 
-import { getItem, setItem } from './storageAdapter';
+import { getItem, setItem } from './drivers';
 import { getStorageId } from './storageId';
 
 const MERGE_TABLE_KEY = '@gulfer_uuid_merges';
@@ -14,7 +14,7 @@ interface MergeEntry {
   foreignStorageId: string; // Storage UUID where the entity came from
   foreignEntityUuid: string; // Entity UUID in the foreign storage
   localEntityUuid: string; // Local UUID that "wins"
-  entityType: 'course' | 'round' | 'player'; // Type of entity
+  entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'; // Type of entity
   mergedAt: number; // Timestamp when merge was created
 }
 
@@ -34,7 +34,7 @@ interface MergeTable {
 export async function getLocalUuidForForeign(
   foreignStorageId: string,
   foreignEntityUuid: string,
-  entityType: 'course' | 'round' | 'player'
+  entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'
 ): Promise<string | null> {
   try {
     const mergeTable = await getMergeTable();
@@ -65,7 +65,7 @@ export async function mapForeignToLocal(
   foreignStorageId: string,
   foreignEntityUuid: string,
   localEntityUuid: string,
-  entityType: 'course' | 'round' | 'player'
+  entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'
 ): Promise<void> {
   try {
     const mergeTable = await getMergeTable();
@@ -100,7 +100,7 @@ export async function mapForeignToLocal(
  */
 export async function getForeignEntitiesForLocal(
   localEntityUuid: string,
-  entityType: 'course' | 'round' | 'player'
+  entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'
 ): Promise<Array<{ foreignStorageId: string; foreignEntityUuid: string }>> {
   try {
     const mergeTable = await getMergeTable();
@@ -141,7 +141,7 @@ async function getMergeTable(): Promise<MergeTable> {
 /**
  * Get all merge entries for a specific entity type
  */
-export async function getMergeEntries(entityType: 'course' | 'round' | 'player'): Promise<MergeEntry[]> {
+export async function getMergeEntries(entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'): Promise<MergeEntry[]> {
   try {
     const mergeTable = await getMergeTable();
     return Object.values(mergeTable).filter(entry => entry.entityType === entityType);

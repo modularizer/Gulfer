@@ -1,16 +1,16 @@
 /**
  * Storage ID Management
- * Each storage instance has a permanent 6-hex ID that never changes
+ * Each storage instance has a permanent 8-hex ID that never changes
  * This allows tracking which storage instance data came from during imports
  */
 
-import { getItem, setItem } from './storageAdapter';
+import { getItem, setItem } from './drivers';
 import { generateUUID } from '../../utils/uuid';
 
 const STORAGE_ID_KEY = '@gulfer_storage_id';
 
 /**
- * Get or create the storage ID (6 hex characters)
+ * Get or create the storage ID (8 hex characters)
  * This ID is permanent and never changes for this storage instance
  */
 export async function getStorageId(): Promise<string> {
@@ -18,7 +18,7 @@ export async function getStorageId(): Promise<string> {
     let storageId = await getItem(STORAGE_ID_KEY);
     
     if (!storageId) {
-      // Generate new storage ID (6 hex characters)
+      // Generate new storage ID (8 hex characters)
       storageId = await generateUUID();
       await setItem(STORAGE_ID_KEY, storageId);
     }

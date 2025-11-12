@@ -3,10 +3,11 @@
  * Reusable card for displaying player information
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Platform } from 'react-native';
 import { Card, Text, Chip, useTheme } from 'react-native-paper';
 import { User } from '@/services/storage/userStorage';
+import { getCurrentUserId } from '@/services/storage/currentUserStorage';
 import { getShadowStyle } from '../../utils';
 import HashedImage from './HashedImage';
 import { router } from 'expo-router';
@@ -44,6 +45,16 @@ export default function PlayerCard({
   mode = 'medium',
 }: PlayerCardProps) {
   const theme = useTheme();
+  const [isCurrentUser, setIsCurrentUser] = useState(false);
+
+  // Check if this player is the current user
+  useEffect(() => {
+    const checkCurrentUser = async () => {
+      const currentUserId = await getCurrentUserId();
+      setIsCurrentUser(currentUserId === player.id);
+    };
+    checkCurrentUser();
+  }, [player.id]);
 
   const handlePress = () => {
     if (onPress) {
@@ -148,7 +159,7 @@ export default function PlayerCard({
                 <Text style={[sharedCardStyles.name, { color: theme.colors.onSurface }]}>
                   {player.name}
                 </Text>
-                {player.isCurrentUser && (
+                {isCurrentUser && (
                   <Chip 
                     style={styles.currentUserChip} 
                     textStyle={styles.currentUserChipText}
@@ -271,7 +282,7 @@ export default function PlayerCard({
                 <Text style={[sharedCardStyles.name, { color: theme.colors.onSurface }]}>
                   {player.name}
                 </Text>
-                {player.isCurrentUser && (
+                {isCurrentUser && (
                   <Chip 
                     style={styles.currentUserChip} 
                     textStyle={styles.currentUserChipText}

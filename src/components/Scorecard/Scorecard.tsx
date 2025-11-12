@@ -450,7 +450,8 @@ export default function Scorecard({
     for (const hole of holes) {
       const atLeastOnePlayerHasZero = players.some(player => {
         const score = scores.find(s => s.playerId === String(player.id) && s.holeNumber === hole);
-        return !score || score.throws === 0;
+        // A hole is incomplete if there's no score, or if the score is explicitly marked as incomplete
+        return !score || (score.complete === false);
       });
       if (atLeastOnePlayerHasZero) {
         return hole;

@@ -2,18 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Platform, TouchableOpacity, Alert } from 'react-native';
 import { useTheme, Button, Text, IconButton, Dialog, Portal, TextInput } from 'react-native-paper';
 import { router } from 'expo-router';
-
-// Conditional DateTimePicker import for native platforms
-let DateTimePicker: any;
-if (Platform.OS !== 'web') {
-  DateTimePicker = require('@react-native-community/datetimepicker').default;
-}
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { createNewRound } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getUserIdForPlayerName } from '@/services/storage/userStorage';
 import { getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
+import { saveUserRoundByUserAndRound } from '@/services/storage/userRoundStorage';
 import { importRound, parseExportText } from '@/services/roundExport';
 import { getImportMappingInfo, createManualMappings } from '@/services/importMapping';
-import { Player } from '@/types';
 import ImportMappingDialog from '@/components/common/ImportMappingDialog';
 import { normalizeExportText } from '@/utils';
 
@@ -86,22 +81,18 @@ export default function NewRoundScreen() {
       const currentUserName = await getCurrentUserName();
       const playerName = currentUserName || 'You';
       const playerId = await getUserIdForPlayerName(playerName);
-      const defaultPlayer: Player = { 
-        id: playerId, 
-        name: playerName,
-      };
       
       // Get default course (last used or latest added)
       const defaultCourse = await getLastUsedCourse() || await getLatestAddedCourse();
-      const courseName = defaultCourse ? defaultCourse.name : undefined;
       const courseId = defaultCourse ? defaultCourse.id : undefined;
       
       const newRound = await createNewRound({
-        players: [defaultPlayer],
-        courseName,
         courseId,
         date,
       });
+      
+      // Create UserRound for the player
+      await saveUserRoundByUserAndRound(playerId, newRound.id);
       
       // Redirect to the overview page
       router.replace(`/round/${newRound.id}/overview`);

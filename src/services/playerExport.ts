@@ -8,6 +8,7 @@ import { User } from './storage/userStorage';
 import { getStorageId } from './storage/storageId';
 import { saveUser, getUserByName, generateUserId, getUserById } from './storage/userStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
+import { setCurrentUserId, getCurrentUserId } from './storage/currentUserStorage';
 import { normalizeExportText } from '../utils';
 
 /**
@@ -31,7 +32,9 @@ export async function exportPlayer(playerId: string): Promise<string> {
   lines.push(`Player Name: ${player.name}`);
   lines.push('');
   
-  if (player.isCurrentUser) {
+  // Check if this player is the current user
+  const currentUserId = await getCurrentUserId();
+  if (currentUserId === player.id) {
     lines.push('Is Current User: true');
     lines.push('');
   }
@@ -130,9 +133,13 @@ export async function importPlayer(
           const newPlayer: User = {
             id: localPlayerId,
             name: parsed.playerName,
-            isCurrentUser: parsed.isCurrentUser || false,
           };
           await saveUser(newPlayer);
+          
+          // If this was the current user, set it
+          if (parsed.isCurrentUser) {
+            await setCurrentUserId(localPlayerId);
+          }
           
           // Map foreign player to new local player
           await mapForeignToLocal(foreignStorageId, parsed.playerId, localPlayerId, 'player');
@@ -150,9 +157,13 @@ export async function importPlayer(
       const newPlayer: User = {
         id: localPlayerId,
         name: parsed.playerName,
-        isCurrentUser: parsed.isCurrentUser || false,
       };
       await saveUser(newPlayer);
+      
+      // If this was the current user, set it
+      if (parsed.isCurrentUser) {
+        await setCurrentUserId(localPlayerId);
+      }
     }
   }
   

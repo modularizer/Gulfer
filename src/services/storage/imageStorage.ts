@@ -5,7 +5,7 @@
  * On web: Uses blob URLs (stored in IndexedDB for persistence)
  */
 
-import { getItem, setItem, removeItem } from './storageAdapter';
+import { getItem, setItem, removeItem } from './drivers';
 import * as FileSystem from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';

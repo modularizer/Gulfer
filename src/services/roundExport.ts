@@ -253,7 +253,7 @@ export async function exportRound(roundId: string): Promise<string> {
   text += `Version: 2.0\n`;
   text += `Storage ID: ${storageId}\n`;
   text += `Round ID: ${round.id}\n\n`;
-  text += `Round: ${round.title}\n`;
+  text += `Round: ${round.name}\n`;
   text += `Date: ${dateStr} at ${timeStr}\n`;
   text += `Timestamp: ${round.date}\n`;
   

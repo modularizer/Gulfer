@@ -9,20 +9,18 @@ import PlayerChip from '@/components/common/PlayerChip';
 import NameUsernameDialog from '@/components/common/NameUsernameDialog';
 import NotesSection from '@/components/common/NotesSection';
 import { Scorecard } from '@/components/Scorecard';
-import { getRoundById, saveRound, generateRoundTitle } from '@/services/storage/roundStorage';
+import { getRoundById, saveRound, generateRoundName, getCourseNameFromId, getPlayersForRound } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
-import { getAllCourses } from '@/services/storage/courseStorage';
+import { saveUserRoundByUserAndRound, deleteUserRoundsByRoundId, getUserRoundsByRoundId } from '@/services/storage/userRoundStorage';
+import { getAllCourses, getCourseById } from '@/services/storage/courseStorage';
 import { exportRound } from '@/services/roundExport';
 import { router, useLocalSearchParams, usePathname, useFocusEffect } from 'expo-router';
 import { Platform } from 'react-native';
 import { useExport } from '@/hooks/useExport';
 import { useModalStateSimple } from '@/hooks/useModalState';
-
-// Conditional DateTimePicker import for native platforms
-let DateTimePicker: any;
-if (Platform.OS !== 'web') {
-  DateTimePicker = require('@react-native-community/datetimepicker').default;
-}
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
+import faviconImage from '../../../assets/favicon.png';
 
 
 // Round minutes to nearest 5-minute increment
@@ -41,6 +39,7 @@ export default function RoundOverviewScreen() {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [numberOfHoles, setNumberOfHoles] = useState('9');
   const [courses, setCourses] = useState<any[]>([]);
+  const [courseName, setCourseName] = useState<string | undefined>(undefined);
   const [errorDialog, setErrorDialog] = useState({ visible: false, title: '', message: '' });
   const [warningDialog, setWarningDialog] = useState({ visible: false, message: '' });
   const [addPlayerDialogVisible, setAddPlayerDialogVisible] = useState(false);
@@ -153,7 +152,11 @@ export default function RoundOverviewScreen() {
       }
 
       setRound(loadedRound);
-      setPlayers(loadedRound.players);
+      
+      // Load players from UserRound entities
+      const loadedPlayers = await getPlayersForRound(loadedRound.id);
+      setPlayers(loadedPlayers);
+      
       setNotes(loadedRound.notes || '');
       const loadedPhotos = loadedRound.photos || [];
       setPhotos(loadedPhotos);
@@ -166,7 +169,7 @@ export default function RoundOverviewScreen() {
       
       // Initialize previous values to prevent saving on load
       prevValuesRef.current = {
-        players: [...loadedRound.players],
+        players: [...loadedPlayers],
         notes: loadedRound.notes || '',
         photos: [...loadedPhotos],
         selectedCourseId: null, // Will be set below
@@ -176,20 +179,23 @@ export default function RoundOverviewScreen() {
       const loadedCourses = await getAllCourses();
       setCourses(loadedCourses);
       
-      if (loadedRound.courseName) {
-        const matchingCourse = loadedCourses.find(c => c.name.trim() === loadedRound.courseName!.trim());
+      if (loadedRound.courseId) {
+        const matchingCourse = loadedCourses.find(c => c.id === loadedRound.courseId);
         if (matchingCourse) {
           setSelectedCourseId(matchingCourse.id);
+          setCourseName(matchingCourse.name);
           const holeCount = Array.isArray(matchingCourse.holes) 
             ? matchingCourse.holes.length 
             : (matchingCourse.holes as unknown as number || 0);
           setNumberOfHoles(holeCount.toString());
         } else {
           setSelectedCourseId(null);
+          setCourseName(undefined);
           setNumberOfHoles('9');
         }
       } else {
         setSelectedCourseId(null);
+        setCourseName(undefined);
         setNumberOfHoles('9');
       }
     } catch (error) {
@@ -235,27 +241,17 @@ export default function RoundOverviewScreen() {
       return;
     }
 
-    let courseName: string | undefined = round.courseName;
-    let courseId: string | undefined = round.courseId;
-    if (selectedCourseId) {
-      const courses = await getAllCourses();
-      const selectedCourse = courses.find((c) => c.id === selectedCourseId);
-      courseName = selectedCourse ? selectedCourse.name.trim() : round.courseName;
-      courseId = selectedCourseId;
-    }
+    const courseId: string | undefined = selectedCourseId || round.courseId;
 
     // Use selectedDate for the round date, or keep existing date
     const roundDate = selectedDate.getTime();
-    const updatedTitle = generateRoundTitle(roundDate);
+    const updatedName = generateRoundName(roundDate);
 
     const updatedRound: Round = {
       ...round,
       date: roundDate,
-      title: updatedTitle,
-      players,
+      name: updatedName,
       notes: notes.trim() || undefined,
-      photos: photos.length > 0 ? photos : undefined,
-      courseName: courseName?.trim() || undefined,
       courseId: courseId,
     };
 
@@ -263,7 +259,7 @@ export default function RoundOverviewScreen() {
       players: updatedRound.players.length,
       notes: updatedRound.notes?.length || 0,
       photos: updatedRound.photos?.length || 0,
-      courseName: updatedRound.courseName,
+      courseId: updatedRound.courseId,
       date: new Date(updatedRound.date).toISOString()
     });
 
@@ -511,7 +507,7 @@ export default function RoundOverviewScreen() {
     
     try {
       const exportedText = await exportRound(round.id);
-      await exportToClipboard(exportedText, round.title || 'Round');
+      await exportToClipboard(exportedText, round.name || 'Round');
       setCopySuccess(true);
       setTimeout(() => {
         setCopySuccess(false);
@@ -652,7 +648,7 @@ export default function RoundOverviewScreen() {
             >
               <View style={styles.logoWrapper}>
                 <Image 
-                  source={require('../../../assets/favicon.png')}
+                  source={faviconImage}
                   style={styles.logoImage}
                   contentFit="contain"
                   cachePolicy="memory-disk"
@@ -709,18 +705,25 @@ export default function RoundOverviewScreen() {
             <View style={styles.courseSelectorContainer}>
               <CourseSelector
                 selectedCourseId={selectedCourseId}
-                onCourseChange={setSelectedCourseId}
+                onCourseChange={(courseId) => {
+                  setSelectedCourseId(courseId);
+                  if (courseId) {
+                    const course = courses.find(c => c.id === courseId);
+                    setCourseName(course?.name);
+                  } else {
+                    setCourseName(undefined);
+                  }
+                }}
                 onHolesChange={(holes) => setNumberOfHoles(holes.toString())}
-                initialCourseName={round.courseName}
+                initialCourseId={round.courseId}
               />
-              {round.courseName && (
+              {courseName && (
                 <IconButton
                   icon="arrow-right"
                   size={20}
                   iconColor={theme.colors.primary}
                   onPress={() => {
-                    const { encodeNameForUrl } = require('@/utils/urlEncoding');
-                    const encodedCourseName = encodeNameForUrl(round.courseName!);
+                    const encodedCourseName = encodeNameForUrl(courseName);
                     router.push(`/course/${encodedCourseName}/overview`);
                   }}
                   style={styles.courseLinkIcon}
@@ -874,19 +877,19 @@ export default function RoundOverviewScreen() {
                       holes={(() => {
                         // Always show first 5 holes in preview, regardless of scores
                         let holesArray: number[] = [];
-                        if (round.courseName) {
-                          const course = courses.find(c => c.name === round.courseName);
+                        if (round.courseId) {
+                          const course = courses.find(c => c.id === round.courseId);
                           if (course) {
                             const holeCount = Array.isArray(course.holes) ? course.holes.length : (course.holes as unknown as number || 0);
                             holesArray = Array.from({ length: Math.min(holeCount, 5) }, (_, i) => i + 1);
-                            console.log('[Overview] Preview holes from course:', holesArray, 'course:', round.courseName, 'holeCount:', holeCount);
+                            console.log('[Overview] Preview holes from course:', holesArray, 'course:', course.name, 'holeCount:', holeCount);
                           } else {
                             holesArray = [1, 2, 3, 4, 5];
                             console.log('[Overview] Preview holes default (course not found):', holesArray);
                           }
                         } else {
                           holesArray = [1, 2, 3, 4, 5];
-                          console.log('[Overview] Preview holes default (no course name):', holesArray);
+                          console.log('[Overview] Preview holes default (no course):', holesArray);
                         }
                         console.log('[Overview] Final preview holes array:', holesArray, 'length:', holesArray.length);
                         return holesArray;
@@ -898,8 +901,8 @@ export default function RoundOverviewScreen() {
                       onAddHole={() => {}}
                       onRemoveHole={() => {}}
                       readOnly={true}
-                      courseName={round.courseName || undefined}
-                      courseId={undefined}
+                      courseName={courseName}
+                      courseId={round.courseId}
                       columnVisibility={{ gStats: true }}
                       disableScrolling={true} // Disable scrolling in preview
                     />

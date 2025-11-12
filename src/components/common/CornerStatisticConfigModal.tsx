@@ -21,11 +21,23 @@ function getExpectedHoleCount(rounds: Round[]): number {
   return maxHoles;
 }
 
+/**
+ * Check if a score represents a completed hole
+ * Uses the complete field if available, otherwise falls back to throws >= 1 for backward compatibility
+ */
+function isScoreComplete(score: any): boolean {
+  if (score.complete !== undefined) {
+    return score.complete === true;
+  }
+  // Backward compatibility: if complete field is missing, infer from throws
+  return score.throws >= 1;
+}
+
 function isRoundComplete(round: Round, userId: string, expectedHoleCount: number): boolean {
   const userScores = round.scores?.filter(s => s.playerId === userId) || [];
   if (userScores.length === 0) return false;
   const completedHoles = new Set(
-    userScores.filter(s => s.throws >= 1).map(s => s.holeNumber)
+    userScores.filter(s => isScoreComplete(s)).map(s => s.holeNumber)
   );
   return completedHoles.size >= expectedHoleCount;
 }
@@ -2203,7 +2215,7 @@ export default function CornerStatisticConfigModal({
                       </Text>
                       {selectedRounds.map(round => (
                         <Text key={round.id} style={[styles.selectedInfoItem, { color: theme.colors.onSurfaceVariant }]}>
-                          {round.title}
+                          {round.name}
                         </Text>
                       ))}
                     </View>
@@ -2419,7 +2431,7 @@ export default function CornerStatisticConfigModal({
                         />
                         <View style={styles.roundPickerItemText}>
                           <Text style={[styles.roundPickerItemTitle, { color: theme.colors.onSurface }]}>
-                            {round.title}
+                            {round.name}
                           </Text>
                           <Text style={[styles.roundPickerItemSubtitle, { color: theme.colors.onSurfaceVariant }]}>
                             {playerScores.map(({ player, totalScore }) => 

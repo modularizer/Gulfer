@@ -2,7 +2,7 @@
  * Utility functions for loading and saving photos from storage by storage key
  */
 
-import { getItem, setItem } from '../services/storage/storageAdapter';
+import { getItem, setItem } from '../services/storage/drivers';
 
 const PHOTOS_STORAGE_PREFIX = '@gulfer_photos_';
 

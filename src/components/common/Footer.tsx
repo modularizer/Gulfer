@@ -1,10 +1,11 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { router, usePathname, useSegments, useFocusEffect } from 'expo-router';
 import { Linking, Platform } from 'react-native';
-import { getAllUsers } from '@/services/storage/userStorage';
+import { getAllUsers, getUserById } from '@/services/storage/userStorage';
 import { encodeNameForUrl } from '../../utils/urlEncoding';
 import { getRoundById } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
+import { getCurrentUserId } from '@/services/storage/currentUserStorage';
 import { Round } from '@/types';
 import { useScorecard } from '../../contexts/ScorecardContext';
 import HillFooter from './Footer/HillFooter';
@@ -166,11 +167,13 @@ export default function Footer({}: FooterProps) {
 
   const handleProfilePress = useCallback(async () => {
     try {
-      const users = await getAllUsers();
-      const currentUser = users.find(u => u.isCurrentUser);
-      if (currentUser) {
-        // Navigate to player page using encoded name
-        router.push(`/player/${encodeNameForUrl(currentUser.name)}/overview`);
+      const currentUserId = await getCurrentUserId();
+      if (currentUserId) {
+        const currentUser = await getUserById(currentUserId);
+        if (currentUser) {
+          // Navigate to player page using encoded name
+          router.push(`/player/${encodeNameForUrl(currentUser.name)}/overview`);
+        }
       } else {
         // No user set, navigate to /you page to set it
         router.push('/player/me');

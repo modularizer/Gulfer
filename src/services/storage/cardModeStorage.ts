@@ -1,5 +1,5 @@
 import { CardMode } from '@/components/common/CardModeToggle';
-import { getItem, setItem } from './storageAdapter';
+import { getItem, setItem } from './drivers';
 
 const STORAGE_PREFIX = '@gulfer_card_mode_';
 const cache = new Map<string, CardMode>();
