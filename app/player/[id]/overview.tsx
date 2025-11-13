@@ -4,7 +4,6 @@ import { useTheme, Text, Card, Chip, Button, Dialog, Portal } from 'react-native
 import { router, useLocalSearchParams } from 'expo-router';
 import { getUserByName, User, saveUser } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
-import { Round } from '@/types';
 import { getAllCourses, Course } from '@/services/storage/courseStorage';
 import { getShadowStyle, getAppVersion } from '@/utils';
 import { exportPlayer } from '@/services/playerExport';

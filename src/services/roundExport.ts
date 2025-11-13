@@ -2,11 +2,11 @@
  * Service for exporting and importing rounds
  */
 
-import { EntityType } from '@/types';
 import { getAllCourses, saveCourse, getCourseByName, getCourseById, generateCourseId, getAllHolesForCourse, saveHolesForCourse, type Course, type CourseInsert, type HoleInsert } from './storage/courseStorage';
 import { getAllUsers, saveUser, getUserIdForPlayerName, type UserInsert } from './storage/userStorage';
 import { saveRound, generateRoundId, getRoundById, getAllPlayerRoundsForRound, getAllScoresForRound, savePlayerRoundsForRound, saveScoresForRound,  type RoundInsert, type PlayerRoundInsert, type ScoreInsert } from './storage/roundStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
+import { EntityType } from './storage/db';
 import { getStorageId } from './storage/platform/platformStorage';
 import { normalizeExportText } from '@/utils';
 import { generateUUID } from '@/utils/uuid';

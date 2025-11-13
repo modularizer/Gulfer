@@ -3,7 +3,7 @@
  * Uses Drizzle ORM directly
  */
 
-import { schema, getDatabase } from './storage/db';
+import { schema, getDatabase, EntityType } from './storage/db';
 import { eq } from 'drizzle-orm';
 import { getImageByHash } from './storage/photoStorage';
 import { getStorageId } from './storage/platform/platformStorage';
@@ -11,7 +11,6 @@ import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { generateUUID } from '@/utils/uuid';
-import { roundSchema, userSchema, courseSchema, EntityType } from '@/types';
 
 
 
@@ -220,21 +219,19 @@ export async function importAllData(
           }
         }
 
-        const validated = courseSchema.parse(course);
-
         await db.insert(schema.courses).values({
-          id: validated.id,
-          name: validated.name,
-          notes: validated.notes || null,
-          latitude: validated.latitude ?? null,
-          longitude: validated.longitude ?? null,
+          id: course.id,
+          name: course.name,
+          notes: course.notes || null,
+          latitude: course.latitude ?? null,
+          longitude: course.longitude ?? null,
         }).onConflictDoUpdate({
           target: schema.courses.id,
           set: {
-            name: validated.name,
-            notes: validated.notes || null,
-            latitude: validated.latitude ?? null,
-            longitude: validated.longitude ?? null,
+            name: course.name,
+            notes: course.notes || null,
+            latitude: course.latitude ?? null,
+            longitude: course.longitude ?? null,
           },
         });
 
@@ -276,22 +273,20 @@ export async function importAllData(
           }
         }
 
-        const validated = userSchema.parse(player);
-
         await db.insert(schema.players).values({
-          id: validated.id,
-          name: validated.name,
-          notes: validated.notes || null,
-          latitude: validated.latitude ?? null,
-          longitude: validated.longitude ?? null,
+          id: player.id,
+          name: player.name,
+          notes: player.notes || null,
+          latitude: player.latitude ?? null,
+          longitude: player.longitude ?? null,
           isTeam: false,
         }).onConflictDoUpdate({
           target: schema.players.id,
           set: {
-            name: validated.name,
-            notes: validated.notes || null,
-            latitude: validated.latitude ?? null,
-            longitude: validated.longitude ?? null,
+            name: player.name,
+            notes: player.notes || null,
+            latitude: player.latitude ?? null,
+            longitude: player.longitude ?? null,
           },
         });
 
@@ -309,25 +304,24 @@ export async function importAllData(
     // Import rounds
     for (const round of exportData.rounds || []) {
       try {
-        const validated = roundSchema.parse(round);
 
         await db.insert(schema.rounds).values({
-          id: validated.id,
-          name: validated.name,
-          notes: validated.notes || null,
-          latitude: validated.latitude ?? null,
-          longitude: validated.longitude ?? null,
-          courseId: validated.courseId || null,
-          date: validated.date,
+          id: round.id,
+          name: round.name,
+          notes: round.notes || null,
+          latitude: round.latitude ?? null,
+          longitude: round.longitude ?? null,
+          courseId: round.courseId || null,
+          date: round.date,
         }).onConflictDoUpdate({
           target: schema.rounds.id,
           set: {
-            name: validated.name,
-            notes: validated.notes || null,
-            latitude: validated.latitude ?? null,
-            longitude: validated.longitude ?? null,
-            courseId: validated.courseId || null,
-            date: validated.date,
+            name: round.name,
+            notes: round.notes || null,
+            latitude: round.latitude ?? null,
+            longitude: round.longitude ?? null,
+            courseId: round.courseId || null,
+            date: round.date,
           },
         });
 

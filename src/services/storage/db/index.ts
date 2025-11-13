@@ -16,7 +16,17 @@ export type {
   NavigationState,
   ModalStates,
   SettingsOther,
+  Player,
+  PlayerRound,
+  Round,
+  Score,
+  Course,
+  Hole,
+  PlayerRoundJoinResult,
+  PlayerRoundWithDetails,
 } from './types';
+
+export { EntityType } from './types';
 
 /**
  * Initialize database (call once at app startup)

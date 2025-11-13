@@ -7,8 +7,8 @@ import { parseExportText } from './roundExport';
 import { getAllCourses } from './storage/courseStorage';
 import { getAllUsers } from './storage/userStorage';
 import { getLocalUuidForForeign } from './storage/uuidMerge';
+import { EntityType } from './storage/db';
 import { findMostSimilar } from '@/utils/stringSimilarity';
-import { EntityType } from '@/types';
 
 interface EntityMapping {
   foreignId: string;

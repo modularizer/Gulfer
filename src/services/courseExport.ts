@@ -4,10 +4,10 @@
  * Includes both UUIDs and human-readable names for merging support
  */
 
-import { EntityType } from '@/types';
 import { getStorageId } from './storage/platform/platformStorage';
 import { saveCourse, getCourseByName, generateCourseId, getCourseById, saveHolesForCourse, getAllHolesForCourse, type CourseInsert, type HoleInsert } from './storage/courseStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
+import { EntityType } from './storage/db';
 import { normalizeExportText } from '@/utils';
 import { generateUUID } from '@/utils/uuid';
 

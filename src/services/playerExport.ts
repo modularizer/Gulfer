@@ -5,10 +5,10 @@
  */
 
 import { UserInsert } from './storage/userStorage';
-import { EntityType } from '@/types';
 import { getStorageId } from './storage/platform/platformStorage';
 import { saveUser, getUserByName, generateUserId, getUserById } from './storage/userStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
+import { EntityType } from './storage/db';
 import { setCurrentUserId, getCurrentUserId } from './storage/platform/currentUserStorage';
 import { normalizeExportText } from '@/utils';
 

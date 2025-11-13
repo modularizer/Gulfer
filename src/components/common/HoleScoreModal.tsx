@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { Text, TextInput, Dialog, Portal, IconButton, Button, useTheme } from 'react-native-paper';
-import { Player } from '@/types';
+import { Text, TextInput, Dialog, Portal, IconButton, useTheme } from 'react-native-paper';
 import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 const SUCCESS_MESSAGE_DURATION_MS = 1500;

@@ -1,61 +1,48 @@
 /**
- * Helper functions for querying playerRounds (playerRounds) from the database
+ * Helper functions for querying playerRounds from the database
  * These queries are optimized for corner statistics and other analytics
+ * Uses Drizzle ORM directly - returns database types without transformation
  */
 
-import { schema, getDatabase } from './db';
+import { schema, getDatabase, type PlayerRoundWithDetails, type Score } from './db';
 import { eq, and, sql, gte, lte, inArray } from 'drizzle-orm';
-
-export type PlayerRound = typeof schema.playerRounds.$inferSelect;
-export type Round = typeof schema.rounds.$inferSelect;
-export type Score = typeof schema.playerRoundHoleScores.$inferSelect;
-export type Player = typeof schema.players.$inferSelect;
 
 /**
  * Get all playerRounds for a specific course
  * Returns playerRounds with their scores and round information
  */
-export async function getPlayerRoundsForCourse(courseId: string): Promise<Array<{
-  playerRound: PlayerRound;
-  round: Round;
-  player: { id: string; name: string };
-  scores: Score[];
-}>> {
+export async function getPlayerRoundsForCourse(courseId: string): Promise<PlayerRoundWithDetails[]> {
   const db = await getDatabase();
   
   // Query playerRounds with joins
+  // Note: Drizzle returns joined results with table names as keys
   const results = await db
-    .select({
-      playerRound: schema.playerRounds,
-      round: schema.rounds,
-      player: {
-        id: schema.players.id,
-        name: schema.players.name,
-      },
-    })
+    .select()
     .from(schema.playerRounds)
     .innerJoin(schema.rounds, eq(schema.playerRounds.roundId, schema.rounds.id))
     .innerJoin(schema.players, eq(schema.playerRounds.playerId, schema.players.id))
     .where(eq(schema.rounds.courseId, courseId));
   
-  // Get scores for each playerRound
-  const roundIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.playerRound.roundId)));
-  const playerIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.playerRound.playerId)));
+  if (results.length === 0) {
+    return [];
+  }
   
-  const allScores = roundIds.length > 0 && playerIds.length > 0
-    ? await db
-        .select()
-        .from(schema.playerRoundHoleScores)
-        .where(
-          and(
-            inArray(schema.playerRoundHoleScores.roundId, roundIds),
-            inArray(schema.playerRoundHoleScores.playerId, playerIds)
-          )
-        )
-    : [];
+  // Get scores for each playerRound
+  const roundIds = Array.from(new Set(results.map(r => r.player_rounds.roundId)));
+  const playerIds = Array.from(new Set(results.map(r => r.player_rounds.playerId)));
+  
+  const allScores = await db
+    .select()
+    .from(schema.playerRoundHoleScores)
+    .where(
+      and(
+        inArray(schema.playerRoundHoleScores.roundId, roundIds),
+        inArray(schema.playerRoundHoleScores.playerId, playerIds)
+      )
+    );
   
   // Group scores by playerId and roundId
-  const scoresByPlayerRound = new Map<string, typeof allScores>();
+  const scoresByPlayerRound = new Map<string, Score[]>();
   for (const score of allScores) {
     const key = `${score.playerId}:${score.roundId}`;
     if (!scoresByPlayerRound.has(key)) {
@@ -65,14 +52,18 @@ export async function getPlayerRoundsForCourse(courseId: string): Promise<Array<
   }
   
   // Combine results - use DB types directly
-  return results.map((r: typeof results[0]) => {
-    const key = `${r.playerRound.playerId}:${r.playerRound.roundId}`;
+  // Drizzle returns joined results with table names as keys
+  return results.map(r => {
+    const key = `${r.player_rounds.playerId}:${r.player_rounds.roundId}`;
     const scores = scoresByPlayerRound.get(key) || [];
     
     return {
-      playerRound: r.playerRound,
-      round: r.round,
-      player: r.player,
+      playerRound: r.player_rounds,
+      round: r.rounds,
+      player: {
+        id: r.players.id,
+        name: r.players.name,
+      },
       scores,
     };
   });
@@ -85,23 +76,13 @@ export async function getPlayerRoundsForCourse(courseId: string): Promise<Array<
 export async function getCompletedPlayerRoundsForCourse(
   courseId: string,
   expectedHoleCount?: number
-): Promise<Array<{
-  playerRound: PlayerRound;
-  round: Round;
-  player: { id: string; name: string };
-  scores: Score[];
-}>> {
+): Promise<PlayerRoundWithDetails[]> {
   const allPlayerRounds = await getPlayerRoundsForCourse(courseId);
   
   // If expectedHoleCount not provided, calculate from holes
   let holeCount: number;
   if (expectedHoleCount === undefined) {
-    const db = await getDatabase();
-    const holes = await db
-      .select()
-      .from(schema.holes)
-      .where(eq(schema.holes.courseId, courseId));
-    holeCount = holes.length;
+    holeCount = await getExpectedHoleCount(courseId);
   } else {
     holeCount = expectedHoleCount;
   }
@@ -122,15 +103,10 @@ export async function getPlayerRoundsForCourseInDateRange(
   sinceDate?: number,
   untilDate?: number,
   beforeDate?: number // Exclude rounds on or after this date
-): Promise<Array<{
-  playerRound: PlayerRound;
-  round: Round;
-  player: { id: string; name: string };
-  scores: Score[];
-}>> {
+): Promise<PlayerRoundWithDetails[]> {
   const db = await getDatabase();
   
-  let roundConditions = [eq(schema.rounds.courseId, courseId)];
+  const roundConditions = [eq(schema.rounds.courseId, courseId)];
   
   if (sinceDate !== undefined) {
     roundConditions.push(gte(schema.rounds.date, sinceDate));
@@ -144,38 +120,35 @@ export async function getPlayerRoundsForCourseInDateRange(
     roundConditions.push(sql`${schema.rounds.date} < ${beforeDate}`);
   }
   
+  // Query playerRounds with joins
+  // Note: Drizzle returns joined results with table names as keys
   const results = await db
-    .select({
-      playerRound: schema.playerRounds,
-      round: schema.rounds,
-      player: {
-        id: schema.players.id,
-        name: schema.players.name,
-      },
-    })
+    .select()
     .from(schema.playerRounds)
     .innerJoin(schema.rounds, eq(schema.playerRounds.roundId, schema.rounds.id))
     .innerJoin(schema.players, eq(schema.playerRounds.playerId, schema.players.id))
     .where(and(...roundConditions));
   
+  if (results.length === 0) {
+    return [];
+  }
+  
   // Get scores
-  const roundIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.playerRound.roundId)));
-  const playerIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.playerRound.playerId)));
+  const roundIds = Array.from(new Set(results.map(r => r.player_rounds.roundId)));
+  const playerIds = Array.from(new Set(results.map(r => r.player_rounds.playerId)));
   
-  const allScores = roundIds.length > 0 && playerIds.length > 0
-    ? await db
-        .select()
-        .from(schema.playerRoundHoleScores)
-        .where(
-          and(
-            inArray(schema.playerRoundHoleScores.roundId, roundIds),
-            inArray(schema.playerRoundHoleScores.playerId, playerIds)
-          )
-        )
-    : [];
+  const allScores = await db
+    .select()
+    .from(schema.playerRoundHoleScores)
+    .where(
+      and(
+        inArray(schema.playerRoundHoleScores.roundId, roundIds),
+        inArray(schema.playerRoundHoleScores.playerId, playerIds)
+      )
+    );
   
-  // Group scores
-  const scoresByPlayerRound = new Map<string, typeof allScores>();
+  // Group scores by playerId and roundId
+  const scoresByPlayerRound = new Map<string, Score[]>();
   for (const score of allScores) {
     const key = `${score.playerId}:${score.roundId}`;
     if (!scoresByPlayerRound.has(key)) {
@@ -184,15 +157,19 @@ export async function getPlayerRoundsForCourseInDateRange(
     scoresByPlayerRound.get(key)!.push(score);
   }
   
-  // Use DB types directly
-  return results.map((r: typeof results[0]) => {
-    const key = `${r.playerRound.playerId}:${r.playerRound.roundId}`;
+  // Combine results - use DB types directly
+  // Drizzle returns joined results with table names as keys
+  return results.map(r => {
+    const key = `${r.player_rounds.playerId}:${r.player_rounds.roundId}`;
     const scores = scoresByPlayerRound.get(key) || [];
     
     return {
-      playerRound: r.playerRound,
-      round: r.round,
-      player: r.player,
+      playerRound: r.player_rounds,
+      round: r.rounds,
+      player: {
+        id: r.players.id,
+        name: r.players.name,
+      },
       scores,
     };
   });

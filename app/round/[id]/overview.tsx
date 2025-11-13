@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { Button, Dialog, Portal, IconButton, useTheme, Text, Menu } from 'react-native-paper';
-import { Player, Round } from '@/types';
 import PhotoGallery, { PhotoGalleryHandle } from '@/components/common/PhotoGallery';
 import CourseSelector from '@/components/common/CourseSelector';
 import PlayerChip from '@/components/common/PlayerChip';

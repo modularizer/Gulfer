@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, Button, IconButton, useTheme } from 'react-native-paper';
-import { getAllCourses, saveCourse, getCourseByName } from '@/services/storage/courseStorage';
+import { getCourseByName, getAllHolesForCourse, saveHolesForCourse } from '@/services/storage/courseStorage';
 import HoleScoreModal from '@/components/common/HoleScoreModal';
 import NumberModal from '@/components/common/NumberModal';
 import { CornerStatisticsConfig, computeCellCornerValues } from '@/services/cornerStatistics';
@@ -10,7 +10,7 @@ import { computeAllHoleStatistics, computeTotalRoundStatistics, HoleStatistics }
 import GStatsCell from '@/components/common/GStatsCell';
 import { scorecardTableStyles } from '@/styles/scorecardTableStyles';
 import { useScorecard } from '@/contexts/ScorecardContext';
-import {Player} from "@services/storage/playerRoundQueries";
+import type { Player, Hole, Course } from "@/services/storage/db";
 
 // Minimal score type for Scorecard - matches what we actually have
 export type ScorecardScore = {
@@ -159,19 +159,11 @@ export default function Scorecard({
     const loadCourseData = async () => {
       if (courseName) {
         try {
-          const courses = await getAllCourses();
-          const course = courses.find(c => c.name === courseName);
+          const course = await getCourseByName(courseName);
           if (course) {
-            // Handle both old format (holes: number) and new format (holes: Hole[])
-            if (Array.isArray(course.holes)) {
-              setCourseHoles(course.holes);
-            } else {
-              // Old format - create empty holes array
-              const holeNumbers = Array.from({ length: course.holes as unknown as number || 0 }, (_, i) => ({
-                number: i + 1,
-              }));
-              setCourseHoles(holeNumbers);
-            }
+            // Load holes separately
+            const holes = await getAllHolesForCourse(course.id);
+            setCourseHoles(holes);
           }
         } catch (error) {
           console.error('Error loading course data:', error);
@@ -375,7 +367,7 @@ export default function Scorecard({
 
   const getHoleDistance = (holeNumber: number): number | undefined => {
     const hole = courseHoles.find(h => h.number === holeNumber);
-    return hole?.distance;
+    return hole?.distance ?? undefined;
   };
 
   const formatDistance = (holeNumber: number): string => {
@@ -409,12 +401,13 @@ export default function Scorecard({
       const course = await getCourseByName(courseName);
       if (!course) return;
 
-      const updatedHoles = course.holes.map((h) => {
+      const holes = await getAllHolesForCourse(course.id);
+      const updatedHoles = holes.map((h) => {
         if (h.number === holeEditModal.holeNumber) {
           if (holeEditModal.field === 'distance') {
             // If value is null, clear the distance
             if (value === null) {
-              return { ...h, distance: undefined };
+              return { ...h, distance: null };
             }
             // Convert from current unit to meters for storage
             const distanceInMeters = value / (unitsPerMeter[distanceUnit] || 1);
@@ -422,7 +415,7 @@ export default function Scorecard({
           } else {
             // If value is null, clear the par
             if (value === null) {
-              return { ...h, par: undefined };
+              return { ...h, par: null };
             }
             return { ...h, par: value };
           }
@@ -430,12 +423,8 @@ export default function Scorecard({
         return h;
       });
 
-      const updatedCourse: Course = {
-        ...course,
-        holes: updatedHoles,
-      };
-
-      await saveCourse(updatedCourse);
+      // Save holes separately (courses don't have holes property)
+      await saveHolesForCourse(course.id, updatedHoles);
       setCourseHoles(updatedHoles);
       closeHoleEditModal();
     } catch (error) {
@@ -1276,7 +1265,7 @@ export default function Scorecard({
           })()}
           onScoreChange={handleScoreChange}
           onDismiss={closeEditModal}
-          initialActivePlayerId={editModal.initialPlayerId}
+          initialActivePlayerId={editModal.initialPlayerId ? String(editModal.initialPlayerId) : undefined}
           allHoles={holes}
           onNextHole={handleNextHole}
           min={0}
@@ -1301,7 +1290,7 @@ export default function Scorecard({
               } else {
                 // Convert distance from meters to current unit
                 const distance = hole.distance;
-                if (distance === undefined) return 0;
+                if (distance === null || distance === undefined) return 0;
                 return Math.round(distance * (unitsPerMeter[distanceUnit] || 1));
               }
             })()

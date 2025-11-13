@@ -6,7 +6,6 @@ import { CornerConfig, UserFilter, AccumulationMode, RoundSelection, SinceDateOp
 import { getAllUsers, User } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
-import { Round, Player } from '@/types';
 import { selectRoundsByCriteria, filterRoundsByUser } from '@/services/cornerStatistics';
 import { useDialogStyle } from '@/hooks/useDialogStyle';
 

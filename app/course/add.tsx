@@ -2,7 +2,6 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import { Button, Dialog, Portal, TextInput, useTheme, Text } from 'react-native-paper';
 import { router } from 'expo-router';
-import { Course } from '@/types';
 import { saveCourse, generateCourseId, getCourseById } from '@/services/storage/courseStorage';
 import { importCourse } from '@/services/courseExport';
 import { ErrorDialog, ImportDialog } from '@/components/common';

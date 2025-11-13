@@ -173,14 +173,17 @@ export async function getImageByHash(hash: string): Promise<string | null> {
   if (results.length === 0 || !results[0].data) return null;
   
   const photo = results[0];
+  const photoData = photo.data;
+  
+  if (!photoData) return null;
   
   if (Platform.OS === 'web') {
-    return `data:image/jpeg;base64,${photo.data}`;
+    return `data:image/jpeg;base64,${photoData}`;
   } else {
     // On mobile, check if file still exists
-    const fileInfo = await FileSystem.getInfoAsync(photo.data);
+    const fileInfo = await FileSystem.getInfoAsync(photoData);
     if (fileInfo.exists) {
-      return photo.data;
+      return photoData;
     }
     // File missing, clear data from database
     await db.update(schema.photos)

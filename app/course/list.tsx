@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, Portal, TextInput, Button } from 'react-native-paper';
-import { Course, Player } from '@/types';
 import { getAllCourses, saveCourse, generateCourseId, deleteCourse } from '@/services/storage/courseStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { router, useFocusEffect } from 'expo-router';

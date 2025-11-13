@@ -3,7 +3,7 @@
  * Refactored to use playerRounds (playerRounds) directly from database
  */
 
-import type { PlayerRound, Score, Round } from './storage/playerRoundQueries';
+import type { PlayerRoundWithDetails, Score, Round } from './storage/db';
 import {
   getPlayerRoundsForCourseInDateRange,
   getExpectedHoleCount
@@ -11,14 +11,9 @@ import {
 
 /**
  * PlayerRound data with related round, player, and scores
- * This is the standard structure returned by playerRoundQueries functions
+ * Alias for PlayerRoundWithDetails from db types
  */
-export type PlayerRoundData = {
-  playerRound: PlayerRound;
-  round: Round;
-  player: { id: string; name: string };
-  scores: Score[];
-};
+export type PlayerRoundData = PlayerRoundWithDetails;
 
 export type UserFilter = 
   | 'everyone'  // Include all rounds from everyone

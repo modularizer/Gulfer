@@ -1,8 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Button, Dialog, Portal, TextInput, useTheme, Text } from 'react-native-paper';
+import { Button, TextInput, useTheme, Text } from 'react-native-paper';
 import { router } from 'expo-router';
-import { Course } from '@/types';
 import { saveCourse, generateCourseId } from '@/services/storage/courseStorage';
 import { ErrorDialog } from '@/components/common';
 import { encodeNameForUrl } from '@/utils/urlEncoding';

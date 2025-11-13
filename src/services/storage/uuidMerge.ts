@@ -4,10 +4,9 @@
  * Uses Drizzle ORM with mergeEntries table
  */
 
-import { schema, getDatabase } from './db';
+import { schema, getDatabase, EntityType } from './db';
 import { getStorageId } from './platform/platformStorage';
 import { eq, and } from 'drizzle-orm';
-import { EntityType } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
 /**

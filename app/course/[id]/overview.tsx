@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { useTheme, Text } from 'react-native-paper';
-import { Course, Round, Player } from '@/types';
 import { getCourseById, getCourseByName, saveCourse } from '@/services/storage/courseStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
 import { exportCourse } from '@/services/courseExport';

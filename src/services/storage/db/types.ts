@@ -5,7 +5,6 @@
  */
 
 import type { CardMode } from '@/components/common/CardModeToggle';
-import type { ColumnVisibilityConfig } from '@/types/schema';
 import type { CornerStatisticsConfig } from '@/services/cornerStatistics';
 import type { NavigationState, ModalState } from '@/services/navigationState';
 
@@ -17,9 +16,9 @@ export type CardModes = Record<string, CardMode>;
 
 /**
  * Column visibility configuration
- * Re-exported from types/schema for consistency
+ * Re-exported from cornerConfigStorage for consistency
  */
-export type { ColumnVisibilityConfig };
+export type { ColumnVisibilityConfig } from '../cornerConfigStorage';
 
 /**
  * Corner statistics configuration
@@ -44,4 +43,56 @@ export type ModalStates = Record<string, ModalState>;
  * Generic key-value store for miscellaneous settings
  */
 export type SettingsOther = Record<string, any>;
+
+/**
+ * Entity type enum
+ * Maps to actual table names in the database schema
+ */
+export enum EntityType {
+  Players = 'players',
+  TeamMembers = 'team_members',
+  Courses = 'courses',
+  Holes = 'holes',
+  Rounds = 'rounds',
+  PlayerRounds = 'player_rounds',
+  PlayerRoundHoleScores = 'player_round_hole_scores',
+  Photos = 'photos',
+  Settings = 'settings',
+  MergeEntries = 'merge_entries',
+}
+
+/**
+ * Database table types
+ * Inferred from Drizzle schema - these should be the only place $inferSelect is used
+ */
+import type * as schema from './schema';
+
+export type Player = typeof schema.players.$inferSelect;
+export type PlayerRound = typeof schema.playerRounds.$inferSelect;
+export type Round = typeof schema.rounds.$inferSelect;
+export type Score = typeof schema.playerRoundHoleScores.$inferSelect;
+export type Course = typeof schema.courses.$inferSelect;
+export type Hole = typeof schema.holes.$inferSelect;
+
+/**
+ * Join result type for playerRounds with rounds and players
+ * This represents the structure returned by Drizzle when joining playerRounds, rounds, and players
+ */
+export type PlayerRoundJoinResult = {
+  player_rounds: PlayerRound;
+  rounds: Round;
+  players: Player;
+};
+
+/**
+ * PlayerRound with details
+ * Result type for playerRound queries that includes related data
+ * Contains playerRound, round, player info, and associated scores
+ */
+export type PlayerRoundWithDetails = {
+  playerRound: PlayerRound;
+  round: Round;
+  player: { id: string; name: string };
+  scores: Score[];
+};
 
