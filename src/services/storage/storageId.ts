@@ -1,10 +1,11 @@
 /**
  * Storage ID Management
  * Each storage instance has a permanent 16-hex ID that never changes
- * This allows tracking which storage instance data came from during imports
+ * Uses platform storage (AsyncStorage/localStorage) instead of database
+ * This ensures the storage ID persists across database resets
  */
 
-import { defaultStorageDriver } from './drivers';
+import { getPlatformStorage, setPlatformStorage } from './platform/platformStorage';
 import { generateUUID } from '../../utils/uuid';
 
 const STORAGE_ID_KEY = '@gulfer_storage_id';
@@ -14,35 +15,17 @@ const STORAGE_ID_KEY = '@gulfer_storage_id';
  * This ID is permanent and never changes for this storage instance
  */
 export async function getStorageId(): Promise<string> {
-  try {
-    let storageId = await defaultStorageDriver.getItem(STORAGE_ID_KEY);
-    
-    if (!storageId) {
-      // Generate new storage ID (16 hex characters)
-      storageId = await generateUUID();
-      await defaultStorageDriver.setItem(STORAGE_ID_KEY, storageId);
-    }
-    
-    return storageId;
-  } catch (error) {
-    console.error('Error getting storage ID:', error);
-    // Fallback: generate a new one (shouldn't happen in normal operation)
-    return await generateUUID();
-  }
-}
-
-/**
- * Get storage ID synchronously (for use in exports)
- * Returns cached value or generates new one
- */
-let cachedStorageId: string | null = null;
-
-export async function getStorageIdSync(): Promise<string> {
-  if (cachedStorageId) {
-    return cachedStorageId;
+  const existing = await getPlatformStorage(STORAGE_ID_KEY);
+  
+  if (existing) {
+    return existing;
   }
   
-  cachedStorageId = await getStorageId();
-  return cachedStorageId;
+  // Generate new storage ID
+  const storageId = await generateUUID();
+  
+  // Store in platform storage
+  await setPlatformStorage(STORAGE_ID_KEY, storageId);
+  
+  return storageId;
 }
-

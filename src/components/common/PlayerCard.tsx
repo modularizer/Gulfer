@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Platform } from 'react-native';
 import { Card, Text, Chip, useTheme } from 'react-native-paper';
 import { User } from '@/services/storage/userStorage';
-import { getCurrentUserId } from '@/services/storage/currentUserStorage';
+import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage';
 import { getShadowStyle } from '../../utils';
 import HashedImage from './HashedImage';
 import { router } from 'expo-router';

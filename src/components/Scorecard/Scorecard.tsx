@@ -6,7 +6,9 @@ import { getAllCourses, saveCourse, getCourseByName } from '@/services/storage/c
 import HoleScoreModal from '@/components/common/HoleScoreModal';
 import NumberModal from '@/components/common/NumberModal';
 import { CornerStatisticsConfig, computeCellCornerValues, computeTotalCornerValues } from '@/services/cornerStatistics';
-import { getCurrentUserName } from '@/services/storage/userStorage';
+import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage';
+import { schema, getDatabase } from '@/services/storage/db';
+import { eq } from 'drizzle-orm';
 import { computeAllHoleStatistics, computeTotalRoundStatistics, HoleStatistics } from '@/services/holeStatistics';
 import GStatsCell from '@/components/common/GStatsCell';
 import { scorecardTableStyles } from '@/styles/scorecardTableStyles';
@@ -127,26 +129,19 @@ export default function Scorecard({
       if (currentUserId) {
         setResolvedCurrentUserId(currentUserId);
       } else {
-        // Try to get current user from storage
-        try {
-          const userName = await getCurrentUserName();
-          if (userName && players.length > 0) {
-            // Find player with matching name
-            const userPlayer = players.find(p => p.name === userName);
-            if (userPlayer) {
-              setResolvedCurrentUserId(userPlayer.id);
-            } else {
-              // Default to first player if no match
-              setResolvedCurrentUserId(players[0]?.id);
-            }
-          } else if (players.length > 0) {
+        // Try to get current user ID from storage
+        const storedCurrentUserId = await getCurrentUserId();
+        if (storedCurrentUserId && players.length > 0) {
+          // Find player with matching ID
+          const userPlayer = players.find(p => p.id === storedCurrentUserId);
+          if (userPlayer) {
+            setResolvedCurrentUserId(userPlayer.id);
+          } else {
+            // Default to first player if no match
             setResolvedCurrentUserId(players[0]?.id);
           }
-        } catch (error) {
-          console.error('Error resolving current user ID:', error);
-          if (players.length > 0) {
-            setResolvedCurrentUserId(players[0]?.id);
-          }
+        } else if (players.length > 0) {
+          setResolvedCurrentUserId(players[0]?.id);
         }
       }
     };

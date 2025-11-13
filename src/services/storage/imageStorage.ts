@@ -1,170 +1,190 @@
 /**
  * Image storage service with deduplication
- * Stores images in permanent file system location, using hash for deduplication
- * On mobile: Uses file:// URIs to permanent directory
- * On web: Uses blob URLs (stored in IndexedDB for persistence)
+ * Uses Drizzle ORM to store image data
+ * On mobile: Stores file path in database, actual file in file system
+ * On web: Stores base64 data in database
  */
 
-import { defaultStorageDriver } from './drivers';
+import { schema, getDatabase } from './db';
 import * as FileSystem from 'expo-file-system';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
+import { eq } from 'drizzle-orm';
+import { generateUUID } from '@/utils/uuid';
 
-const IMAGE_STORAGE_PREFIX = '@gulfer_image_';
 const IMAGE_DIR = `${FileSystem.documentDirectory}images/`;
 
 // Ensure images directory exists
 async function ensureImageDir(): Promise<void> {
-  const dirInfo = await FileSystem.getInfoAsync(IMAGE_DIR);
-  if (!dirInfo.exists) {
-    await FileSystem.makeDirectoryAsync(IMAGE_DIR, { intermediates: true });
+  if (Platform.OS !== 'web') {
+    const dirInfo = await FileSystem.getInfoAsync(IMAGE_DIR);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(IMAGE_DIR, { intermediates: true });
+    }
   }
 }
 
 /**
  * Hash an image file and return the hash
- * Platform-aware: uses FileSystem on mobile, fetch/File API on web
  */
 async function hashImage(uri: string): Promise<string> {
-  try {
-    let base64: string;
+  let base64: string;
+  
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    const blob = await response.blob();
     
-    if (Platform.OS === 'web') {
-      // On web, fetch the blob and convert to base64
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
-      // Convert blob to base64
-      base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          // Remove data URL prefix if present
-          const base64Data = result.includes(',') ? result.split(',')[1] : result;
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      
-      // Remove data URL prefix (data:image/jpeg;base64,)
-      if (base64.startsWith('data:')) {
-        base64 = base64.split(',')[1];
-      }
-    } else {
-      // On mobile, use FileSystem
-      base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+    base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64Data = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    
+    if (base64.startsWith('data:')) {
+      base64 = base64.split(',')[1];
     }
-    
-    // Hash the base64 string
-    const hash = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      base64
-    );
-    
-    return hash;
-  } catch (error) {
-    console.error('Error hashing image:', error);
-    throw error;
+  } else {
+    base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
   }
+  
+  const hash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    base64
+  );
+  
+  return hash;
 }
 
 /**
  * Store an image by its hash
  * Returns the hash and file URI if successful, or null if there was an error
- * On mobile: Copies to permanent directory, returns file:// URI
- * On web: Stores in IndexedDB, returns blob URL
  */
 export async function storeImage(uri: string): Promise<{ hash: string; fileUri: string } | null> {
-  try {
-    // Hash the image
-    const hash = await hashImage(uri);
-    
+  const hash = await hashImage(uri);
+  const db = await getDatabase();
+  
+  // Check if already stored in photos table
+  const existing = await db.select()
+    .from(schema.photos)
+    .where(eq(schema.photos.hash, hash))
+    .limit(1);
+  
+  if (existing.length > 0 && existing[0].data) {
+    // Already stored
     if (Platform.OS === 'web') {
-      // On web, check if already stored in IndexedDB
-      const existing = await defaultStorageDriver.getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
-      if (existing) {
-        // Return existing data URI
-        const dataUri = `data:image/jpeg;base64,${existing}`;
-        return { hash, fileUri: dataUri };
-      }
-      
-      // Fetch the blob and convert to base64 for storage
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
-      // Convert blob to base64
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const result = reader.result as string;
-          // Remove data URL prefix if present
-          const base64Data = result.includes(',') ? result.split(',')[1] : result;
-          resolve(base64Data);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      
-      // Remove data URL prefix if present
-      const cleanBase64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
-      
-      // Store in IndexedDB
-      await defaultStorageDriver.setItem(`${IMAGE_STORAGE_PREFIX}${hash}`, cleanBase64);
-      const dataUri = `data:image/jpeg;base64,${cleanBase64}`;
+      const dataUri = `data:image/jpeg;base64,${existing[0].data}`;
       return { hash, fileUri: dataUri };
     } else {
-      // On mobile, use permanent file system
-      await ensureImageDir();
-      const fileUri = `${IMAGE_DIR}${hash}.jpg`;
-      
-      // Check if file already exists
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (fileInfo.exists) {
-        // File already exists, return hash and URI
-        return { hash, fileUri };
-      }
-      
-      // Copy file to permanent location
-      await FileSystem.copyAsync({
-        from: uri,
-        to: fileUri,
-      });
-      
-      return { hash, fileUri };
+      return { hash, fileUri: existing[0].data }; // data is file path on mobile
     }
-  } catch (error) {
-    console.error('Error storing image:', error);
-    return null;
+  }
+  
+  if (Platform.OS === 'web') {
+    // On web, store base64 in database
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64Data = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    
+    const cleanBase64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
+    
+    // Store in photos table (create or update)
+    if (existing.length > 0) {
+      // Update existing photo record with data
+      await db.update(schema.photos)
+        .set({ data: cleanBase64 })
+        .where(eq(schema.photos.hash, hash));
+    } else {
+      // Create new photo record with data (refId can be a placeholder)
+      await db.insert(schema.photos).values({
+        id: await generateUUID(),
+        refId: await generateUUID(), // Placeholder, will be updated when photo is linked to entity
+        refTable: null,
+        refSchema: null,
+        hash,
+        data: cleanBase64,
+        createdAt: Date.now(),
+      });
+    }
+    
+    const dataUri = `data:image/jpeg;base64,${cleanBase64}`;
+    return { hash, fileUri: dataUri };
+  } else {
+    // On mobile, store file path in database, actual file in file system
+    await ensureImageDir();
+    const fileUri = `${IMAGE_DIR}${hash}.jpg`;
+    
+    // Copy file to permanent location
+    await FileSystem.copyAsync({
+      from: uri,
+      to: fileUri,
+    });
+    
+    // Store file path in photos table
+    if (existing.length > 0) {
+      // Update existing photo record with data
+      await db.update(schema.photos)
+        .set({ data: fileUri })
+        .where(eq(schema.photos.hash, hash));
+    } else {
+      // Create new photo record with data
+      await db.insert(schema.photos).values({
+        id: await generateUUID(),
+        refId: await generateUUID(), // Placeholder
+        refTable: null,
+        refSchema: null,
+        hash,
+        data: fileUri,
+        createdAt: Date.now(),
+      });
+    }
+    
+    return { hash, fileUri };
   }
 }
 
 /**
  * Get image URI by hash
- * On mobile: Returns file:// URI
- * On web: Returns data URI from IndexedDB
  */
 export async function getImageByHash(hash: string): Promise<string | null> {
-  try {
-    if (Platform.OS === 'web') {
-      const base64 = await defaultStorageDriver.getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
-      if (!base64) {
-        return null;
-      }
-      return `data:image/jpeg;base64,${base64}`;
-    } else {
-      // On mobile, construct file path
-      const fileUri = `${IMAGE_DIR}${hash}.jpg`;
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (fileInfo.exists) {
-        return fileUri;
-      }
-      return null;
+  const db = await getDatabase();
+  const results = await db.select()
+    .from(schema.photos)
+    .where(eq(schema.photos.hash, hash))
+    .limit(1);
+  
+  if (results.length === 0 || !results[0].data) return null;
+  
+  const photo = results[0];
+  
+  if (Platform.OS === 'web') {
+    return `data:image/jpeg;base64,${photo.data}`;
+  } else {
+    // On mobile, check if file still exists
+    const fileInfo = await FileSystem.getInfoAsync(photo.data);
+    if (fileInfo.exists) {
+      return photo.data;
     }
-  } catch (error) {
-    console.error('Error retrieving image:', error);
+    // File missing, clear data from database
+    await db.update(schema.photos)
+      .set({ data: null })
+      .where(eq(schema.photos.hash, hash));
     return null;
   }
 }
@@ -173,19 +193,27 @@ export async function getImageByHash(hash: string): Promise<string | null> {
  * Delete an image by its hash
  */
 export async function deleteImageByHash(hash: string): Promise<void> {
-  try {
-    if (Platform.OS === 'web') {
-      await defaultStorageDriver.removeItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
-    } else {
-      const fileUri = `${IMAGE_DIR}${hash}.jpg`;
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      if (fileInfo.exists) {
-        await FileSystem.deleteAsync(fileUri);
-      }
+  const db = await getDatabase();
+  
+  // Get photo data to delete file if on mobile
+  const results = await db.select()
+    .from(schema.photos)
+    .where(eq(schema.photos.hash, hash))
+    .limit(1);
+  
+  if (results.length > 0 && results[0].data && Platform.OS !== 'web') {
+    // Delete file from file system
+    const fileInfo = await FileSystem.getInfoAsync(results[0].data);
+    if (fileInfo.exists) {
+      await FileSystem.deleteAsync(results[0].data);
     }
-  } catch (error) {
-    console.error('Error deleting image:', error);
-    throw error;
+  }
+  
+  // Clear data from database (but keep photo record if it has refId)
+  if (results.length > 0) {
+    await db.update(schema.photos)
+      .set({ data: null })
+      .where(eq(schema.photos.hash, hash));
   }
 }
 
@@ -193,17 +221,19 @@ export async function deleteImageByHash(hash: string): Promise<void> {
  * Check if an image exists by hash
  */
 export async function imageExists(hash: string): Promise<boolean> {
-  try {
-    if (Platform.OS === 'web') {
-      const data = await defaultStorageDriver.getItem(`${IMAGE_STORAGE_PREFIX}${hash}`);
-      return data !== null;
-    } else {
-      const fileUri = `${IMAGE_DIR}${hash}.jpg`;
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      return fileInfo.exists;
-    }
-  } catch (error) {
-    console.error('Error checking image existence:', error);
-    return false;
+  const db = await getDatabase();
+  const results = await db.select()
+    .from(schema.photos)
+    .where(eq(schema.photos.hash, hash))
+    .limit(1);
+  
+  if (results.length === 0 || !results[0].data) return false;
+  
+  if (Platform.OS === 'web') {
+    return true;
+  } else {
+    // On mobile, verify file exists
+    const fileInfo = await FileSystem.getInfoAsync(results[0].data);
+    return fileInfo.exists;
   }
 }

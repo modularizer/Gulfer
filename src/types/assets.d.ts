@@ -18,3 +18,4 @@ declare module '*.jpeg' {
   export default value;
 }
 
+

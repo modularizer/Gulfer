@@ -4,8 +4,11 @@ import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
 import Footer from './Footer';
-import { getAllUsers, saveUser, saveCurrentUserName, generateUserId, getUserById } from '@/services/storage/userStorage';
-import { getCurrentUserId, setCurrentUserId } from '@/services/storage/currentUserStorage';
+import { schema, getDatabase } from '@/services/storage/db';
+import { eq } from 'drizzle-orm';
+import { getCurrentUserId, setCurrentUserId } from '@/services/storage/platform/currentUserStorage';
+import { generateUUID } from '@/utils/uuid';
+import { userSchema } from '@/types';
 import { useTheme } from '../../theme/ThemeContext';
 import backgroundImage from '../../../assets/background.webp';
 
@@ -49,32 +52,49 @@ export default function AppLayout({ children }: AppLayoutProps) {
   // Ensure current user exists with name "You" if no name is set
   useEffect(() => {
     const ensureCurrentUser = async () => {
-      try {
-        const currentUserId = await getCurrentUserId();
-        let currentUser = currentUserId ? await getUserById(currentUserId) : null;
+      const db = await getDatabase();
+      const currentUserId = await getCurrentUserId();
+      
+      if (currentUserId) {
+        const results = await db.select()
+          .from(schema.players)
+          .where(eq(schema.players.id, currentUserId))
+          .limit(1);
         
-        if (!currentUser || !currentUser.name) {
-          // No current user or no name set, create/update with "You"
-          if (currentUser) {
-            // Update existing user
-            currentUser.name = 'You';
-            await saveUser(currentUser);
-          } else {
-            // Create new user
-            const userId = await generateUserId();
-            const newUser = {
-              id: userId,
-              name: 'You',
-            };
-            await saveUser(newUser);
-            // Set as current user
-            await setCurrentUserId(userId);
-            // Also save to current user name storage
-            await saveCurrentUserName('You');
-          }
+        if (results.length > 0 && results[0].name) {
+          return; // User exists and has a name
         }
-      } catch (error) {
-        console.error('Error ensuring current user:', error);
+        
+        if (results.length > 0) {
+          // Update existing user
+          await db.update(schema.players)
+            .set({ name: 'You' })
+            .where(eq(schema.players.id, currentUserId));
+        } else {
+          // Create new user
+          const userId = await generateUUID();
+          await db.insert(schema.players).values({
+            id: userId,
+            name: 'You',
+            notes: null,
+            latitude: null,
+            longitude: null,
+            isTeam: false,
+          });
+          await setCurrentUserId(userId);
+        }
+      } else {
+        // No current user, create one
+        const userId = await generateUUID();
+        await db.insert(schema.players).values({
+          id: userId,
+          name: 'You',
+          notes: null,
+          latitude: null,
+          longitude: null,
+          isTeam: false,
+        });
+        await setCurrentUserId(userId);
       }
     };
 

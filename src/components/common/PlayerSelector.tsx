@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { IconButton, Text, Menu, Dialog, Portal, Button, useTheme, Surface } from 'react-native-paper';
-import { Player } from '@/types';
-import { getAllUsers, saveUser, saveCurrentUserName, getCurrentUserName, generateUserId, getUserIdForPlayerName, getUserById } from '@/services/storage/userStorage';
-import { getCurrentUserId } from '@/services/storage/currentUserStorage';
+import { Player, User } from '@/types';
+import { schema, getDatabase } from '@/services/storage/db';
+import { eq } from 'drizzle-orm';
+import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage';
+import { generateUUID } from '@/utils/uuid';
 import { getShadowStyle } from '../../utils';
 import NameUsernameDialog from './NameUsernameDialog';
 
@@ -11,6 +13,14 @@ interface PlayerSelectorProps {
   players: Player[];
   onPlayersChange: (players: Player[]) => void;
   hideHeader?: boolean;
+}
+
+const LOCATION_PRECISION = 1e6;
+
+// Helper to convert database format to application format
+function locationFromDb(lat: number | null, lng: number | null) {
+  if (lat === null || lng === null) return undefined;
+  return { latitude: lat / LOCATION_PRECISION, longitude: lng / LOCATION_PRECISION };
 }
 
 export default function PlayerSelector({
@@ -29,14 +39,19 @@ export default function PlayerSelector({
   // Load known users
   useEffect(() => {
     const loadUsers = async () => {
-      try {
-        const loadedUsers = await getAllUsers();
-        setKnownUsers(loadedUsers);
-        const currentId = await getCurrentUserId();
-        setCurrentUserId(currentId);
-      } catch (error) {
-        console.error('Error loading users:', error);
-      }
+      const db = await getDatabase();
+      const playersData = await db.select().from(schema.players);
+      
+      const users: User[] = playersData.map(p => ({
+        id: p.id,
+        name: p.name,
+        notes: p.notes || undefined,
+        location: locationFromDb(p.latitude, p.longitude),
+      }));
+      
+      setKnownUsers(users);
+      const currentId = await getCurrentUserId();
+      setCurrentUserId(currentId);
     };
 
     loadUsers();
@@ -66,8 +81,11 @@ export default function PlayerSelector({
       const isCurrentUser = currentUserId && player?.id === currentUserId;
       
       if (isCurrentUser) {
-        // Save to current user storage
-        await saveCurrentUserName(name);
+        // Update player name in database
+        const db = await getDatabase();
+        await db.update(schema.players)
+          .set({ name })
+          .where(eq(schema.players.id, currentUserId));
       }
       
       // Update player with new name
@@ -79,13 +97,29 @@ export default function PlayerSelector({
       });
       onPlayersChange(updatedPlayers);
     } else {
-      // Save to known users first
-      const playerId = await getUserIdForPlayerName(name);
-      const newUser: User = {
+      // Create new player
+      const db = await getDatabase();
+      const playerId = await generateUUID();
+      
+      // Check if name already exists
+      const existing = await db.select()
+        .from(schema.players)
+        .where(eq(schema.players.name, name))
+        .limit(1);
+      
+      if (existing.length > 0) {
+        setErrorDialog({ visible: true, title: 'Error', message: `A player with name "${name}" already exists` });
+        return;
+      }
+      
+      await db.insert(schema.players).values({
         id: playerId,
         name,
-      };
-      await saveUser(newUser);
+        notes: null,
+        latitude: null,
+        longitude: null,
+        isTeam: false,
+      });
       
       const newPlayer: Player = {
         id: playerId,
@@ -94,8 +128,14 @@ export default function PlayerSelector({
       onPlayersChange([...players, newPlayer]);
       
       // Reload known users
-      const updatedUsers = await getAllUsers();
-      setKnownUsers(updatedUsers);
+      const playersData = await db.select().from(schema.players);
+      const users: User[] = playersData.map(p => ({
+        id: p.id,
+        name: p.name,
+        notes: p.notes || undefined,
+        location: locationFromDb(p.latitude, p.longitude),
+      }));
+      setKnownUsers(users);
     }
     setPlayerDialog({ visible: false, playerId: '', isEditing: false, initialName: '', initialUsername: '', excludeUserId: undefined });
   }, [playerDialog.isEditing, playerDialog.playerId, players, onPlayersChange]);
@@ -318,4 +358,3 @@ const styles = StyleSheet.create({
     margin: 0,
   },
 });
-

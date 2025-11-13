@@ -3,7 +3,7 @@ import { Chip } from 'react-native-paper';
 import { Player } from '@/types';
 import { router } from 'expo-router';
 import { StyleSheet } from 'react-native';
-import { idToCodename } from '../../utils/idUtils';
+import { encodeNameForUrl } from '../../utils/urlEncoding';
 
 interface PlayerChipProps {
   player: Player;
@@ -24,8 +24,7 @@ export default function PlayerChip({
     if (onPress) {
       onPress();
     } else {
-      const playerCodename = idToCodename(player.id);
-      router.push(`/player/${playerCodename}`);
+      router.push(`/player/${encodeNameForUrl(player.name)}/overview`);
     }
   };
 

@@ -8,7 +8,7 @@ import { User } from './storage/userStorage';
 import { getStorageId } from './storage/storageId';
 import { saveUser, getUserByName, generateUserId, getUserById } from './storage/userStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
-import { setCurrentUserId, getCurrentUserId } from './storage/currentUserStorage';
+import { setCurrentUserId, getCurrentUserId } from './storage/platform/currentUserStorage';
 import { normalizeExportText } from '../utils';
 
 /**

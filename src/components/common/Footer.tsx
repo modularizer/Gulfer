@@ -5,7 +5,7 @@ import { getAllUsers, getUserById } from '@/services/storage/userStorage';
 import { encodeNameForUrl } from '../../utils/urlEncoding';
 import { getRoundById } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
-import { getCurrentUserId } from '@/services/storage/currentUserStorage';
+import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage';
 import { Round } from '@/types';
 import { useScorecard } from '../../contexts/ScorecardContext';
 import HillFooter from './Footer/HillFooter';

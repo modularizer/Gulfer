@@ -1,10 +1,9 @@
 /**
  * Navigation state persistence service
- * Works on both web and mobile platforms
+ * Uses Drizzle ORM directly
  */
 
-import { Platform } from 'react-native';
-import { getItem, setItem } from './storage/drivers';
+import { getSettings, updateSettings } from './storage/settingsHelper';
 
 const NAVIGATION_STATE_KEY = 'gulfer-navigation-state';
 const MODAL_STATE_KEY_PREFIX = 'gulfer-modal-state-';
@@ -24,42 +23,44 @@ export interface ModalState {
  * Save the current navigation state
  */
 export async function saveNavigationState(pathname: string, searchParams?: Record<string, string>): Promise<void> {
-  try {
-    const state: NavigationState = {
-      pathname,
-      searchParams,
-      timestamp: Date.now(),
-    };
-    await setItem(NAVIGATION_STATE_KEY, JSON.stringify(state));
-  } catch (error) {
-    console.error('Error saving navigation state:', error);
-  }
+  const state: NavigationState = {
+    pathname,
+    searchParams,
+    timestamp: Date.now(),
+  };
+  
+  const settings = await getSettings();
+  const other = settings.other ? { ...settings.other } : {};
+  other[NAVIGATION_STATE_KEY] = state;
+  
+  await updateSettings({ other });
 }
 
 /**
  * Get the saved navigation state
  */
 export async function getNavigationState(): Promise<NavigationState | null> {
-  try {
-    const stored = await getItem(NAVIGATION_STATE_KEY);
-    if (!stored) {
-      return null;
+  const settings = await getSettings();
+  
+  if (settings.other) {
+    const stored = settings.other[NAVIGATION_STATE_KEY];
+    if (stored) {
+      return stored as NavigationState;
     }
-    return JSON.parse(stored) as NavigationState;
-  } catch (error) {
-    console.error('Error getting navigation state:', error);
-    return null;
   }
+  return null;
 }
 
 /**
  * Clear the saved navigation state
  */
 export async function clearNavigationState(): Promise<void> {
-  try {
-    await setItem(NAVIGATION_STATE_KEY, '');
-  } catch (error) {
-    console.error('Error clearing navigation state:', error);
+  const settings = await getSettings();
+  
+  if (settings.other) {
+    const other = { ...settings.other };
+    delete other[NAVIGATION_STATE_KEY];
+    await updateSettings({ other });
   }
 }
 
@@ -69,16 +70,17 @@ export async function clearNavigationState(): Promise<void> {
  * @param modalState The modal state object
  */
 export async function saveModalState(routePath: string, modalState: ModalState): Promise<void> {
-  try {
-    const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
-    const stateWithTimestamp = {
-      ...modalState,
-      timestamp: Date.now(),
-    };
-    await setItem(key, JSON.stringify(stateWithTimestamp));
-  } catch (error) {
-    console.error('Error saving modal state:', error);
-  }
+  const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
+  const stateWithTimestamp = {
+    ...modalState,
+    timestamp: Date.now(),
+  };
+  
+  const settings = await getSettings();
+  const other = settings.other ? { ...settings.other } : {};
+  other[key] = stateWithTimestamp;
+  
+  await updateSettings({ other });
 }
 
 /**
@@ -86,13 +88,15 @@ export async function saveModalState(routePath: string, modalState: ModalState):
  * @param routePath The route pathname
  */
 export async function getModalState(routePath: string, maxAge?: number): Promise<ModalState | null> {
-  try {
-    const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
-    const stored = await getItem(key);
+  const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
+  const settings = await getSettings();
+  
+  if (settings.other) {
+    const stored = settings.other[key];
     if (!stored) {
       return null;
     }
-    const state = JSON.parse(stored) as ModalState;
+    const state = stored as ModalState;
     
     // Check expiration if maxAge is provided and state has a timestamp
     if (maxAge !== undefined && state.timestamp) {
@@ -105,10 +109,9 @@ export async function getModalState(routePath: string, maxAge?: number): Promise
     }
     
     return state;
-  } catch (error) {
-    console.error('Error getting modal state:', error);
-    return null;
   }
+  
+  return null;
 }
 
 /**
@@ -116,11 +119,13 @@ export async function getModalState(routePath: string, maxAge?: number): Promise
  * @param routePath The route pathname
  */
 export async function clearModalState(routePath: string): Promise<void> {
-  try {
-    const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
-    await setItem(key, '');
-  } catch (error) {
-    console.error('Error clearing modal state:', error);
+  const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
+  const settings = await getSettings();
+  
+  if (settings.other) {
+    const other = { ...settings.other };
+    delete other[key];
+    await updateSettings({ other });
   }
 }
 
@@ -139,4 +144,3 @@ export function buildPathWithParams(pathname: string, searchParams?: Record<stri
   
   return `${pathname}?${params.toString()}`;
 }
-
