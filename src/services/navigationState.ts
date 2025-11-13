@@ -1,15 +1,11 @@
 /**
  * Navigation state persistence service
- * Uses Drizzle ORM with well-defined schema columns
+ * Uses Drizzle ORM with well-defined 2-generic-sports-schema columns
  */
 
 import { getSettings, updateSettings } from './storage/settingsHelper';
 
-export interface NavigationState {
-  pathname: string;
-  searchParams?: Record<string, string>;
-  timestamp: number;
-}
+
 
 export interface ModalState {
   [key: string]: any;

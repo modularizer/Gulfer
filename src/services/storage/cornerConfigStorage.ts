@@ -5,15 +5,7 @@
 import { CornerStatisticsConfig } from '../cornerStatistics';
 import { getSettings, updateSettings } from './settingsHelper';
 
-export interface ColumnVisibilityConfig {
-  distance?: boolean;
-  par?: boolean;
-  gStats?: boolean;
-  showUnderlines?: boolean;
-  showFontSizeAdjustments?: boolean;
-  showFontColorAdjustments?: boolean;
-  [key: string]: boolean | undefined;
-}
+
 
 /**
  * Get the saved column visibility configuration

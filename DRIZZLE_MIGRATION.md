@@ -12,12 +12,12 @@ The codebase has been migrated from a custom ORM to Drizzle ORM with cross-platf
 - `@types/sql.js` - TypeScript types
 
 ### 2. Database Infrastructure ✅
-- **Adapter** (`src/services/storage/db/adapter.ts`): Cross-platform database initialization
+- **Adapter** (`src/services/storage/db/sqlite.ts`): Cross-platform database initialization
   - Web: Uses sql.js with IndexedDB persistence
   - React Native: Uses expo-sqlite
   - Automatic platform detection
 
-- **Schema** (`src/services/storage/db/schema.ts`): All tables defined in Drizzle format
+- **Schema** (`src/services/storage/db/1-generic-sports-and-formats.ts`): All tables defined in Drizzle format
   - `players` - Users and players (shared table)
   - `teamMembers` - Team relationships
   - `courses` - Golf courses

@@ -208,19 +208,7 @@ export interface CornerConfig {
   customColor?: string;
 }
 
-/**
- * Configuration for all four corner statistics (top-left, top-right, bottom-left, bottom-right)
- */
-export interface CornerStatisticsConfig {
-  /** Configuration for the top-left corner */
-  topLeft?: CornerConfig | null;
-  /** Configuration for the top-right corner */
-  topRight?: CornerConfig | null;
-  /** Configuration for the bottom-left corner */
-  bottomLeft?: CornerConfig | null;
-  /** Configuration for the bottom-right corner */
-  bottomRight?: CornerConfig | null;
-}
+
 
 /**
  * Check if a score represents a completed hole
