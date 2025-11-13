@@ -3,10 +3,10 @@
  * Export schema and database instance for direct Drizzle usage
  */
 
-import { getDatabase, type Database } from './adapter';
+import { getDatabase, saveDatabase, type Database } from './adapter';
 import * as schema from './schema';
 
-export { schema, getDatabase, type Database };
+export { schema, getDatabase, saveDatabase, type Database };
 
 // Export schema types for convenience
 export type {

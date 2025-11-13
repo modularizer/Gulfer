@@ -14,6 +14,10 @@ export type Database = ReturnType<typeof drizzleExpo> | ReturnType<typeof drizzl
 let dbInstance: Database | null = null;
 let sqlJsDb: SqlJsDatabase | null = null;
 let sqlJsModule: SqlJsStatic | null = null;
+let saveTimeout: NodeJS.Timeout | null = null;
+
+// Debounce save operations to avoid excessive IndexedDB writes
+const SAVE_DEBOUNCE_MS = 100;
 
 /**
  * Initialize the database adapter based on platform
@@ -56,12 +60,102 @@ export async function initDatabase(): Promise<Database> {
 
 /**
  * Get the database instance (initializes if needed)
+ * Returns a wrapped database that automatically saves after write operations
  */
 export async function getDatabase(): Promise<Database> {
   if (!dbInstance) {
-    return await initDatabase();
+    await initDatabase();
   }
-  return dbInstance;
+  
+  if (!dbInstance) {
+    throw new Error('Database not initialized');
+  }
+  
+  // Return a wrapped database that auto-saves after write operations
+  return wrapDatabaseWithAutoSave(dbInstance);
+}
+
+/**
+ * Schedule a debounced save operation
+ * This ensures we don't save too frequently during rapid writes
+ */
+function scheduleAutoSave(): void {
+  // Clear existing timeout
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  
+  // Schedule a new save
+  saveTimeout = setTimeout(async () => {
+    await saveDatabase();
+    saveTimeout = null;
+  }, SAVE_DEBOUNCE_MS);
+}
+
+/**
+ * Wrap database with auto-save functionality
+ * Automatically schedules saveDatabase() after insert, update, and delete operations
+ */
+function wrapDatabaseWithAutoSave(db: Database): Database {
+  // Create a proxy that intercepts method calls
+  return new Proxy(db, {
+    get(target, prop) {
+      const value = (target as any)[prop];
+      
+      // Wrap insert, update, and delete methods to auto-save
+      if (prop === 'insert' || prop === 'update' || prop === 'delete') {
+        // Return a function that wraps the builder
+        return function(...args: any[]) {
+          const builder = value.apply(target, args);
+          
+          // Wrap the builder's methods to detect when queries are executed
+          return wrapBuilderWithAutoSave(builder);
+        };
+      }
+      
+      // For other properties/methods, return as-is
+      if (typeof value === 'function') {
+        return value.bind(target);
+      }
+      return value;
+    }
+  }) as Database;
+}
+
+/**
+ * Wrap a Drizzle query builder to auto-save when executed
+ */
+function wrapBuilderWithAutoSave(builder: any): any {
+  // Create a proxy that intercepts method calls on the builder
+  return new Proxy(builder, {
+    get(target, prop) {
+      const value = (target as any)[prop];
+      
+      // If it's a method that returns a promise (query execution), wrap it
+      if (typeof value === 'function') {
+        return function(...args: any[]) {
+          const result = value.apply(target, args);
+          
+          // If the result is a promise (query execution), schedule auto-save
+          if (result && typeof result.then === 'function') {
+            // Schedule save after query completes
+            result.then(() => scheduleAutoSave()).catch(() => {
+              // Don't save on error, but clear timeout if needed
+              if (saveTimeout) {
+                clearTimeout(saveTimeout);
+                saveTimeout = null;
+              }
+            });
+          }
+          
+          return result;
+        };
+      }
+      
+      // For non-function properties, return as-is
+      return value;
+    }
+  });
 }
 
 /**
