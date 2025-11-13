@@ -5,6 +5,7 @@
  */
 
 import { User } from './storage/userStorage';
+import { EntityType } from '@/types';
 import { getStorageId } from './storage/platform/platformStorage';
 import { saveUser, getUserByName, generateUserId, getUserById } from './storage/userStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
@@ -112,10 +113,10 @@ export async function importPlayer(
     // Check for manual mapping first
     if (manualMapping && manualMapping.foreignPlayerId === parsed.playerId) {
       localPlayerId = manualMapping.localPlayerId;
-      await mapForeignToLocal(foreignStorageId, parsed.playerId, localPlayerId, 'player');
+      await mapForeignToLocal(foreignStorageId, parsed.playerId, localPlayerId, EntityType.Players);
     } else {
       // Check if already mapped
-      const existingMapping = await getLocalUuidForForeign(foreignStorageId, parsed.playerId, 'player');
+      const existingMapping = await getLocalUuidForForeign(foreignStorageId, parsed.playerId, EntityType.Players);
       
       if (existingMapping) {
         localPlayerId = existingMapping;
@@ -126,7 +127,7 @@ export async function importPlayer(
         if (existingPlayer) {
           // Map to existing player
           localPlayerId = existingPlayer.id;
-          await mapForeignToLocal(foreignStorageId, parsed.playerId, existingPlayer.id, 'player');
+          await mapForeignToLocal(foreignStorageId, parsed.playerId, existingPlayer.id, EntityType.Players);
         } else {
           // Create new player
           localPlayerId = generateUserId();
@@ -142,7 +143,7 @@ export async function importPlayer(
           }
           
           // Map foreign player to new local player
-          await mapForeignToLocal(foreignStorageId, parsed.playerId, localPlayerId, 'player');
+          await mapForeignToLocal(foreignStorageId, parsed.playerId, localPlayerId, EntityType.Players);
         }
       }
     }

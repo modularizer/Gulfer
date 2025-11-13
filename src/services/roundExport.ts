@@ -2,7 +2,7 @@
  * Service for exporting and importing rounds
  */
 
-import { Round, Course, Player, Hole, Score } from '@/types';
+import { Round, Course, Player, Hole, Score, EntityType } from '@/types';
 import { getAllCourses, saveCourse, getCourseByName, getCourseById, generateCourseId } from './storage/courseStorage';
 import { getAllUsers, saveUser, getUserIdForPlayerName,  } from './storage/userStorage';
 import { saveRound, generateRoundId, getRoundById, type RoundWithDetails } from './storage/roundStorage';
@@ -394,11 +394,11 @@ export async function importRound(
         localCourseId = manualMappings.courses.get(foreignCourseId);
         if (localCourseId && foreignStorageId) {
           // Create the mapping in the merge table
-          await mapForeignToLocal(foreignStorageId, foreignCourseId, localCourseId, 'course');
+          await mapForeignToLocal(foreignStorageId, foreignCourseId, localCourseId, EntityType.Courses);
         }
       } else {
         // Check if this foreign course is already mapped
-        const mappedCourseId = await getLocalUuidForForeign(foreignStorageId, foreignCourseId, 'course');
+        const mappedCourseId = await getLocalUuidForForeign(foreignStorageId, foreignCourseId, EntityType.Courses);
         
         if (mappedCourseId) {
           // Use existing mapping
@@ -410,7 +410,7 @@ export async function importRound(
           if (existingCourse && foreignStorageId) {
             // Map foreign course to existing local course
             localCourseId = existingCourse.id;
-            await mapForeignToLocal(foreignStorageId, foreignCourseId, existingCourse.id, 'course');
+            await mapForeignToLocal(foreignStorageId, foreignCourseId, existingCourse.id, EntityType.Courses);
           } else if (courseHoles !== undefined) {
             // Create new course and optionally map it
             const holes: Hole[] = courseHolesData.length > 0 
@@ -427,7 +427,7 @@ export async function importRound(
             
             // Map foreign course to new local course
             if (foreignStorageId) {
-              await mapForeignToLocal(foreignStorageId, foreignCourseId, localCourseId, 'course');
+              await mapForeignToLocal(foreignStorageId, foreignCourseId, localCourseId, EntityType.Courses);
             }
           }
         }
@@ -451,11 +451,11 @@ export async function importRound(
           localPlayerId = manualMappings.players.get(playerData.id)!;
           if (foreignStorageId) {
             // Create the mapping in the merge table
-            await mapForeignToLocal(foreignStorageId, playerData.id, localPlayerId, 'player');
+            await mapForeignToLocal(foreignStorageId, playerData.id, localPlayerId, EntityType.Players);
           }
         } else {
           // Check if this foreign player is already mapped
-          const mappedPlayerId = await getLocalUuidForForeign(foreignStorageId, playerData.id, 'player');
+          const mappedPlayerId = await getLocalUuidForForeign(foreignStorageId, playerData.id, EntityType.Players);
           
           if (mappedPlayerId) {
             // Use existing mapping
@@ -467,7 +467,7 @@ export async function importRound(
             if (existingUser && foreignStorageId) {
               // Map foreign player to existing local player
               localPlayerId = existingUser.id;
-              await mapForeignToLocal(foreignStorageId, playerData.id, existingUser.id, 'player');
+              await mapForeignToLocal(foreignStorageId, playerData.id, existingUser.id, EntityType.Players);
             } else {
               // Create new user and map it
               localPlayerId = await getUserIdForPlayerName(playerData.name);
@@ -480,7 +480,7 @@ export async function importRound(
               
               // Map foreign player to new local player
               if (foreignStorageId) {
-                await mapForeignToLocal(foreignStorageId, playerData.id, localPlayerId, 'player');
+                await mapForeignToLocal(foreignStorageId, playerData.id, localPlayerId, EntityType.Players);
               }
             }
           }
@@ -534,7 +534,8 @@ export async function importRound(
       id: roundId,
       name: title,
       notes: notes || undefined,
-      location: undefined,
+      latitude: undefined,
+      longitude: undefined,
       date: dateTimestamp,
       courseId: localCourseId,
       players: importedPlayers,

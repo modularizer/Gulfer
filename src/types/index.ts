@@ -39,5 +39,6 @@ export {
   parseOrThrow,
   validateArray,
   SCHEMA_VERSION,
+  EntityType,
 } from './schema';
 

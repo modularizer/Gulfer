@@ -4,7 +4,7 @@
  * Includes both UUIDs and human-readable names for merging support
  */
 
-import { Course, Hole } from '../types';
+import { Course, Hole, EntityType } from '../types';
 import { getStorageId } from './storage/platform/platformStorage';
 import { saveCourse, getCourseByName, generateCourseId, getCourseById } from './storage/courseStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
@@ -48,8 +48,8 @@ export async function exportCourse(courseId: string): Promise<string> {
   }
   
   // Location (if available)
-  if (course.location) {
-    lines.push(`Location: ${course.location.latitude}, ${course.location.longitude}`);
+  if (course.latitude !== undefined && course.longitude !== undefined) {
+    lines.push(`Location: ${course.latitude}, ${course.longitude}`);
     lines.push('');
   }
   
@@ -68,10 +68,8 @@ export interface ParsedCourseExport {
   courseId?: string;
   courseName?: string;
   holes?: Hole[];
-  location?: {
-    latitude: number;
-    longitude: number;
-  };
+  latitude?: number;
+  longitude?: number;
 }
 
 export function parseCourseExport(exportText: string): ParsedCourseExport {
@@ -110,10 +108,8 @@ export function parseCourseExport(exportText: string): ParsedCourseExport {
     } else if (line.startsWith('Location:')) {
       const locationMatch = line.match(/Location:\s*([\d.-]+),\s*([\d.-]+)/);
       if (locationMatch) {
-        parsed.location = {
-          latitude: parseFloat(locationMatch[1]),
-          longitude: parseFloat(locationMatch[2]),
-        };
+        parsed.latitude = parseFloat(locationMatch[1]);
+        parsed.longitude = parseFloat(locationMatch[2]);
       }
     } else if (line === '=== END EXPORT ===') {
       break;
@@ -153,10 +149,10 @@ export async function importCourse(
     // Check for manual mapping first
     if (manualMapping && manualMapping.foreignCourseId === parsed.courseId) {
       localCourseId = manualMapping.localCourseId;
-      await mapForeignToLocal(foreignStorageId, parsed.courseId, localCourseId, 'course');
+      await mapForeignToLocal(foreignStorageId, parsed.courseId, localCourseId, EntityType.Courses);
     } else {
       // Check if already mapped
-      const existingMapping = await getLocalUuidForForeign(foreignStorageId, parsed.courseId, 'course');
+      const existingMapping = await getLocalUuidForForeign(foreignStorageId, parsed.courseId, EntityType.Courses);
       
       if (existingMapping) {
         localCourseId = existingMapping;
@@ -167,7 +163,7 @@ export async function importCourse(
         if (existingCourse) {
           // Map to existing course
           localCourseId = existingCourse.id;
-          await mapForeignToLocal(foreignStorageId, parsed.courseId, existingCourse.id, 'course');
+          await mapForeignToLocal(foreignStorageId, parsed.courseId, existingCourse.id, EntityType.Courses);
         } else {
           // Create new course
           localCourseId = generateCourseId();
@@ -175,12 +171,13 @@ export async function importCourse(
             id: localCourseId,
             name: parsed.courseName,
             holes: parsed.holes || [],
-            location: parsed.location,
+            latitude: parsed.latitude,
+            longitude: parsed.longitude,
           };
           await saveCourse(newCourse);
           
           // Map foreign course to new local course
-          await mapForeignToLocal(foreignStorageId, parsed.courseId, localCourseId, 'course');
+          await mapForeignToLocal(foreignStorageId, parsed.courseId, localCourseId, EntityType.Courses);
         }
       }
     }
@@ -196,7 +193,8 @@ export async function importCourse(
         id: localCourseId,
         name: parsed.courseName,
         holes: parsed.holes || [],
-        location: parsed.location,
+        latitude: parsed.latitude,
+        longitude: parsed.longitude,
       };
       await saveCourse(newCourse);
     }

@@ -7,7 +7,7 @@
 import { schema, getDatabase } from './db';
 import { getStorageId } from './platform/platformStorage';
 import { eq, and } from 'drizzle-orm';
-import { MergeEntry } from '@/types';
+import { EntityType } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
 /**
@@ -16,7 +16,7 @@ import { generateUUID } from '@/utils/uuid';
 export async function getLocalUuidForForeign(
   foreignStorageId: string,
   foreignEntityUuid: string,
-  entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'
+  entityType: EntityType
 ): Promise<string | null> {
   const db = await getDatabase();
   const results = await db.select()
@@ -42,7 +42,7 @@ export async function mapForeignToLocal(
   foreignStorageId: string,
   foreignEntityUuid: string,
   localEntityUuid: string,
-  entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'
+  entityType: EntityType
 ): Promise<void> {
   const db = await getDatabase();
   
@@ -84,43 +84,3 @@ export async function mapForeignToLocal(
   }
 }
 
-/**
- * Get all foreign entities that map to a given local UUID
- */
-export async function getForeignEntitiesForLocal(
-  localEntityUuid: string,
-  entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'
-): Promise<Array<{ foreignStorageId: string; foreignEntityUuid: string }>> {
-  const db = await getDatabase();
-  const results = await db.select()
-    .from(schema.mergeEntries)
-    .where(and(
-      eq(schema.mergeEntries.localId, localEntityUuid),
-      eq(schema.mergeEntries.refTable, entityType)
-    ));
-  
-  return results.map(entry => ({
-    foreignStorageId: entry.foreignStorageId,
-    foreignEntityUuid: entry.foreignId,
-  }));
-}
-
-/**
- * Get all merge entries for a specific entity type
- */
-export async function getMergeEntries(
-  entityType: 'course' | 'round' | 'player' | 'user' | 'userround' | 'hole' | 'score' | 'photo'
-): Promise<MergeEntry[]> {
-  const db = await getDatabase();
-  const results = await db.select()
-    .from(schema.mergeEntries)
-    .where(eq(schema.mergeEntries.refTable, entityType));
-  
-  return results.map(entry => ({
-    foreignStorageId: entry.foreignStorageId,
-    foreignEntityUuid: entry.foreignId,
-    localEntityUuid: entry.localId,
-    entityType: entityType,
-    mergedAt: entry.mergedAt,
-  }));
-}

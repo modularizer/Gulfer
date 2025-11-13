@@ -8,21 +8,12 @@ import { eq } from 'drizzle-orm';
 import { getImageByHash } from './storage/photoStorage';
 import { getStorageId } from './storage/platform/platformStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
-import { setCurrentUserId } from './storage/platform/currentUserStorage';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { generateUUID } from '@/utils/uuid';
-import { roundSchema, userSchema, courseSchema, holeSchema } from '@/types';
+import { roundSchema, userSchema, courseSchema, EntityType } from '@/types';
 
-const PHOTOS_STORAGE_PREFIX = '@gulfer_photos_';
-const IMAGE_STORAGE_PREFIX = '@gulfer_image_';
-const LOCATION_PRECISION = 1e6;
 
-// Helper to convert database format to application format
-function locationFromDb(lat: number | null, lng: number | null) {
-  if (lat === null || lng === null) return undefined;
-  return { latitude: lat / LOCATION_PRECISION, longitude: lng / LOCATION_PRECISION };
-}
 
 export interface BulkExportData {
   version: string;
@@ -44,37 +35,12 @@ export async function exportAllData(): Promise<BulkExportData> {
     const storageId = await getStorageId();
 
     // Get all data using Drizzle
-    const roundsData = await db.select().from(schema.rounds);
-    const playersData = await db.select().from(schema.players);
-    const coursesData = await db.select().from(schema.courses);
+    const rounds = await db.select().from(schema.rounds);
+    const players = await db.select().from(schema.players);
+    const courses = await db.select().from(schema.courses);
     const photosData = await db.select().from(schema.photos);
 
-    // Convert to application format
-    const rounds = roundsData.map(r => ({
-      id: r.id,
-      name: r.name,
-      notes: r.notes,
-      location: locationFromDb(r.latitude, r.longitude),
-      courseId: r.courseId,
-      date: r.date,
-    }));
-
-    const players = playersData.map(p => ({
-      id: p.id,
-      name: p.name,
-      notes: p.notes,
-      location: locationFromDb(p.latitude, p.longitude),
-    }));
-
-    const courses = coursesData.map(c => ({
-      id: c.id,
-      name: c.name,
-      notes: c.notes,
-      location: locationFromDb(c.latitude, c.longitude),
-    }));
-
     // Get photos by refId
-    const photos: Record<string, string[]> = {};
     const photoHashesByRefId = new Map<string, string[]>();
     for (const photo of photosData) {
       if (!photoHashesByRefId.has(photo.refId)) {
@@ -94,19 +60,16 @@ export async function exportAllData(): Promise<BulkExportData> {
         if (Platform.OS === 'web') {
           const imageUri = await getImageByHash(hash);
           if (imageUri && imageUri.startsWith('data:')) {
-            const base64 = imageUri.split(',')[1];
-            images[hash] = base64;
+            images[hash] = imageUri.split(',')[1];
           }
         } else {
           const imageUri = await getImageByHash(hash);
           if (imageUri && imageUri.startsWith('file://')) {
-            const base64 = await FileSystem.readAsStringAsync(imageUri, {
-              encoding: FileSystem.EncodingType.Base64,
+            images[hash] = await FileSystem.readAsStringAsync(imageUri, {
+                encoding: FileSystem.EncodingType.Base64,
             });
-            images[hash] = base64;
           } else if (imageUri && imageUri.startsWith('data:')) {
-            const base64 = imageUri.split(',')[1];
-            images[hash] = base64;
+            images[hash] = imageUri.split(',')[1];
           }
         }
       } catch (error) {
@@ -114,7 +77,7 @@ export async function exportAllData(): Promise<BulkExportData> {
       }
     }
 
-    const exportData: BulkExportData = {
+    return {
       version: '1.0',
       exportDate: Date.now(),
       storageId,
@@ -124,8 +87,6 @@ export async function exportAllData(): Promise<BulkExportData> {
       photos: Object.fromEntries(photoHashesByRefId),
       images,
     };
-
-    return exportData;
   } catch (error) {
     console.error('Error exporting all data:', error);
     throw error;
@@ -158,12 +119,6 @@ export async function importAllData(
     skipDuplicates?: boolean;
   }
 ): Promise<ImportSummary> {
-  const opts = {
-    overwriteExisting: false,
-    skipDuplicates: true,
-    ...options,
-  };
-
   const summary: ImportSummary = {
     rounds: { imported: 0, skipped: 0 },
     players: { imported: 0, skipped: 0 },
@@ -177,14 +132,6 @@ export async function importAllData(
     const localStorageId = await getStorageId();
     const foreignStorageId = exportData.storageId;
 
-    // Helper to convert location to DB format
-    const locationToDb = (loc: any) => {
-      if (!loc) return { latitude: null, longitude: null };
-      return {
-        latitude: Math.round(loc.latitude * LOCATION_PRECISION),
-        longitude: Math.round(loc.longitude * LOCATION_PRECISION),
-      };
-    };
 
     // Import images first
     for (const [hash, base64] of Object.entries(exportData.images || {})) {
@@ -252,7 +199,7 @@ export async function importAllData(
         let localCourseId: string | undefined;
 
         if (foreignStorageId && foreignStorageId !== localStorageId && course.id) {
-          const mappedId = await getLocalUuidForForeign(foreignStorageId, course.id, 'course');
+          const mappedId = await getLocalUuidForForeign(foreignStorageId, course.id, EntityType.Courses);
           if (mappedId) {
             localCourseId = mappedId;
             summary.courses.skipped++;
@@ -267,33 +214,32 @@ export async function importAllData(
           
           if (existing.length > 0) {
             localCourseId = existing[0].id;
-            await mapForeignToLocal(foreignStorageId, course.id, existing[0].id, 'course');
+            await mapForeignToLocal(foreignStorageId, course.id, existing[0].id, EntityType.Courses);
             summary.courses.skipped++;
             continue;
           }
         }
 
         const validated = courseSchema.parse(course);
-        const dbLoc = locationToDb(validated.location);
 
         await db.insert(schema.courses).values({
           id: validated.id,
           name: validated.name,
           notes: validated.notes || null,
-          latitude: dbLoc.latitude,
-          longitude: dbLoc.longitude,
+          latitude: validated.latitude ?? null,
+          longitude: validated.longitude ?? null,
         }).onConflictDoUpdate({
           target: schema.courses.id,
           set: {
             name: validated.name,
             notes: validated.notes || null,
-            latitude: dbLoc.latitude,
-            longitude: dbLoc.longitude,
+            latitude: validated.latitude ?? null,
+            longitude: validated.longitude ?? null,
           },
         });
 
         if (foreignStorageId && foreignStorageId !== localStorageId && course.id && !localCourseId) {
-          await mapForeignToLocal(foreignStorageId, course.id, course.id, 'course');
+          await mapForeignToLocal(foreignStorageId, course.id, course.id, EntityType.Courses);
         }
 
         summary.courses.imported++;
@@ -309,7 +255,7 @@ export async function importAllData(
         let localPlayerId: string | undefined;
 
         if (foreignStorageId && foreignStorageId !== localStorageId && player.id) {
-          const mappedId = await getLocalUuidForForeign(foreignStorageId, player.id, 'player');
+          const mappedId = await getLocalUuidForForeign(foreignStorageId, player.id, EntityType.Players);
           if (mappedId) {
             localPlayerId = mappedId;
             summary.players.skipped++;
@@ -324,34 +270,33 @@ export async function importAllData(
           
           if (existing.length > 0) {
             localPlayerId = existing[0].id;
-            await mapForeignToLocal(foreignStorageId, player.id, existing[0].id, 'player');
+            await mapForeignToLocal(foreignStorageId, player.id, existing[0].id, EntityType.Players);
             summary.players.skipped++;
             continue;
           }
         }
 
         const validated = userSchema.parse(player);
-        const dbLoc = locationToDb(validated.location);
 
         await db.insert(schema.players).values({
           id: validated.id,
           name: validated.name,
           notes: validated.notes || null,
-          latitude: dbLoc.latitude,
-          longitude: dbLoc.longitude,
+          latitude: validated.latitude ?? null,
+          longitude: validated.longitude ?? null,
           isTeam: false,
         }).onConflictDoUpdate({
           target: schema.players.id,
           set: {
             name: validated.name,
             notes: validated.notes || null,
-            latitude: dbLoc.latitude,
-            longitude: dbLoc.longitude,
+            latitude: validated.latitude ?? null,
+            longitude: validated.longitude ?? null,
           },
         });
 
         if (foreignStorageId && foreignStorageId !== localStorageId && player.id && !localPlayerId) {
-          await mapForeignToLocal(foreignStorageId, player.id, player.id, 'player');
+          await mapForeignToLocal(foreignStorageId, player.id, player.id, EntityType.Players);
         }
 
         summary.players.imported++;
@@ -365,14 +310,13 @@ export async function importAllData(
     for (const round of exportData.rounds || []) {
       try {
         const validated = roundSchema.parse(round);
-        const dbLoc = locationToDb(validated.location);
 
         await db.insert(schema.rounds).values({
           id: validated.id,
           name: validated.name,
           notes: validated.notes || null,
-          latitude: dbLoc.latitude,
-          longitude: dbLoc.longitude,
+          latitude: validated.latitude ?? null,
+          longitude: validated.longitude ?? null,
           courseId: validated.courseId || null,
           date: validated.date,
         }).onConflictDoUpdate({
@@ -380,8 +324,8 @@ export async function importAllData(
           set: {
             name: validated.name,
             notes: validated.notes || null,
-            latitude: dbLoc.latitude,
-            longitude: dbLoc.longitude,
+            latitude: validated.latitude ?? null,
+            longitude: validated.longitude ?? null,
             courseId: validated.courseId || null,
             date: validated.date,
           },

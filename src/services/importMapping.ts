@@ -8,6 +8,7 @@ import { getAllCourses } from './storage/courseStorage';
 import { getAllUsers } from './storage/userStorage';
 import { getLocalUuidForForeign } from './storage/uuidMerge';
 import { findMostSimilar } from '../utils/stringSimilarity';
+import { EntityType } from '@/types';
 
 interface EntityMapping {
   foreignId: string;
@@ -44,7 +45,7 @@ export async function getImportMappingInfo(exportText: string): Promise<{
   let courseMapping: EntityMapping | null = null;
   if (parsed.courseId && parsed.courseName && foreignStorageId) {
     // First check if already mapped
-    const existingMapping = await getLocalUuidForForeign(foreignStorageId, parsed.courseId, 'course');
+    const existingMapping = await getLocalUuidForForeign(foreignStorageId, parsed.courseId, EntityType.Courses);
     
     if (existingMapping) {
       // Already mapped, no need to prompt
@@ -80,7 +81,7 @@ export async function getImportMappingInfo(exportText: string): Promise<{
     
     if (foreignStorageId) {
       // Check if already mapped
-      const existingMapping = await getLocalUuidForForeign(foreignStorageId, foreignPlayer.id, 'player');
+      const existingMapping = await getLocalUuidForForeign(foreignStorageId, foreignPlayer.id, EntityType.Players);
       
       if (existingMapping) {
         // Already mapped

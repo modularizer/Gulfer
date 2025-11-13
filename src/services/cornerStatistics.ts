@@ -397,8 +397,6 @@ function collectScoresFromUserRounds(
 
 /**
  * Compute corner value based on configuration
- * @param playerId - The ID of the player whose column we're computing for (used when scoreUserFilter is 'eachUser')
- * @param currentRoundDate - Timestamp of the current round being viewed (to exclude rounds that started at the same time or after)
  */
 export async function computeCornerValue(
   config: CornerConfig | null | undefined,

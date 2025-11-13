@@ -15,13 +15,6 @@ interface PlayerSelectorProps {
   hideHeader?: boolean;
 }
 
-const LOCATION_PRECISION = 1e6;
-
-// Helper to convert database format to application format
-function locationFromDb(lat: number | null, lng: number | null) {
-  if (lat === null || lng === null) return undefined;
-  return { latitude: lat / LOCATION_PRECISION, longitude: lng / LOCATION_PRECISION };
-}
 
 export default function PlayerSelector({
   players,
@@ -46,7 +39,8 @@ export default function PlayerSelector({
         id: p.id,
         name: p.name,
         notes: p.notes || undefined,
-        location: locationFromDb(p.latitude, p.longitude),
+        latitude: p.latitude,
+        longitude: p.longitude,
       }));
       
       setKnownUsers(users);
@@ -133,7 +127,8 @@ export default function PlayerSelector({
         id: p.id,
         name: p.name,
         notes: p.notes || undefined,
-        location: locationFromDb(p.latitude, p.longitude),
+        latitude: p.latitude,
+        longitude: p.longitude,
       }));
       setKnownUsers(users);
     }

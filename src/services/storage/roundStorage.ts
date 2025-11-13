@@ -5,7 +5,7 @@
  */
 
 import { schema, getDatabase } from './db';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { generateUUID } from '@/utils/uuid';
 
 export type Round = typeof schema.rounds.$inferSelect;

@@ -12,16 +12,14 @@ const uuidSchema = z.string().regex(/^[0-9a-f]{16}$/i, 'Must be a 16 character h
 
 /**
  * Base entity schema
- * Shared fields for entities that have id, name, notes, and location
+ * Shared fields for entities that have id, name, notes, latitude, and longitude
  */
 export const baseEntitySchema = z.object({
   id: uuidSchema,
   name: z.string().min(1, 'Name cannot be empty').max(50, 'Name too long'),
   notes: z.string().max(200, 'Notes too long').optional(),
-  location: z.object({
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
-  }).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
 });
 
 export type BaseEntity = z.infer<typeof baseEntitySchema>;
@@ -140,6 +138,19 @@ export const photoSchema = z.object({
 export type Photo = z.infer<typeof photoSchema>;
 
 /**
+ * Entity type - matches actual database table names
+ */
+export enum EntityType {
+  Courses = 'courses',
+  Rounds = 'rounds',
+  Players = 'players',
+  PlayerRounds = 'player_rounds',
+  Holes = 'holes',
+  PlayerRoundHoleScores = 'player_round_hole_scores',
+  Photos = 'photos',
+}
+
+/**
  * Merge entry schema
  * Supports all entity types that can be merged between storage instances
  */
@@ -147,7 +158,7 @@ export const mergeEntrySchema = z.object({
   foreignStorageId: uuidSchema,
   foreignEntityUuid: uuidSchema,
   localEntityUuid: uuidSchema,
-  entityType: z.enum(['course', 'round', 'player', 'user', 'userround', 'hole', 'score', 'photo']),
+  entityType: z.nativeEnum(EntityType),
   mergedAt: z.number().nonnegative(),
 });
 
