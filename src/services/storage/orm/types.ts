@@ -174,10 +174,24 @@ export interface ViewConfig<T = Record<string, any>> {
     viewName: string;
 
     /**
+     * The base TableDriver that this view wraps
+     */
+    tableDriver: TableDriver<any>;
+
+    /**
      * Optional: Computed fields that are computed from the record on select
      * These fields are not stored but computed dynamically when entities are retrieved
      */
-    columns: { [K in keyof T]: ResolvedColumnConfig<T[K]> | ComputedColumnConfig<T[K]> };
+    computedFields?: Array<{
+        field: string;
+        generator: (record: any) => any | Promise<any>;
+    }>;
+
+    /**
+     * Optional: Column definitions (can include computed columns)
+     * These fields are not stored but computed dynamically when entities are retrieved
+     */
+    columns?: { [K in keyof T]: ResolvedColumnConfig<T[K]> | ComputedColumnConfig<T[K]> };
 
     /**
      * Optional: Join configurations

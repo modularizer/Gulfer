@@ -6,8 +6,9 @@
 
 import { Filter } from '../filters';
 import { FieldSelection, LimitOffset } from '../drivers/IStorageDriver';
-import { ViewConfig } from './viewConfig';
+import { ViewConfig, ComputedColumnConfig, ResolvedForeignKeyConfig } from './types';
 import { TableDriver } from './TableDriver';
+import { getFullTableName, tableConfigRegistry } from './table';
 import { storageServiceRegistry } from './TableDriver';
 
 /**
@@ -47,6 +48,34 @@ export class ViewDriver<T extends { id: string }> {
   }
 
   /**
+   * Helper to find the keyName (application field name) for a foreign key column
+   */
+  private _findKeyNameForForeignKeyColumn(fk: ResolvedForeignKeyConfig, tableBuilder: any): string | undefined {
+    for (const [keyName, colConfig] of Object.entries(tableBuilder.config.columns)) {
+      if (colConfig === fk.column) {
+        return keyName as string;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Helper to find the keyName (application field name) for a referenced column
+   */
+  private _findKeyNameForReferencedColumn(columnName: string, tableName: string): string | undefined {
+    const fullTableName = getFullTableName(tableName, undefined);
+    const referencedTable = tableConfigRegistry.get(fullTableName);
+    if (!referencedTable) return undefined;
+    
+    for (const [keyName, colConfig] of Object.entries(referencedTable.config.columns)) {
+      if (colConfig.columnName === columnName) {
+        return keyName as string;
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Apply joins to a single entity
    */
   private async _applyJoins(entity: T): Promise<T> {
@@ -58,18 +87,25 @@ export class ViewDriver<T extends { id: string }> {
 
     for (const join of this.config.joins) {
       const { foreignKey, type, alias, fields = '*' } = join;
-      const relatedTableName = foreignKey.referencesTableName;
-      const relatedService = storageServiceRegistry.get(relatedTableName) as TableDriver<any>;
+      const fullTableName = getFullTableName(foreignKey.referencesTableName, foreignKey.referencesSchemaName);
+      const relatedService = storageServiceRegistry.get(fullTableName) as TableDriver<any>;
 
       if (!relatedService) {
-        console.warn(`Join references table "${relatedTableName}" but service not found in registry`);
+        console.warn(`Join references table "${foreignKey.referencesTableName}" but service not found in registry`);
         continue;
       }
 
-      const fieldValue = (entity as any)[foreignKey.field];
+      // Find the keyName for the foreign key field
+      const fkKeyName = this._findKeyNameForForeignKeyColumn(foreignKey, this.config.tableDriver['builder']);
+      if (!fkKeyName) {
+        console.warn(`Could not find keyName for foreign key column ${foreignKey.column.columnName}`);
+        continue;
+      }
+
+      const fieldValue = (entity as any)[fkKeyName];
       if (fieldValue === undefined || fieldValue === null) {
         // No foreign key value, set join field to null or empty array
-        entityWithJoins[alias || relatedTableName] = type === 'one-to-many' ? [] : null;
+        entityWithJoins[alias || foreignKey.referencesTableName] = type === 'one-to-many' ? [] : null;
         continue;
       }
 
@@ -77,17 +113,18 @@ export class ViewDriver<T extends { id: string }> {
         if (type === 'one-to-one' || type === 'many-to-one') {
           // Join a single related entity
           const relatedEntity = await relatedService.getById(fieldValue, fields);
-          entityWithJoins[alias || relatedTableName] = relatedEntity;
+          entityWithJoins[alias || foreignKey.referencesTableName] = relatedEntity;
         } else if (type === 'one-to-many') {
           // Join an array of related entities
           // Find entities where their foreign key field matches this entity's ID
-          const filter = { [foreignKey.referencesField]: entity.id };
+          const referencesKeyName = this._findKeyNameForReferencedColumn(foreignKey.referencesColumnName, foreignKey.referencesTableName) || 'id';
+          const filter = { [referencesKeyName]: entity.id };
           const relatedEntities = await relatedService.getAllWhere(fields, filter);
-          entityWithJoins[alias || relatedTableName] = relatedEntities;
+          entityWithJoins[alias || foreignKey.referencesTableName] = relatedEntities;
         }
       } catch (error) {
-        console.error(`Error applying join for ${relatedTableName}:`, error);
-        entityWithJoins[alias || relatedTableName] = type === 'one-to-many' ? [] : null;
+        console.error(`Error applying join for ${foreignKey.referencesTableName}:`, error);
+        entityWithJoins[alias || foreignKey.referencesTableName] = type === 'one-to-many' ? [] : null;
       }
     }
 
