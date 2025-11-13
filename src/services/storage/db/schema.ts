@@ -3,7 +3,7 @@
  * Converted from custom ORM to Drizzle format
  */
 
-import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, unique, real, index } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 import type {
   CardModes,
@@ -14,23 +14,36 @@ import type {
   SettingsOther,
 } from './types';
 
-/**
- * Players table
- * Stores both players and users (they share the same schema)
- */
-export const players = sqliteTable('players', {
-  id: text('id').primaryKey().notNull(), // 16 hex character UUID
-  name: text('name').notNull().unique(),
-  notes: text('notes', { length: 200 }),
-  latitude: integer('latitude'), // Stored as integer (multiply by 1e6 for precision)
-  longitude: integer('longitude'), // Stored as integer (multiply by 1e6 for precision)
-  isTeam: integer('is_team', { mode: 'boolean' }).default(false),
-});
 
-/**
- * Team members table
- * Links teams to players
- */
+const baseColumns = {
+    id: text('id').primaryKey().notNull(), // 16 hex character UUID
+    name: text('name').notNull().unique(),
+    notes: text('notes', { length: 200 }),
+    lat: real("lat").notNull(),
+    lng: real("lng").notNull()
+}
+
+
+export enum Sex {
+    MALE = 'MALE',
+    FEMALE = 'FEMALE',
+    MIXED = 'MIXED',
+    UNKNOWN = 'UNKNOWN',
+}
+
+
+export const playerColumns = {
+    ...baseColumns,
+    sex: text("sex", {
+        enum: [Sex.MALE, Sex.FEMALE, Sex.MIXED, Sex.UNKNOWN],
+    }).notNull().default(Sex.UNKNOWN),
+    isTeam: integer('is_team', { mode: 'boolean' }).default(false),
+}
+export const players = sqliteTable('players', playerColumns,
+    (table) => ({
+        latLngIdx: index("lat_lng_idx").on(table.lat, table.lng),
+    })
+);
 export const teamMembers = sqliteTable('team_members', {
   id: text('id').primaryKey().notNull(),
   teamId: text('team_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
@@ -39,30 +52,39 @@ export const teamMembers = sqliteTable('team_members', {
   teamPlayerUnique: unique().on(table.teamId, table.playerId),
 }));
 
+export type HoleMetadataType = string;
+export type HoleMetadata = Record<HoleMetadataType, any>;
+
+
+
+export const sports = sqliteTable('sports', {
+    ...baseColumns,
+    standardNumberOfHoles: integer('sports'),
+    semiStandardNumberOfHoles: integer('sports'),
+    holeMetadataDefaults: text('hole_metadata_defaults', {mode: 'json'}).$type<HoleMetadata>(),
+});
+
+
 /**
  * Courses table
  */
 export const courses = sqliteTable('courses', {
-  id: text('id').primaryKey().notNull(), // 16 hex character UUID
-  name: text('name').notNull().unique(),
-  notes: text('notes', { length: 200 }),
-  latitude: integer('latitude'), // Stored as integer (multiply by 1e6 for precision)
-  longitude: integer('longitude'), // Stored as integer (multiply by 1e6 for precision)
+  ...baseColumns,
+    sportId: text('sport_id').notNull(),
 });
+
+
+
 
 /**
  * Holes table
  */
 export const holes = sqliteTable('holes', {
-  id: text('id').primaryKey().notNull(), // 16 hex character UUID
-  name: text('name').notNull(),
-  notes: text('notes', { length: 200 }),
-  latitude: integer('latitude'), // Stored as integer (multiply by 1e6 for precision)
-  longitude: integer('longitude'), // Stored as integer (multiply by 1e6 for precision)
+  ...baseColumns,
+  sportId: text('sport_id').notNull().references(() => sports.id, { onDelete: 'cascade' }),
   courseId: text('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
   number: integer('number').notNull(),
-  par: integer('par'),
-  distance: integer('distance'),
+  metadata: text('metadata', {mode: 'json'}).$type<HoleMetadata>(),
 }, (table) => ({
   courseNumberUnique: unique().on(table.courseId, table.number),
 }));
@@ -71,11 +93,7 @@ export const holes = sqliteTable('holes', {
  * Rounds table
  */
 export const rounds = sqliteTable('rounds', {
-  id: text('id').primaryKey().notNull(), // 16 hex character UUID
-  name: text('name').notNull(),
-  notes: text('notes', { length: 200 }),
-  latitude: integer('latitude'), // Stored as integer (multiply by 1e6 for precision)
-  longitude: integer('longitude'), // Stored as integer (multiply by 1e6 for precision)
+  ...baseColumns,
   courseId: text('course_id').references(() => courses.id, { onDelete: 'set null' }),
   date: integer('date').notNull(), // Stored as milliseconds (timestamp)
 }, (table) => ({
