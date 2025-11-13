@@ -53,7 +53,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   useEffect(() => {
     const ensureCurrentUser = async () => {
       const db = await getDatabase();
-      const currentUserId = await getCurrentUserId();
+        const currentUserId = await getCurrentUserId();
       
       if (currentUserId) {
         const results = await db.select()
@@ -66,22 +66,22 @@ export default function AppLayout({ children }: AppLayoutProps) {
         }
         
         if (results.length > 0) {
-          // Update existing user
+            // Update existing user
           await db.update(schema.players)
             .set({ name: 'You' })
             .where(eq(schema.players.id, currentUserId));
-        } else {
-          // Create new user
+          } else {
+            // Create new user
           const userId = await generateUUID();
           await db.insert(schema.players).values({
-            id: userId,
-            name: 'You',
+              id: userId,
+              name: 'You',
             notes: null,
             latitude: null,
             longitude: null,
             isTeam: false,
           });
-          await setCurrentUserId(userId);
+            await setCurrentUserId(userId);
         }
       } else {
         // No current user, create one

@@ -8,6 +8,16 @@ import * as schema from './schema';
 
 export { schema, getDatabase, type Database };
 
+// Export schema types for convenience
+export type {
+  CardModes,
+  ColumnVisibilityConfig,
+  CornerStatisticsConfig,
+  NavigationState,
+  ModalStates,
+  SettingsOther,
+} from './types';
+
 /**
  * Initialize database (call once at app startup)
  */

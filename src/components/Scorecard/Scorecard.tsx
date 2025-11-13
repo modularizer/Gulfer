@@ -134,14 +134,14 @@ export default function Scorecard({
         if (storedCurrentUserId && players.length > 0) {
           // Find player with matching ID
           const userPlayer = players.find(p => p.id === storedCurrentUserId);
-          if (userPlayer) {
-            setResolvedCurrentUserId(userPlayer.id);
-          } else {
-            // Default to first player if no match
+            if (userPlayer) {
+              setResolvedCurrentUserId(userPlayer.id);
+            } else {
+              // Default to first player if no match
+              setResolvedCurrentUserId(players[0]?.id);
+            }
+          } else if (players.length > 0) {
             setResolvedCurrentUserId(players[0]?.id);
-          }
-        } else if (players.length > 0) {
-          setResolvedCurrentUserId(players[0]?.id);
         }
       }
     };

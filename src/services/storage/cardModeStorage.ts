@@ -12,7 +12,7 @@ function isValidMode(mode: string | null): mode is CardMode {
 
 export async function loadCardMode(page: string, fallback: CardMode = 'medium'): Promise<CardMode> {
   const settings = await getSettings();
-  
+
   if (settings.cardModes) {
     const stored = settings.cardModes[page];
     if (isValidMode(stored)) {

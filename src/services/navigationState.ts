@@ -1,12 +1,9 @@
 /**
  * Navigation state persistence service
- * Uses Drizzle ORM directly
+ * Uses Drizzle ORM with well-defined schema columns
  */
 
 import { getSettings, updateSettings } from './storage/settingsHelper';
-
-const NAVIGATION_STATE_KEY = 'gulfer-navigation-state';
-const MODAL_STATE_KEY_PREFIX = 'gulfer-modal-state-';
 
 export interface NavigationState {
   pathname: string;
@@ -29,11 +26,7 @@ export async function saveNavigationState(pathname: string, searchParams?: Recor
     timestamp: Date.now(),
   };
   
-  const settings = await getSettings();
-  const other = settings.other ? { ...settings.other } : {};
-  other[NAVIGATION_STATE_KEY] = state;
-  
-  await updateSettings({ other });
+  await updateSettings({ navigationState: state });
 }
 
 /**
@@ -41,27 +34,14 @@ export async function saveNavigationState(pathname: string, searchParams?: Recor
  */
 export async function getNavigationState(): Promise<NavigationState | null> {
   const settings = await getSettings();
-  
-  if (settings.other) {
-    const stored = settings.other[NAVIGATION_STATE_KEY];
-    if (stored) {
-      return stored as NavigationState;
-    }
-  }
-  return null;
+  return settings.navigationState || null;
 }
 
 /**
  * Clear the saved navigation state
  */
 export async function clearNavigationState(): Promise<void> {
-  const settings = await getSettings();
-  
-  if (settings.other) {
-    const other = { ...settings.other };
-    delete other[NAVIGATION_STATE_KEY];
-    await updateSettings({ other });
-  }
+  await updateSettings({ navigationState: null });
 }
 
 /**
@@ -70,17 +50,15 @@ export async function clearNavigationState(): Promise<void> {
  * @param modalState The modal state object
  */
 export async function saveModalState(routePath: string, modalState: ModalState): Promise<void> {
-  const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
-  const stateWithTimestamp = {
+  const settings = await getSettings();
+  const modalStates = settings.modalStates ? { ...settings.modalStates } : {};
+  
+  modalStates[routePath] = {
     ...modalState,
     timestamp: Date.now(),
   };
   
-  const settings = await getSettings();
-  const other = settings.other ? { ...settings.other } : {};
-  other[key] = stateWithTimestamp;
-  
-  await updateSettings({ other });
+  await updateSettings({ modalStates });
 }
 
 /**
@@ -88,30 +66,30 @@ export async function saveModalState(routePath: string, modalState: ModalState):
  * @param routePath The route pathname
  */
 export async function getModalState(routePath: string, maxAge?: number): Promise<ModalState | null> {
-  const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
   const settings = await getSettings();
   
-  if (settings.other) {
-    const stored = settings.other[key];
-    if (!stored) {
-      return null;
-    }
-    const state = stored as ModalState;
-    
-    // Check expiration if maxAge is provided and state has a timestamp
-    if (maxAge !== undefined && state.timestamp) {
-      const age = Date.now() - state.timestamp;
-      if (age > maxAge) {
-        // State is too old, clear it and return null
-        await clearModalState(routePath);
-        return null;
-      }
-    }
-    
-    return state;
+  if (!settings.modalStates) {
+    return null;
   }
   
-  return null;
+  const stored = settings.modalStates[routePath];
+  if (!stored) {
+    return null;
+  }
+  
+  const state = stored as ModalState;
+  
+  // Check expiration if maxAge is provided and state has a timestamp
+  if (maxAge !== undefined && state.timestamp) {
+    const age = Date.now() - state.timestamp;
+    if (age > maxAge) {
+      // State is too old, clear it and return null
+      await clearModalState(routePath);
+      return null;
+    }
+  }
+  
+  return state;
 }
 
 /**
@@ -119,13 +97,12 @@ export async function getModalState(routePath: string, maxAge?: number): Promise
  * @param routePath The route pathname
  */
 export async function clearModalState(routePath: string): Promise<void> {
-  const key = `${MODAL_STATE_KEY_PREFIX}${routePath}`;
   const settings = await getSettings();
   
-  if (settings.other) {
-    const other = { ...settings.other };
-    delete other[key];
-    await updateSettings({ other });
+  if (settings.modalStates) {
+    const modalStates = { ...settings.modalStates };
+    delete modalStates[routePath];
+    await updateSettings({ modalStates });
   }
 }
 

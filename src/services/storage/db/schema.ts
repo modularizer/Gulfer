@@ -3,8 +3,16 @@
  * Converted from custom ORM to Drizzle format
  */
 
-import { sqliteTable, text, integer, unique, json } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core';
 import { relations, sql } from 'drizzle-orm';
+import type {
+  CardModes,
+  ColumnVisibilityConfig,
+  CornerStatisticsConfig,
+  NavigationState,
+  ModalStates,
+  SettingsOther,
+} from './types';
 
 /**
  * Players table
@@ -132,10 +140,12 @@ export const photos = sqliteTable('photos', {
  */
 export const settings = sqliteTable('settings', {
   userId: text('user_id').primaryKey().notNull().references(() => players.id, { onDelete: 'cascade' }),
-  cardModes: json('card_modes').$type<Record<string, string>>(), // { [page: string]: CardMode }
-  columnVisibility: json('column_visibility').$type<Record<string, boolean | undefined>>(), // ColumnVisibilityConfig
-  cornerConfig: json('corner_config').$type<any>(), // CornerStatisticsConfig
-  other: json('other').$type<Record<string, any>>(), // { [key: string]: any } for other key-value settings
+  cardModes: text('card_modes', { mode: 'json' }).$type<CardModes>(),
+  columnVisibility: text('column_visibility', { mode: 'json' }).$type<ColumnVisibilityConfig>(),
+  cornerConfig: text('corner_config', { mode: 'json' }).$type<CornerStatisticsConfig>(),
+  navigationState: text('navigation_state', { mode: 'json' }).$type<NavigationState | null>(),
+  modalStates: text('modal_states', { mode: 'json' }).$type<ModalStates | null>(),
+  other: text('other', { mode: 'json' }).$type<SettingsOther>(),
   updatedAt: integer('updated_at').notNull().$defaultFn(() => Date.now()),
 });
 

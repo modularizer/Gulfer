@@ -5,11 +5,11 @@
  */
 
 import { User } from './storage/userStorage';
-import { getStorageId } from './storage/storageId';
+import { getStorageId } from './storage/platform/platformStorage';
 import { saveUser, getUserByName, generateUserId, getUserById } from './storage/userStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
 import { setCurrentUserId, getCurrentUserId } from './storage/platform/currentUserStorage';
-import { normalizeExportText } from '../utils';
+import { normalizeExportText } from '@/utils';
 
 /**
  * Export a player to a human-readable text format
@@ -129,7 +129,7 @@ export async function importPlayer(
           await mapForeignToLocal(foreignStorageId, parsed.playerId, existingPlayer.id, 'player');
         } else {
           // Create new player
-          localPlayerId = await generateUserId();
+          localPlayerId = generateUserId();
           const newPlayer: User = {
             id: localPlayerId,
             name: parsed.playerName,
@@ -147,7 +147,7 @@ export async function importPlayer(
       }
     }
   } else {
-    // Legacy import without UUID - just find by name or create new
+    // Import without UUID - find by name or create new
     const existingPlayer = await getUserByName(parsed.playerName);
     
     if (existingPlayer) {

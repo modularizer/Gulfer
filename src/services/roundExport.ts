@@ -2,13 +2,13 @@
  * Service for exporting and importing rounds
  */
 
-import { Round, Course, Player, Hole, Score } from '../types';
+import { Round, Course, Player, Hole, Score } from '@/types';
 import { getAllCourses, saveCourse, getCourseByName, getCourseById, generateCourseId } from './storage/courseStorage';
-import { getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, getUserById } from './storage/userStorage';
-import { saveRound, generateRoundId, getRoundById } from './storage/roundStorage';
+import { getAllUsers, saveUser, getUserIdForPlayerName,  } from './storage/userStorage';
+import { saveRound, generateRoundId, getRoundById, type RoundWithDetails } from './storage/roundStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
-import { getStorageId } from './storage/storageId';
-import { normalizeExportText } from '../utils';
+import { getStorageId } from './storage/platform/platformStorage';
+import { normalizeExportText } from '@/utils';
 
 /**
  * Parse exported text into structured data
@@ -417,7 +417,7 @@ export async function importRound(
               ? courseHolesData 
               : Array.from({ length: courseHoles }, (_, i) => ({ number: i + 1 }));
             
-            localCourseId = await generateCourseId();
+            localCourseId = generateCourseId();
             const newCourse: Course = {
               id: localCourseId,
               name: courseName,
@@ -433,7 +433,7 @@ export async function importRound(
         }
       }
     } else if (courseName && !foreignCourseId) {
-      // Legacy import without course UUID - just find by name
+      // Import without course UUID - find by name
       const existingCourse = await getCourseByName(courseName);
       localCourseId = existingCourse?.id;
     }
@@ -486,7 +486,7 @@ export async function importRound(
           }
         }
       } else {
-        // Legacy import without player UUID - find or create by name
+        // Import without player UUID - find or create by name
         const existingUser = allUsers.find(u => u.name.trim().toLowerCase() === playerData.name.trim().toLowerCase());
         if (existingUser) {
           localPlayerId = existingUser.id;
@@ -509,30 +509,37 @@ export async function importRound(
       });
     }
 
-    // Map scores to player IDs
-    const roundScores: Score[] = scores.map(score => {
+    // Create new round with UUID (always generate new local UUID for rounds)
+    // Rounds are not merged - each import creates a new round
+    const roundId = generateRoundId();
+    const courseNameForRound = localCourseId ? (await getCourseById(localCourseId))?.name : courseName;
+    
+    // Map scores to Score type (with userId and roundId)
+    const roundScores: Score[] = scores.map((score) => {
       const player = importedPlayers.find(p => p.name === score.playerName);
       if (!player) {
         throw new Error(`Player not found: ${score.playerName}`);
       }
       return {
-        playerId: player.id,
+        id: generateUUID(),
+        userId: player.id,
+        roundId: roundId,
         holeNumber: score.holeNumber,
         throws: score.throws,
+        complete: true,
       };
     });
-
-    // Create new round with UUID (always generate new local UUID for rounds)
-    // Rounds are not merged - each import creates a new round
-    const roundId = await generateRoundId();
-    const newRound: Round = {
+    
+    const newRound: RoundWithDetails = {
       id: roundId,
-      title,
+      name: title,
+      notes: notes || undefined,
+      location: undefined,
       date: dateTimestamp,
+      courseId: localCourseId,
       players: importedPlayers,
       scores: roundScores,
-      courseName: localCourseId ? (await getCourseById(localCourseId))?.name : courseName,
-      notes,
+      courseName: courseNameForRound,
     };
 
     await saveRound(newRound);

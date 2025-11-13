@@ -1,169 +1,191 @@
 /**
- * Storage service for managing Photo entities
- * Uses Drizzle ORM directly
+ * Photo storage service
+ * Handles both image storage (with file system) and photo entity management
+ * Uses Drizzle ORM to store photo data
+ * On mobile: Stores file path in database, actual file in file system
+ * On web: Stores base64 data in database
  */
 
-import { Photo, photoSchema } from '@/types';
 import { schema, getDatabase } from './db';
-import { eq, and } from 'drizzle-orm';
+import * as FileSystem from 'expo-file-system';
+import * as Crypto from 'expo-crypto';
+import { Platform } from 'react-native';
+import { eq } from 'drizzle-orm';
 import { generateUUID } from '@/utils/uuid';
 
-/**
- * Get all photos
- */
-export async function getAllPhotos(): Promise<Photo[]> {
-  const db = await getDatabase();
-  const photos = await db.select().from(schema.photos);
-  
-  return photos.map(photo => ({
-    id: photo.id,
-    refId: photo.refId,
-    hash: photo.hash,
-  }));
+const IMAGE_DIR = `${FileSystem.documentDirectory}images/`;
+
+// Ensure images directory exists
+async function ensureImageDir(): Promise<void> {
+  if (Platform.OS !== 'web') {
+    const dirInfo = await FileSystem.getInfoAsync(IMAGE_DIR);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(IMAGE_DIR, { intermediates: true });
+    }
+  }
 }
 
 /**
- * Get photos by refId (for any entity)
+ * Hash an image file and return the hash
  */
-export async function getPhotosByRefId(refId: string): Promise<Photo[]> {
+async function hashImage(uri: string): Promise<string> {
+  let base64: string;
+  
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    
+    base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64Data = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    
+    if (base64.startsWith('data:')) {
+      base64 = base64.split(',')[1];
+    }
+  } else {
+    base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+  }
+  
+  const hash = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    base64
+  );
+  
+  return hash;
+}
+
+/**
+ * Store an image by its hash
+ * Returns the hash and file URI if successful, or null if there was an error
+ */
+export async function storeImage(uri: string): Promise<{ hash: string; fileUri: string } | null> {
+  const hash = await hashImage(uri);
   const db = await getDatabase();
-  const photos = await db.select()
+  
+  // Check if already stored in photos table
+  const existing = await db.select()
     .from(schema.photos)
-    .where(eq(schema.photos.refId, refId));
+    .where(eq(schema.photos.hash, hash))
+    .limit(1);
   
-  return photos.map(photo => ({
-    id: photo.id,
-    refId: photo.refId,
-    hash: photo.hash,
-  }));
+  if (existing.length > 0 && existing[0].data) {
+    // Already stored
+    if (Platform.OS === 'web') {
+      const dataUri = `data:image/jpeg;base64,${existing[0].data}`;
+      return { hash, fileUri: dataUri };
+    } else {
+      return { hash, fileUri: existing[0].data }; // data is file path on mobile
+    }
+  }
+  
+  if (Platform.OS === 'web') {
+    // On web, store base64 in database
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64Data = result.includes(',') ? result.split(',')[1] : result;
+        resolve(base64Data);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    
+    const cleanBase64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
+    
+    // Store in photos table (create or update)
+    if (existing.length > 0) {
+      // Update existing photo record with data
+      await db.update(schema.photos)
+        .set({ data: cleanBase64 })
+        .where(eq(schema.photos.hash, hash));
+    } else {
+      // Create new photo record with data (refId can be a placeholder)
+      await db.insert(schema.photos).values({
+        id: generateUUID(),
+        refId: generateUUID(), // Placeholder, will be updated when photo is linked to entity
+        refTable: null,
+        refSchema: null,
+        hash,
+        data: cleanBase64,
+        createdAt: Date.now(),
+      });
+    }
+    
+    const dataUri = `data:image/jpeg;base64,${cleanBase64}`;
+    return { hash, fileUri: dataUri };
+  } else {
+    // On mobile, store file path in database, actual file in file system
+    await ensureImageDir();
+    const fileUri = `${IMAGE_DIR}${hash}.jpg`;
+    
+    // Copy file to permanent location
+    await FileSystem.copyAsync({
+      from: uri,
+      to: fileUri,
+    });
+    
+    // Store file path in photos table
+    if (existing.length > 0) {
+      // Update existing photo record with data
+      await db.update(schema.photos)
+        .set({ data: fileUri })
+        .where(eq(schema.photos.hash, hash));
+    } else {
+      // Create new photo record with data
+      await db.insert(schema.photos).values({
+        id: generateUUID(),
+        refId: generateUUID(), // Placeholder
+        refTable: null,
+        refSchema: null,
+        hash,
+        data: fileUri,
+        createdAt: Date.now(),
+      });
+    }
+    
+    return { hash, fileUri };
+  }
 }
 
 /**
- * Get photo hashes by refId (convenience method)
+ * Get image URI by hash
  */
-export async function getPhotoHashesByRefId(refId: string): Promise<string[]> {
-  const photos = await getPhotosByRefId(refId);
-  return photos.map(photo => photo.hash);
-}
-
-/**
- * Get a photo by ID
- */
-export async function getPhotoById(photoId: string): Promise<Photo | null> {
+export async function getImageByHash(hash: string): Promise<string | null> {
   const db = await getDatabase();
   const results = await db.select()
     .from(schema.photos)
-    .where(eq(schema.photos.id, photoId))
+    .where(eq(schema.photos.hash, hash))
     .limit(1);
   
-  if (results.length === 0) return null;
+  if (results.length === 0 || !results[0].data) return null;
   
   const photo = results[0];
-  return {
-    id: photo.id,
-    refId: photo.refId,
-    hash: photo.hash,
-  };
-}
-
-/**
- * Save a photo to storage
- */
-export async function savePhoto(photo: Photo): Promise<void> {
-  const validated = photoSchema.parse(photo);
-  const db = await getDatabase();
   
-  await db.insert(schema.photos).values({
-    id: validated.id,
-    refId: validated.refId,
-    refTable: null,
-    refSchema: null,
-    hash: validated.hash,
-  }).onConflictDoUpdate({
-    target: schema.photos.id,
-    set: {
-      refId: validated.refId,
-      hash: validated.hash,
-    },
-  });
-}
-
-/**
- * Save multiple photos at once
- */
-export async function savePhotos(photos: Photo[]): Promise<void> {
-  const db = await getDatabase();
-  
-  for (const photo of photos) {
-    const validated = photoSchema.parse(photo);
-    await db.insert(schema.photos).values({
-      id: validated.id,
-      refId: validated.refId,
-      refTable: null,
-      refSchema: null,
-      hash: validated.hash,
-    }).onConflictDoUpdate({
-      target: schema.photos.id,
-      set: {
-        refId: validated.refId,
-        hash: validated.hash,
-      },
-    });
+  if (Platform.OS === 'web') {
+    return `data:image/jpeg;base64,${photo.data}`;
+  } else {
+    // On mobile, check if file still exists
+    const fileInfo = await FileSystem.getInfoAsync(photo.data);
+    if (fileInfo.exists) {
+      return photo.data;
+    }
+    // File missing, clear data from database
+    await db.update(schema.photos)
+      .set({ data: null })
+      .where(eq(schema.photos.hash, hash));
+    return null;
   }
-}
-
-/**
- * Delete a photo by ID
- */
-export async function deletePhoto(photoId: string): Promise<void> {
-  const db = await getDatabase();
-  await db.delete(schema.photos).where(eq(schema.photos.id, photoId));
-}
-
-/**
- * Delete all photos for a specific refId
- */
-export async function deletePhotosByRefId(refId: string): Promise<void> {
-  const db = await getDatabase();
-  await db.delete(schema.photos).where(eq(schema.photos.refId, refId));
-}
-
-/**
- * Generate a new unique photo ID (16 hex characters)
- */
-export async function generatePhotoId(): Promise<string> {
-  return generateUUID();
-}
-
-/**
- * Add a photo to an entity (creates a new Photo record)
- */
-export async function addPhotoToEntity(refId: string, hash: string): Promise<Photo> {
-  const photoId = await generatePhotoId();
-  const photo: Photo = {
-    id: photoId,
-    refId,
-    hash,
-  };
-  await savePhoto(photo);
-  return photo;
-}
-
-/**
- * Add multiple photos to an entity
- */
-export async function addPhotosToEntity(refId: string, hashes: string[]): Promise<Photo[]> {
-  const photos: Photo[] = [];
-  
-  for (const hash of hashes) {
-    const id = await generateUUID();
-    photos.push({
-      id,
-      refId,
-      hash,
-    });
-  }
-  
-  await savePhotos(photos);
-  return photos;
 }

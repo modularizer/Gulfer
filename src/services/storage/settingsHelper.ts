@@ -1,19 +1,25 @@
 /**
  * Helper for getting the settings userId and working with settings
- * Since we only have one user, we use a constant or get from first player
+ * Uses the current user ID from platform storage
  */
 
 import { schema, getDatabase, Database } from './db';
 import { eq } from 'drizzle-orm';
-
-const SETTINGS_USER_ID_KEY = 'default';
+import { getCurrentUserId } from './platform/currentUserStorage';
 
 /**
  * Get the userId for settings
- * Returns a constant since we only have one user
+ * Returns the current user ID from platform storage
+ * Throws an error if no current user is set (should be handled by AppLayout)
  */
 export async function getSettingsUserId(): Promise<string> {
-  return SETTINGS_USER_ID_KEY;
+  const currentUserId = await getCurrentUserId();
+  
+  if (!currentUserId) {
+    throw new Error('No current user set. The app should ensure a current user exists before accessing settings.');
+  }
+  
+  return currentUserId;
 }
 
 /**
@@ -88,6 +94,8 @@ export async function ensureSettingsExists(db?: Database, userId?: string): Prom
       cardModes: null,
       columnVisibility: null,
       cornerConfig: null,
+      navigationState: null,
+      modalStates: null,
       other: null,
       updatedAt: Date.now(),
     });

@@ -1,9 +1,10 @@
 /**
  * Service for computing hole-level statistics across all rounds
+ * Uses userRounds (playerRounds) directly from database
  */
 
-import { Round, Score } from '../types';
-import { getAllRounds } from './storage/roundStorage';
+import type { Score } from '../types';
+import { getUserRoundsForCourseInDateRange } from './storage/userRoundQueries';
 
 export interface HoleStatistics {
   worst: number | null;      // Worst (maximum) score
@@ -76,36 +77,20 @@ export async function computeHoleStatistics(
   }
 
   try {
-    // Get all rounds for this course
-    const allRounds = await getAllRounds();
-    
-    // Filter by course and date
-    const courseRounds = allRounds.filter(round => {
-      // Must be the correct course
-      if (round.courseId !== courseId) return false;
-      
-      // Exclude rounds that started at the same time or after the current round
-      if (currentRoundDate !== undefined && round.date >= currentRoundDate) {
-        return false;
-      }
-      
-      return true;
-    });
+    // Get all userRounds for this course with date filter
+    const userRounds = await getUserRoundsForCourseInDateRange(
+      courseId,
+      undefined, // sinceDate
+      undefined, // untilDate
+      currentRoundDate // beforeDate
+    );
 
     // Collect all completed scores for this hole
-    // TODO: Update to use UserRounds instead of round.scores
     const scores: number[] = [];
-    for (const round of courseRounds) {
-      const roundScores = (round as any).scores;
-      if (roundScores) {
-        for (const score of roundScores) {
-          if (score.holeNumber === holeNumber) {
-            // Use complete field if available, otherwise fall back to throws > 0 for backward compatibility
-            const isComplete = score.complete !== undefined ? score.complete : score.throws > 0;
-            if (isComplete) {
-              scores.push(score.throws);
-            }
-          }
+    for (const ur of userRounds) {
+      for (const score of ur.scores) {
+        if (score.holeNumber === holeNumber && score.complete) {
+          scores.push(score.throws);
         }
       }
     }
@@ -179,38 +164,25 @@ export async function computeTotalRoundStatistics(
   }
 
   try {
-    // Get all rounds for this course
-    const allRounds = await getAllRounds();
-    
-    // Filter by course and date
-    const courseRounds = allRounds.filter(round => {
-      // Must be the correct course
-      if (round.courseId !== courseId) return false;
-      
-      // Exclude rounds that started at the same time or after the current round
-      if (currentRoundDate !== undefined && round.date >= currentRoundDate) {
-        return false;
-      }
-      
-      return true;
-    });
+    // Get all userRounds for this course with date filter
+    const userRounds = await getUserRoundsForCourseInDateRange(
+      courseId,
+      undefined, // sinceDate
+      undefined, // untilDate
+      currentRoundDate // beforeDate
+    );
 
     // Collect total scores for each user round (user + round combination)
     const totalScores: number[] = [];
     
-    // TODO: Update to use UserRounds instead of round.scores
-    for (const round of courseRounds) {
-      const roundScores = (round as any).scores;
-      if (roundScores && round.players) {
-        for (const player of round.players) {
-          const playerScores = roundScores.filter((s: any) => s.playerId === player.id);
-          const total = playerScores.reduce((sum: number, s: any) => sum + s.throws, 0);
-          
-          // Only include if total is > 0 (has at least one score)
-          if (total > 0) {
-            totalScores.push(total);
-          }
-        }
+    for (const ur of userRounds) {
+      // Calculate total for this userRound
+      const completedScores = ur.scores.filter(s => s.complete);
+      const total = completedScores.reduce((sum, s) => sum + s.throws, 0);
+      
+      // Only include if total is > 0 (has at least one score)
+      if (total > 0) {
+        totalScores.push(total);
       }
     }
 

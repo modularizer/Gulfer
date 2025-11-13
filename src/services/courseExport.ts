@@ -5,7 +5,7 @@
  */
 
 import { Course, Hole } from '../types';
-import { getStorageId } from './storage/storageId';
+import { getStorageId } from './storage/platform/platformStorage';
 import { saveCourse, getCourseByName, generateCourseId, getCourseById } from './storage/courseStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
 import { normalizeExportText } from '../utils';
@@ -170,7 +170,7 @@ export async function importCourse(
           await mapForeignToLocal(foreignStorageId, parsed.courseId, existingCourse.id, 'course');
         } else {
           // Create new course
-          localCourseId = await generateCourseId();
+          localCourseId = generateCourseId();
           const newCourse: Course = {
             id: localCourseId,
             name: parsed.courseName,
@@ -185,7 +185,7 @@ export async function importCourse(
       }
     }
   } else {
-    // Legacy import without UUID - just find by name or create new
+    // Import without UUID - find by name or create new
     const existingCourse = await getCourseByName(parsed.courseName);
     
     if (existingCourse) {

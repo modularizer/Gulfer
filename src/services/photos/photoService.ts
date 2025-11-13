@@ -5,7 +5,7 @@
 
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { storeImage } from '../storage/imageStorage';
+import { storeImage } from '../storage/photoStorage';
 
 export interface PhotoResult {
   hash: string; // Image hash instead of URI

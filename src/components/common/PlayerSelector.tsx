@@ -50,8 +50,8 @@ export default function PlayerSelector({
       }));
       
       setKnownUsers(users);
-      const currentId = await getCurrentUserId();
-      setCurrentUserId(currentId);
+        const currentId = await getCurrentUserId();
+        setCurrentUserId(currentId);
     };
 
     loadUsers();

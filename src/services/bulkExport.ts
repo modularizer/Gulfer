@@ -5,8 +5,8 @@
 
 import { schema, getDatabase } from './storage/db';
 import { eq } from 'drizzle-orm';
-import { getImageByHash } from './storage/imageStorage';
-import { getStorageId } from './storage/storageId';
+import { getImageByHash } from './storage/photoStorage';
+import { getStorageId } from './storage/platform/platformStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
 import { setCurrentUserId } from './storage/platform/currentUserStorage';
 import { Platform } from 'react-native';
@@ -86,9 +86,6 @@ export async function exportAllData(): Promise<BulkExportData> {
     // Get all unique image hashes
     const allImageHashes = new Set<string>();
     photoHashesByRefId.forEach(hashes => hashes.forEach(h => allImageHashes.add(h)));
-    rounds.forEach(round => {
-      // Photos are stored separately now, but check if any legacy data exists
-    });
 
     // Load all image data
     const images: Record<string, string> = {};
@@ -205,8 +202,8 @@ export async function importAllData(
               .where(eq(schema.photos.hash, hash));
           } else {
             await db.insert(schema.photos).values({
-              id: await generateUUID(),
-              refId: await generateUUID(), // Placeholder
+              id: generateUUID(),
+              refId: generateUUID(), // Placeholder
               refTable: null,
               refSchema: null,
               hash,
@@ -232,8 +229,8 @@ export async function importAllData(
               .where(eq(schema.photos.hash, hash));
           } else {
             await db.insert(schema.photos).values({
-              id: await generateUUID(),
-              refId: await generateUUID(), // Placeholder
+              id: generateUUID(),
+              refId: generateUUID(), // Placeholder
               refTable: null,
               refSchema: null,
               hash,
@@ -402,7 +399,7 @@ export async function importAllData(
       try {
         for (const hash of hashes) {
           await db.insert(schema.photos).values({
-            id: await generateUUID(),
+            id: generateUUID(),
             refId,
             refTable: null,
             refSchema: null,

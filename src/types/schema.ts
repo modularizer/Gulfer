@@ -97,9 +97,11 @@ export type Round = z.infer<typeof roundSchema>;
 /**
  * Course schema
  * Note: Holes are stored separately in their own table for better query performance
- * Extends base entity schema
+ * Extends base entity schema with optional holes array
  */
-export const courseSchema = baseEntitySchema;
+export const courseSchema = baseEntitySchema.extend({
+  holes: z.array(holeSchema).optional(),
+});
 
 export type Course = z.infer<typeof courseSchema>;
 

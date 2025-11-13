@@ -5,7 +5,7 @@
  */
 
 import { schema, getDatabase } from './db';
-import { getStorageId } from './storageId';
+import { getStorageId } from './platform/platformStorage';
 import { eq, and } from 'drizzle-orm';
 import { MergeEntry } from '@/types';
 import { generateUUID } from '@/utils/uuid';
@@ -73,7 +73,7 @@ export async function mapForeignToLocal(
   } else {
     // Create new
     await db.insert(schema.mergeEntries).values({
-      id: await generateUUID(),
+      id: generateUUID(),
       foreignStorageId,
       foreignId: foreignEntityUuid,
       refTable: entityType,
