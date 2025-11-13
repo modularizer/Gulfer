@@ -8,6 +8,7 @@ import { getAllCourses } from '@/services/storage/courseStorage';
 import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage';
 import { useScorecard } from '@/contexts/ScorecardContext';
 import HillFooter from './Footer/HillFooter';
+import type { Round } from '@/services/storage/db/types';
 
 interface FooterProps {}
 

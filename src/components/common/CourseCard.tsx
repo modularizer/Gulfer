@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { encodeNameForUrl } from '@utils/urlEncoding';
 import { sharedCardStyles } from './sharedCardStyles';
 import { CardMode } from './CardModeToggle';
+import type { Course, Player } from '@/services/storage/db/types';
 
 interface CourseCardProps {
   course: Course;

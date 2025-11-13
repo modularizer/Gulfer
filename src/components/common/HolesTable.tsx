@@ -5,6 +5,7 @@ import NumberModal from './NumberModal';
 import GStatsCell from './GStatsCell';
 import { computeAllHoleStatistics, HoleStatistics } from '@/services/holeStatistics';
 import { scorecardTableStyles } from '@/styles/scorecardTableStyles';
+import type { Hole } from '@/services/storage/db/types';
 
 interface HolesTableProps {
   holes: Hole[];

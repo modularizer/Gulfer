@@ -7,6 +7,8 @@
 import { schema, getDatabase } from './db';
 import { eq, inArray } from 'drizzle-orm';
 import { generateUUID } from '@/utils/uuid';
+import { getCourseById } from './courseStorage';
+import type { Player } from './db/types';
 
 export type Round = typeof schema.rounds.$inferSelect;
 export type RoundInsert = typeof schema.rounds.$inferInsert;
@@ -262,6 +264,52 @@ export async function savePlayerRoundsForRound(roundId: string, playerRounds: Pl
   if (playerRounds.length > 0) {
     await db.insert(schema.playerRounds).values(playerRounds);
   }
+}
+
+/**
+ * Get course name from course ID
+ * Returns the course name or undefined if not found
+ */
+export async function getCourseNameFromId(courseId: string | null | undefined): Promise<string | undefined> {
+  if (!courseId) {
+    return undefined;
+  }
+  const course = await getCourseById(courseId);
+  return course?.name;
+}
+
+/**
+ * Get all players for a round
+ * Returns array of full Player objects
+ */
+export async function getPlayersForRound(roundId: string): Promise<Player[]> {
+  const db = await getDatabase();
+  
+  // Get all playerRounds for this round
+  const playerRounds = await db
+    .select()
+    .from(schema.playerRounds)
+    .where(eq(schema.playerRounds.roundId, roundId));
+  
+  if (playerRounds.length === 0) {
+    return [];
+  }
+  
+  // Get unique player IDs
+  const playerIds = Array.from(new Set(playerRounds.map(pr => pr.playerId)));
+  
+  // Get all players
+  const allPlayers = playerIds.length > 0
+    ? await db
+        .select()
+        .from(schema.players)
+        .where(playerIds.length === 1 
+          ? eq(schema.players.id, playerIds[0])
+          : inArray(schema.players.id, playerIds)
+        )
+    : [];
+  
+  return allPlayers;
 }
 
 export async function getAllScoresForRound(roundId: string): Promise<Score[]> {

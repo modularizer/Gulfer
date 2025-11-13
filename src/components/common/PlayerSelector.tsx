@@ -7,6 +7,8 @@ import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage
 import { generateUUID } from '@/utils/uuid';
 import { getShadowStyle } from '@/utils';
 import NameUsernameDialog from './NameUsernameDialog';
+import type { Player } from '@/services/storage/db/types';
+import { User } from '@/services/storage/userStorage'; // User is an alias for Player
 
 interface PlayerSelectorProps {
   players: Player[];

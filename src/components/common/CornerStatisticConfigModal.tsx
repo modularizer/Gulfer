@@ -2,19 +2,36 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native';
 import { Dialog, Portal, Text, useTheme, Chip, Menu, Icon, IconButton, Button} from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { CornerConfig, UserFilter, AccumulationMode, RoundSelection, SinceDateOption, UntilDateOption } from '@/services/cornerStatistics';
+import { 
+  CornerConfig, 
+  UserFilter, 
+  AccumulationMode, 
+  RoundSelection, 
+  SinceDateOption, 
+  UntilDateOption,
+  UserFilterEnum,
+  AccumulationModeEnum,
+  RoundSelectionEnum,
+  RoundSelectionTypeEnum,
+  SinceDateOptionEnum,
+  UntilDateOptionEnum,
+  UserFilterModeEnum,
+  ScopeEnum,
+  selectRoundsByCriteria, 
+  filterRoundsByUser 
+} from '@/services/cornerStatistics';
 import { getAllUsers, User } from '@/services/storage/userStorage';
-import { getAllRounds } from '@/services/storage/roundStorage';
+import { getAllRoundsWithDetails, getAllScoresForRound, type RoundWithDetails } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
-import { selectRoundsByCriteria, filterRoundsByUser } from '@/services/cornerStatistics';
 import { useDialogStyle } from '@/hooks/useDialogStyle';
+import type { Round, Player, PlayerRoundWithDetails } from '@/services/storage/db/types';
 
 // Helper functions for checking round completion (duplicated from cornerStatistics.ts for preview)
-function getExpectedHoleCount(rounds: Round[]): number {
+async function getExpectedHoleCount(rounds: RoundWithDetails[]): Promise<number> {
   if (rounds.length === 0) return 0;
   let maxHoles = 0;
   for (const round of rounds) {
-    const uniqueHoles = new Set(round.scores?.map(s => s.holeNumber) || []);
+    const uniqueHoles = new Set(round.scores.map(s => s.holeNumber));
     maxHoles = Math.max(maxHoles, uniqueHoles.size);
   }
   return maxHoles;
@@ -24,7 +41,7 @@ function getExpectedHoleCount(rounds: Round[]): number {
  * Check if a score represents a completed hole
  * Uses the complete field if available, otherwise falls back to throws >= 1 for backward compatibility
  */
-function isScoreComplete(score: any): boolean {
+function isScoreComplete(score: { complete?: boolean; score: number }): boolean {
   if (score.complete !== undefined) {
     return score.complete === true;
   }
@@ -32,8 +49,8 @@ function isScoreComplete(score: any): boolean {
   return score.score >= 1;
 }
 
-function isRoundComplete(round: Round, userId: string, expectedHoleCount: number): boolean {
-  const userScores = round.scores?.filter(s => s.playerId === userId) || [];
+function isRoundComplete(round: RoundWithDetails, userId: string, expectedHoleCount: number): boolean {
+  const userScores = round.scores.filter(s => s.playerId === userId);
   if (userScores.length === 0) return false;
   const completedHoles = new Set(
     userScores.filter(s => isScoreComplete(s)).map(s => s.holeNumber)
@@ -51,21 +68,21 @@ const CORNER_LABELS: Record<CornerPosition, string> = {
 };
 
 // Round selection labels
-type RoundSelectionKey = Exclude<RoundSelection, { type: 'specific'; roundIds: string[] }>;
+type RoundSelectionKey = RoundSelectionEnum;
 const ROUND_SELECTION_LABELS: Record<RoundSelectionKey, string> = {
-  'all': 'all rounds',
-  'latest': 'their latest round',
-  'latest2': 'their latest 2 rounds',
-  'latest3': 'their latest 3 rounds',
-  'first': 'their first round',
-  'bestRound': 'their best round',
-  'bestRound2': 'their second best round',
-  'bestRounds2': 'their best 2 rounds',
-  'bestRounds3': 'their best 3 rounds',
-  'worstRound': 'their worst round',
-  'worstRound2': 'their second worst round',
-  'worstRounds2': 'their worst 2 rounds',
-  'worstRounds3': 'their worst 3 rounds',
+  [RoundSelectionEnum.All]: 'all rounds',
+  [RoundSelectionEnum.Latest]: 'their latest round',
+  [RoundSelectionEnum.Latest2]: 'their latest 2 rounds',
+  [RoundSelectionEnum.Latest3]: 'their latest 3 rounds',
+  [RoundSelectionEnum.First]: 'their first round',
+  [RoundSelectionEnum.BestRound]: 'their best round',
+  [RoundSelectionEnum.BestRound2]: 'their second best round',
+  [RoundSelectionEnum.BestRounds2]: 'their best 2 rounds',
+  [RoundSelectionEnum.BestRounds3]: 'their best 3 rounds',
+  [RoundSelectionEnum.WorstRound]: 'their worst round',
+  [RoundSelectionEnum.WorstRound2]: 'their second worst round',
+  [RoundSelectionEnum.WorstRounds2]: 'their worst 2 rounds',
+  [RoundSelectionEnum.WorstRounds3]: 'their worst 3 rounds',
 };
 
 // Round selection menu items configuration
@@ -76,38 +93,31 @@ interface RoundSelectionMenuItem {
 }
 
 const ROUND_SELECTION_MENU_ITEMS: RoundSelectionMenuItem[] = [
-  { key: 'all' },
-  { key: 'latest', disableForSingleRound: true },
-  { key: 'latest2' },
-  { key: 'latest3' },
-  { key: 'first', disableForSingleRound: true },
-  { key: 'bestRound', showOnlyForRelevant: true },
-  { key: 'bestRound2', showOnlyForRelevant: true },
-  { key: 'bestRounds2', showOnlyForRelevant: true },
-  { key: 'bestRounds3', showOnlyForRelevant: true },
-  { key: 'worstRound', showOnlyForRelevant: true },
-  { key: 'worstRound2', showOnlyForRelevant: true },
-  { key: 'worstRounds2', showOnlyForRelevant: true },
-  { key: 'worstRounds3', showOnlyForRelevant: true },
+  { key: RoundSelectionEnum.All },
+  { key: RoundSelectionEnum.Latest, disableForSingleRound: true },
+  { key: RoundSelectionEnum.Latest2 },
+  { key: RoundSelectionEnum.Latest3 },
+  { key: RoundSelectionEnum.First, disableForSingleRound: true },
+  { key: RoundSelectionEnum.BestRound, showOnlyForRelevant: true },
+  { key: RoundSelectionEnum.BestRound2, showOnlyForRelevant: true },
+  { key: RoundSelectionEnum.BestRounds2, showOnlyForRelevant: true },
+  { key: RoundSelectionEnum.BestRounds3, showOnlyForRelevant: true },
+  { key: RoundSelectionEnum.WorstRound, showOnlyForRelevant: true },
+  { key: RoundSelectionEnum.WorstRound2, showOnlyForRelevant: true },
+  { key: RoundSelectionEnum.WorstRounds2, showOnlyForRelevant: true },
+  { key: RoundSelectionEnum.WorstRounds3, showOnlyForRelevant: true },
 ];
 
 // Accumulation mode menu items
 const ACCUMULATION_MODE_ITEMS: Array<{ key: AccumulationMode; label: string }> = [
-  { key: 'best', label: 'best' },
-  { key: 'worst', label: 'worst' },
-  { key: 'latest', label: 'latest' },
-  { key: 'first', label: 'first' },
-  { key: 'average', label: 'average' },
-  { key: 'percentile', label: 'nth percentile' },
-  { key: 'relevant', label: 'relevant' },
+  { key: AccumulationModeEnum.Best, label: 'best' },
+  { key: AccumulationModeEnum.Worst, label: 'worst' },
+  { key: AccumulationModeEnum.Latest, label: 'latest' },
+  { key: AccumulationModeEnum.First, label: 'first' },
+  { key: AccumulationModeEnum.Average, label: 'average' },
+  { key: AccumulationModeEnum.Percentile, label: 'nth percentile' },
+  { key: AccumulationModeEnum.Relevant, label: 'relevant' },
 ];
-
-// Enums for preset values
-enum UserFilterEnum {
-  Everyone = 'everyone',
-  EachUser = 'eachUser',
-  TodaysPlayers = 'todaysPlayers',
-}
 
 // User filter display labels mapping
 const USER_FILTER_LABELS: Record<UserFilterEnum, string> = {
@@ -116,49 +126,13 @@ const USER_FILTER_LABELS: Record<UserFilterEnum, string> = {
   [UserFilterEnum.TodaysPlayers]: "players of today's round",
 };
 
-enum AccumulationModeEnum {
-  Best = 'best',
-  Worst = 'worst',
-  Latest = 'latest',
-  First = 'first',
-  Average = 'average',
-  Percentile = 'percentile',
-  Relevant = 'relevant',
-}
-
-enum ScopeEnum {
-  Hole = 'hole',
-  Round = 'round',
-}
-
-enum RoundSelectionEnum {
-  All = 'all',
-  Latest = 'latest',
-  Latest2 = 'latest2',
-  Latest3 = 'latest3',
-  First = 'first',
-  BestRound = 'bestRound',
-  BestRound2 = 'bestRound2',
-  BestRounds2 = 'bestRounds2',
-  BestRounds3 = 'bestRounds3',
-  WorstRound = 'worstRound',
-  WorstRound2 = 'worstRound2',
-  WorstRounds2 = 'worstRounds2',
-  WorstRounds3 = 'worstRounds3',
-}
-
-enum UserFilterModeEnum {
-  Or = 'or',
-  And = 'and',
-}
-
 // Date option constants
-const DATE_OPTION_BEGINNING = 'beginning';
-const DATE_OPTION_YEAR_AGO = 'yearAgo';
-const DATE_OPTION_MONTH_AGO = 'monthAgo';
-const DATE_OPTION_TODAY = 'today';
-const DATE_OPTION_YESTERDAY = 'yesterday';
-const DATE_OPTION_CUSTOM = 'custom';
+const DATE_OPTION_BEGINNING = SinceDateOptionEnum.Beginning;
+const DATE_OPTION_YEAR_AGO = SinceDateOptionEnum.YearAgo;
+const DATE_OPTION_MONTH_AGO = SinceDateOptionEnum.MonthAgo;
+const DATE_OPTION_TODAY = UntilDateOptionEnum.Today;
+const DATE_OPTION_YESTERDAY = UntilDateOptionEnum.Yesterday;
+const DATE_OPTION_CUSTOM = RoundSelectionTypeEnum.Custom;
 
 // Date option display labels
 const DATE_OPTION_LABELS: Record<string, string> = {
@@ -191,7 +165,7 @@ const USER_FILTER_MODE_OPRIONS: Record<UserFilterModeEnum, string> = {
 };
 
 // Round selection type constant
-const ROUND_SELECTION_TYPE_SPECIFIC = 'specific';
+const ROUND_SELECTION_TYPE_SPECIFIC = RoundSelectionTypeEnum.Specific;
 
 // UI text constants
 const PRESET_CUSTOM = 'Custom';
@@ -386,12 +360,12 @@ export default function CornerStatisticConfigModal({
       return personalBestPreset 
         ? { ...personalBestPreset.config, presetName: 'Personal Best on Hole', autoColor: true }
         : {
-            scoreUserFilter: 'eachUser',
-            roundUserFilter: 'everyone',
-            accumulationMode: 'best',
-            scope: 'hole',
-            roundSelection: 'all',
-            userFilterMode: 'or',
+            scoreUserFilter: UserFilterEnum.EachUser,
+            roundUserFilter: UserFilterEnum.Everyone,
+            accumulationMode: AccumulationModeEnum.Best,
+            scope: ScopeEnum.Hole,
+            roundSelection: RoundSelectionEnum.All,
+            userFilterMode: UserFilterModeEnum.Or,
             autoColor: true,
           };
     })()
@@ -403,7 +377,7 @@ export default function CornerStatisticConfigModal({
   const [tempSinceDate, setTempSinceDate] = useState<Date>(new Date());
   const [tempUntilDate, setTempUntilDate] = useState<Date>(new Date());
   const [users, setUsers] = useState<User[]>([]);
-  const [rounds, setRounds] = useState<Round[]>([]);
+  const [rounds, setRounds] = useState<RoundWithDetails[]>([]);
   const [menuStates, setMenuStates] = useState<Record<string, boolean>>({});
   const [percentileInput, setPercentileInput] = useState<string>(TEXT_INITIAL_PERCENTILE);
   const [roundPickerVisible, setRoundPickerVisible] = useState(false);
@@ -542,8 +516,8 @@ export default function CornerStatisticConfigModal({
   useEffect(() => {
     if (roundPickerVisible && !isInitialRoundPickerMount.current) {
       const newRoundSelection: RoundSelection = tempSelectedRoundIds.length > 0
-        ? { type: 'specific' as const, roundIds: tempSelectedRoundIds }
-        : 'all';
+        ? { type: RoundSelectionTypeEnum.Specific, roundIds: tempSelectedRoundIds }
+        : RoundSelectionEnum.All;
       setConfig(prev => {
         const updatedConfig: CornerConfig = { 
           ...prev, 
@@ -571,7 +545,7 @@ export default function CornerStatisticConfigModal({
   const loadRounds = async () => {
     if (!courseName) return;
     try {
-      const allRounds = await getAllRounds();
+      const allRounds = await getAllRoundsWithDetails();
       const courseRounds = allRounds.filter(r => r.courseName === courseName);
       setRounds(courseRounds);
     } catch (error) {
@@ -836,7 +810,7 @@ export default function CornerStatisticConfigModal({
   const hasSelectedScoreUsers = Array.isArray(config.scoreUserFilter) && config.scoreUserFilter.length > 0;
 
   // Filter rounds based on roundUserFilter (for round picker)
-  const getFilteredRounds = (): Round[] => {
+  const getFilteredRounds = (): RoundWithDetails[] => {
     if (!courseName) return [];
     
     let filtered = rounds.filter(r => r.courseName === courseName);
@@ -995,7 +969,7 @@ export default function CornerStatisticConfigModal({
       const day = String(date.getDate()).padStart(2, '0');
       setSinceDateInput(`${year}-${month}-${day}`);
       // Store timestamp (this is in local timezone, start of day)
-      updateConfig({ sinceDate: { type: 'custom', timestamp: date.getTime() } });
+      updateConfig({ sinceDate: { type: RoundSelectionTypeEnum.Custom, timestamp: date.getTime() } });
       if (Platform.OS === 'ios') {
         // On iOS, we'll show a confirm button
       } else {
@@ -1032,7 +1006,7 @@ export default function CornerStatisticConfigModal({
       const day = String(date.getDate()).padStart(2, '0');
       setUntilDateInput(`${year}-${month}-${day}`);
       // Store timestamp (this is in local timezone, end of day)
-      updateConfig({ untilDate: { type: 'custom', timestamp: date.getTime() } });
+      updateConfig({ untilDate: { type: RoundSelectionTypeEnum.Custom, timestamp: date.getTime() } });
       if (Platform.OS === 'ios') {
         // On iOS, we'll show a confirm button
       } else {
@@ -1163,7 +1137,7 @@ export default function CornerStatisticConfigModal({
       });
       
       // Get expected hole count for completion checking (after we have the filtered rounds)
-      const expectedHoleCount = getExpectedHoleCount(courseRounds);
+      const expectedHoleCount = await getExpectedHoleCount(courseRounds);
       
       // Step 0.5: VERY IMPORTANT - Filter to only include completed rounds (every hole has nonzero score)
       // This must be done early, before any other filtering
@@ -1192,10 +1166,10 @@ export default function CornerStatisticConfigModal({
         });
       }
       
-      const preview: Array<{
+        const preview: Array<{
         player: Player;
-        rounds: Round[];
-        playerRounds: Array<{ userId: string; userName: string; round: Round }>;
+        rounds: RoundWithDetails[];
+        playerRounds: Array<{ userId: string; userName: string; round: RoundWithDetails }>;
         sampleScores: number[];
         result?: number;
       }> = [];
@@ -1203,7 +1177,7 @@ export default function CornerStatisticConfigModal({
       for (const player of currentRoundPlayers) {
         // Step 1: Filter rounds based on roundUserFilter (who played in the rounds)
         // Also filter to only include completed rounds for the relevant user(s)
-        let roundFilteredRounds: Round[];
+        let roundFilteredRounds: RoundWithDetails[];
         if (config.roundUserFilter === UserFilterEnum.EachUser) {
           // Filter to rounds where the current player is a player AND has completed the round
           roundFilteredRounds = courseRounds.filter(round => 
@@ -1255,7 +1229,8 @@ export default function CornerStatisticConfigModal({
             roundFilteredRounds = [];
           }
         } else {
-          roundFilteredRounds = filterRoundsByUser(courseRounds, config.roundUserFilter, undefined);
+          // For 'everyone', include all rounds
+          roundFilteredRounds = courseRounds;
           // Also filter to only include rounds where at least one relevant user has completed it
           if (config.scoreUserFilter === UserFilterEnum.EachUser) {
             roundFilteredRounds = roundFilteredRounds.filter(round =>
@@ -1273,17 +1248,74 @@ export default function CornerStatisticConfigModal({
           }
         }
         
-        // Step 2: Select rounds by criteria
-        const selectedRounds = await selectRoundsByCriteria(
-          roundFilteredRounds,
-          config.roundSelection,
-          config.accumulationMode,
-          player.id
-        );
+        // Step 2: Select rounds by criteria (local implementation for preview)
+        let selectedRounds: RoundWithDetails[] = roundFilteredRounds;
+        
+        if (config.roundSelection && config.accumulationMode !== AccumulationModeEnum.Latest && config.accumulationMode !== AccumulationModeEnum.First) {
+          // Filter to only completed rounds for the current player
+          const userRounds = roundFilteredRounds
+            .filter(round => round.players.some(p => p.id === player.id))
+            .filter(round => isRoundComplete(round, player.id, expectedHoleCount));
+
+          if (config.roundSelection === RoundSelectionEnum.All) {
+            selectedRounds = userRounds;
+          } else if (config.roundSelection === RoundSelectionEnum.Latest) {
+            const sorted = [...userRounds].sort((a, b) => b.date - a.date);
+            selectedRounds = sorted.length > 0 ? [sorted[0]] : [];
+          } else if (config.roundSelection === RoundSelectionEnum.Latest2) {
+            const sorted = [...userRounds].sort((a, b) => b.date - a.date);
+            selectedRounds = sorted.slice(0, 2);
+          } else if (config.roundSelection === RoundSelectionEnum.Latest3) {
+            const sorted = [...userRounds].sort((a, b) => b.date - a.date);
+            selectedRounds = sorted.slice(0, 3);
+          } else if (config.roundSelection === RoundSelectionEnum.First) {
+            const sorted = [...userRounds].sort((a, b) => a.date - b.date);
+            selectedRounds = sorted.length > 0 ? [sorted[0]] : [];
+          } else if (typeof config.roundSelection === 'object' && config.roundSelection.type === RoundSelectionTypeEnum.Specific) {
+            selectedRounds = roundFilteredRounds.filter(round => config.roundSelection && 
+              typeof config.roundSelection === 'object' && 
+              config.roundSelection.type === RoundSelectionTypeEnum.Specific &&
+              config.roundSelection.roundIds.includes(round.id));
+          } else if (config.roundSelection === RoundSelectionEnum.BestRound || config.roundSelection === RoundSelectionEnum.BestRound2 || 
+                     config.roundSelection === RoundSelectionEnum.BestRounds2 || config.roundSelection === RoundSelectionEnum.BestRounds3 ||
+                     config.roundSelection === RoundSelectionEnum.WorstRound || config.roundSelection === RoundSelectionEnum.WorstRound2 ||
+                     config.roundSelection === RoundSelectionEnum.WorstRounds2 || config.roundSelection === RoundSelectionEnum.WorstRounds3) {
+            // Calculate total score for each round
+            const roundsWithScores = userRounds.map(round => {
+              const userScores = round.scores.filter(s => s.playerId === player.id && isScoreComplete(s));
+              const totalScore = userScores.reduce((sum, score) => sum + score.score, 0);
+              return { round, totalScore, scoreCount: userScores.length };
+            }).filter(r => r.scoreCount > 0);
+
+            if (roundsWithScores.length > 0) {
+              const isWorstSelection = config.roundSelection === RoundSelectionEnum.WorstRound || config.roundSelection === RoundSelectionEnum.WorstRound2 ||
+                                      config.roundSelection === RoundSelectionEnum.WorstRounds2 || config.roundSelection === RoundSelectionEnum.WorstRounds3;
+              roundsWithScores.sort((a, b) => {
+                if (isWorstSelection) {
+                  return b.totalScore - a.totalScore; // Higher is worse
+                } else {
+                  return a.totalScore - b.totalScore; // Lower is better
+                }
+              });
+
+              if (config.roundSelection === RoundSelectionEnum.BestRound || config.roundSelection === RoundSelectionEnum.WorstRound) {
+                selectedRounds = [roundsWithScores[0].round];
+              } else if (config.roundSelection === RoundSelectionEnum.BestRound2 || config.roundSelection === RoundSelectionEnum.WorstRound2) {
+                selectedRounds = roundsWithScores.length > 1 ? [roundsWithScores[1].round] : [];
+              } else if (config.roundSelection === RoundSelectionEnum.BestRounds2 || config.roundSelection === RoundSelectionEnum.WorstRounds2) {
+                selectedRounds = roundsWithScores.slice(0, 2).map(r => r.round);
+              } else if (config.roundSelection === RoundSelectionEnum.BestRounds3 || config.roundSelection === RoundSelectionEnum.WorstRounds3) {
+                selectedRounds = roundsWithScores.slice(0, 3).map(r => r.round);
+              }
+            } else {
+              selectedRounds = [];
+            }
+          }
+        }
 
         // Step 3: Build user+round combinations based on scoreUserFilter
         // This shows which users' scores we're considering from the filtered rounds
-        const playerRounds: Array<{ userId: string; userName: string; round: Round }> = [];
+        const playerRounds: Array<{ userId: string; userName: string; round: RoundWithDetails }> = [];
         
         // Sort rounds by date to ensure we get the correct latest/first
         const sortedSelectedRounds = [...selectedRounds].sort((a, b) => {
@@ -1369,16 +1401,16 @@ export default function CornerStatisticConfigModal({
             if (!isRoundComplete(round, player.id, expectedHoleCount)) {
               continue;
             }
-            const score = round.scores?.find(
+            const score = round.scores.find(
               s => s.holeNumber === 1 && s.playerId === player.id
             );
             if (score && score.score >= 1) {
               sampleScores.push(score.score);
             }
           } else if (config.scoreUserFilter === UserFilterEnum.Everyone) {
-            const roundScores = round.scores?.filter(
+            const roundScores = round.scores.filter(
               s => s.holeNumber === 1 && s.score >= 1 && isRoundComplete(round, s.playerId, expectedHoleCount)
-            ) || [];
+            );
             roundScores.forEach(s => sampleScores.push(s.score));
           } else if (Array.isArray(config.scoreUserFilter)) {
             for (const userId of config.scoreUserFilter) {
@@ -1386,7 +1418,7 @@ export default function CornerStatisticConfigModal({
               if (!isRoundComplete(round, userId, expectedHoleCount)) {
                 continue;
               }
-              const score = round.scores?.find(
+              const score = round.scores.find(
                 s => s.holeNumber === 1 && s.playerId === userId
               );
               if (score && score.score >= 1) {
@@ -1899,7 +1931,7 @@ export default function CornerStatisticConfigModal({
               </View>
 
               {/* Date picker fields (shown when custom dates are selected) */}
-              {config.sinceDate && typeof config.sinceDate === 'object' && config.sinceDate.type === 'custom' && (
+              {config.sinceDate && typeof config.sinceDate === 'object' && config.sinceDate.type === RoundSelectionTypeEnum.Custom && (
                 <View style={styles.dateInputContainer}>
                   <Text style={[styles.dateLabel, { color: theme.colors.onSurface }]}>Since Date:</Text>
                   {Platform.OS === 'web' ? (
@@ -1954,7 +1986,7 @@ export default function CornerStatisticConfigModal({
                   </TouchableOpacity>
                 </View>
               )}
-              {config.untilDate && typeof config.untilDate === 'object' && config.untilDate.type === 'custom' && (
+              {config.untilDate && typeof config.untilDate === 'object' && config.untilDate.type === RoundSelectionTypeEnum.Custom && (
                 <View style={styles.dateInputContainer}>
                   <Text style={[styles.dateLabel, { color: theme.colors.onSurface }]}>Until Date:</Text>
                   {Platform.OS === 'web' ? (
@@ -2411,7 +2443,7 @@ export default function CornerStatisticConfigModal({
                   
                   // Calculate total scores for each player in this round
                   const playerScores = round.players.map(player => {
-                    const scores = round.scores?.filter(s => s.playerId === player.id && s.score >= 1) || [];
+                    const scores = round.scores.filter(s => s.playerId === player.id && s.score >= 1);
                     const totalScore = scores.reduce((sum, score) => sum + score.score, 0);
                     return { player, totalScore, scoreCount: scores.length };
                   });

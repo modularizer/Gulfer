@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { IconButton, Menu, Dialog, Portal, Button, TextInput, useTheme } from 'react-native-paper';
-import { Course, getAllCourses, saveCourse, generateCourseId, getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
+import { getAllCourses, saveCourse, generateCourseId, getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
+import type { Course } from '@/services/storage/db/types';
 
 // Helper function to get number of holes from Course (handles both old and new format)
 const getHoleCount = (course: Course): number => {

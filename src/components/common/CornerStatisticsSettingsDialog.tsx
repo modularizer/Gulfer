@@ -5,6 +5,7 @@ import { CornerStatisticsConfig, CornerConfig } from '@/services/cornerStatistic
 import { ColumnVisibilityConfig } from '@/services/storage/cornerConfigStorage';
 import CornerStatisticConfigModal from './CornerStatisticConfigModal';
 import { useDialogStyle } from '@/hooks/useDialogStyle';
+import type { Player } from '@/services/storage/db/types';
 
 interface CornerStatisticsSettingsDialogProps {
   visible: boolean;

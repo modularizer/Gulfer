@@ -6,7 +6,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Platform } from 'react-native';
 import { Card, Text, Chip, useTheme } from 'react-native-paper';
-import { User } from '@/services/storage/userStorage';
+import type { Player } from '@/services/storage/db/types';
+import { User } from '@/services/storage/userStorage'; // User is an alias for Player
 import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage';
 import { getShadowStyle } from '@/utils';
 import HashedImage from './HashedImage';

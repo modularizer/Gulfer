@@ -3,6 +3,7 @@ import { Chip } from 'react-native-paper';
 import { router } from 'expo-router';
 import { StyleSheet } from 'react-native';
 import { encodeNameForUrl } from '@/utils/urlEncoding';
+import type { Player } from '@/services/storage/db/types';
 
 interface PlayerChipProps {
   player: Player;
