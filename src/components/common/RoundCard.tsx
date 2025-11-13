@@ -96,7 +96,7 @@ export default function RoundCard({
     const total = scores
       ? scores
           .filter((s) => (s as any).playerId === player.id || s.userId === player.id)
-          .reduce((sum, s) => sum + s.throws, 0)
+          .reduce((sum, s) => sum + s.score, 0)
       : 0;
     return { player, total };
   });

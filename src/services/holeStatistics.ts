@@ -1,10 +1,9 @@
 /**
  * Service for computing hole-level statistics across all rounds
- * Uses userRounds (playerRounds) directly from database
+ * Uses playerRounds (playerRounds) directly from database
  */
 
-import type { Score } from '../types';
-import { getUserRoundsForCourseInDateRange } from './storage/userRoundQueries';
+import { getPlayerRoundsForCourseInDateRange } from './storage/playerRoundQueries';
 
 export interface HoleStatistics {
   worst: number | null;      // Worst (maximum) score
@@ -77,8 +76,8 @@ export async function computeHoleStatistics(
   }
 
   try {
-    // Get all userRounds for this course with date filter
-    const userRounds = await getUserRoundsForCourseInDateRange(
+    // Get all playerRounds for this course with date filter
+    const playerRounds = await getPlayerRoundsForCourseInDateRange(
       courseId,
       undefined, // sinceDate
       undefined, // untilDate
@@ -87,10 +86,10 @@ export async function computeHoleStatistics(
 
     // Collect all completed scores for this hole
     const scores: number[] = [];
-    for (const ur of userRounds) {
+    for (const ur of playerRounds) {
       for (const score of ur.scores) {
         if (score.holeNumber === holeNumber && score.complete) {
-          scores.push(score.throws);
+          scores.push(score.score);
         }
       }
     }
@@ -164,8 +163,8 @@ export async function computeTotalRoundStatistics(
   }
 
   try {
-    // Get all userRounds for this course with date filter
-    const userRounds = await getUserRoundsForCourseInDateRange(
+    // Get all playerRounds for this course with date filter
+    const playerRounds = await getPlayerRoundsForCourseInDateRange(
       courseId,
       undefined, // sinceDate
       undefined, // untilDate
@@ -175,10 +174,10 @@ export async function computeTotalRoundStatistics(
     // Collect total scores for each user round (user + round combination)
     const totalScores: number[] = [];
     
-    for (const ur of userRounds) {
-      // Calculate total for this userRound
+    for (const ur of playerRounds) {
+      // Calculate total for this playerRound
       const completedScores = ur.scores.filter(s => s.complete);
-      const total = completedScores.reduce((sum, s) => sum + s.throws, 0);
+      const total = completedScores.reduce((sum, s) => sum + s.score, 0);
       
       // Only include if total is > 0 (has at least one score)
       if (total > 0) {

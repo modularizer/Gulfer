@@ -4,11 +4,12 @@
  * Includes both UUIDs and human-readable names for merging support
  */
 
-import { Course, Hole, EntityType } from '../types';
+import { EntityType } from '@/types';
 import { getStorageId } from './storage/platform/platformStorage';
-import { saveCourse, getCourseByName, generateCourseId, getCourseById } from './storage/courseStorage';
+import { saveCourse, getCourseByName, generateCourseId, getCourseById, saveHolesForCourse, getAllHolesForCourse, type CourseInsert, type HoleInsert } from './storage/courseStorage';
 import { getLocalUuidForForeign, mapForeignToLocal } from './storage/uuidMerge';
-import { normalizeExportText } from '../utils';
+import { normalizeExportText } from '@/utils';
+import { generateUUID } from '@/utils/uuid';
 
 /**
  * Export a course to a human-readable text format
@@ -21,6 +22,9 @@ export async function exportCourse(courseId: string): Promise<string> {
     throw new Error('Course not found');
   }
   
+  // Load holes separately
+  const holes = await getAllHolesForCourse(courseId);
+  
   const storageId = await getStorageId();
   const lines: string[] = [];
   
@@ -32,14 +36,14 @@ export async function exportCourse(courseId: string): Promise<string> {
   lines.push('');
   
   // Holes
-  if (course.holes && course.holes.length > 0) {
+  if (holes && holes.length > 0) {
     lines.push('Holes:');
-    course.holes.forEach((hole, index) => {
+    holes.forEach((hole) => {
       const holeData: string[] = [`  ${hole.number}`];
-      if (hole.par !== undefined) {
+      if (hole.par !== null && hole.par !== undefined) {
         holeData.push(`Par: ${hole.par}`);
       }
-      if (hole.distance !== undefined) {
+      if (hole.distance !== null && hole.distance !== undefined) {
         holeData.push(`Distance: ${hole.distance}m`);
       }
       lines.push(holeData.join(', '));
@@ -63,11 +67,21 @@ export async function exportCourse(courseId: string): Promise<string> {
 /**
  * Parse exported course text
  */
+/**
+ * Parsed hole data from export text
+ * Only includes fields that are parsed from the export format
+ */
+export interface ParsedHole {
+  number: number;
+  par?: number;
+  distance?: number;
+}
+
 export interface ParsedCourseExport {
   storageId?: string;
   courseId?: string;
   courseName?: string;
-  holes?: Hole[];
+  holes?: ParsedHole[];
   latitude?: number;
   longitude?: number;
 }
@@ -89,7 +103,7 @@ export function parseCourseExport(exportText: string): ParsedCourseExport {
     } else if (line.startsWith('Course Name:')) {
       parsed.courseName = line.substring('Course Name:'.length).trim();
     } else if (line === 'Holes:') {
-      const holes: Hole[] = [];
+      const holes: ParsedHole[] = [];
       i++;
       while (i < lines.length && lines[i] && !lines[i].startsWith('Location:') && lines[i] !== '=== END EXPORT ===') {
         const holeLine = lines[i];
@@ -167,14 +181,31 @@ export async function importCourse(
         } else {
           // Create new course
           localCourseId = generateCourseId();
-          const newCourse: Course = {
+          const newCourse: CourseInsert = {
             id: localCourseId,
             name: parsed.courseName,
-            holes: parsed.holes || [],
-            latitude: parsed.latitude,
-            longitude: parsed.longitude,
+            notes: null,
+            latitude: parsed.latitude ?? null,
+            longitude: parsed.longitude ?? null,
           };
           await saveCourse(newCourse);
+          
+          // Save holes separately if provided
+          if (parsed.holes && parsed.holes.length > 0 && localCourseId) {
+            const courseIdForHoles: string = localCourseId; // Type narrowing helper
+            const holes: HoleInsert[] = parsed.holes.map(h => ({
+              id: generateUUID(),
+              name: `Hole ${h.number}`,
+              courseId: courseIdForHoles,
+              number: h.number,
+              par: h.par ?? null,
+              distance: h.distance ?? null,
+              notes: null,
+              latitude: null,
+              longitude: null,
+            }));
+            await saveHolesForCourse(courseIdForHoles, holes);
+          }
           
           // Map foreign course to new local course
           await mapForeignToLocal(foreignStorageId, parsed.courseId, localCourseId, EntityType.Courses);
@@ -189,14 +220,31 @@ export async function importCourse(
       localCourseId = existingCourse.id;
     } else {
       localCourseId = await generateCourseId();
-      const newCourse: Course = {
+      const newCourse: CourseInsert = {
         id: localCourseId,
         name: parsed.courseName,
-        holes: parsed.holes || [],
-        latitude: parsed.latitude,
-        longitude: parsed.longitude,
+        notes: null,
+        latitude: parsed.latitude ?? null,
+        longitude: parsed.longitude ?? null,
       };
       await saveCourse(newCourse);
+      
+      // Save holes separately if provided
+      if (parsed.holes && parsed.holes.length > 0 && localCourseId) {
+        const courseIdForHoles: string = localCourseId; // Type narrowing helper
+        const holes: HoleInsert[] = parsed.holes.map(h => ({
+          id: generateUUID(),
+          name: `Hole ${h.number}`,
+          courseId: courseIdForHoles,
+          number: h.number,
+          par: h.par ?? null,
+          distance: h.distance ?? null,
+          notes: null,
+          latitude: null,
+          longitude: null,
+        }));
+        await saveHolesForCourse(courseIdForHoles, holes);
+      }
     }
   }
   

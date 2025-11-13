@@ -5,17 +5,15 @@
 
 import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
+import initSqlJs, { Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js';
 import { drizzle as drizzleExpo } from 'drizzle-orm/expo-sqlite';
 import { drizzle as drizzleSqlJs } from 'drizzle-orm/sql-js';
-import { ExpoSqliteDatabase, SqlJsDatabase as DrizzleSqlJsDatabase } from 'drizzle-orm/sqlite';
-import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
-export type Database = ExpoSqliteDatabase | DrizzleSqlJsDatabase;
+export type Database = ReturnType<typeof drizzleExpo> | ReturnType<typeof drizzleSqlJs>;
 
 let dbInstance: Database | null = null;
 let sqlJsDb: SqlJsDatabase | null = null;
-let sqlJsModule: typeof import('sql.js') | null = null;
+let sqlJsModule: SqlJsStatic | null = null;
 
 /**
  * Initialize the database adapter based on platform
@@ -30,22 +28,27 @@ export async function initDatabase(): Promise<Database> {
     // Try to load from IndexedDB first
     await loadDatabase();
     
-    if (!sqlJsDb) {
+    if (!dbInstance && !sqlJsDb) {
       // If not loaded from IndexedDB, create new database
-      sqlJsModule = await initSqlJs({
+      const sqlJs = await initSqlJs({
         locateFile: (file: string) => {
           // In a web environment, sql.js will load the WASM file
           // You may need to configure this path based on your build setup
           return `https://sql.js.org/dist/${file}`;
         },
       });
-      sqlJsDb = new sqlJsModule.Database();
+      sqlJsModule = sqlJs;
+      sqlJsDb = new sqlJs.Database();
       dbInstance = drizzleSqlJs(sqlJsDb);
     }
   } else {
     // React Native: Use expo-sqlite
     const sqlite = await SQLite.openDatabaseAsync('gulfer.db');
     dbInstance = drizzleExpo(sqlite);
+  }
+
+  if (!dbInstance) {
+    throw new Error('Failed to initialize database');
   }
 
   return dbInstance;
@@ -124,11 +127,12 @@ export async function loadDatabase(): Promise<void> {
           getRequest.onsuccess = async () => {
             if (getRequest.result) {
               if (!sqlJsModule) {
-                sqlJsModule = await initSqlJs({
+                const sqlJs = await initSqlJs({
                   locateFile: (file: string) => {
                     return `https://sql.js.org/dist/${file}`;
                   },
                 });
+                sqlJsModule = sqlJs;
               }
               sqlJsDb = new sqlJsModule.Database(getRequest.result);
               dbInstance = drizzleSqlJs(sqlJsDb);

@@ -4,7 +4,7 @@
  */
 
 import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core';
-import { relations, sql } from 'drizzle-orm';
+import { relations } from 'drizzle-orm';
 import type {
   CardModes,
   ColumnVisibilityConfig,
@@ -83,7 +83,7 @@ export const rounds = sqliteTable('rounds', {
 }));
 
 /**
- * Player rounds table (UserRound)
+ * Player rounds table (PlayerRound)
  * Links players to rounds
  */
 export const playerRounds = sqliteTable('player_rounds', {

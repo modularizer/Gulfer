@@ -23,7 +23,7 @@ The codebase has been migrated from a custom ORM to Drizzle ORM with cross-platf
   - `courses` - Golf courses
   - `holes` - Course holes
   - `rounds` - Golf rounds
-  - `playerRounds` - UserRound entities
+  - `playerRounds` - PlayerRound entities
   - `playerRoundHoleScores` - Score entities
   - `currentPlayer` - Current user tracking
   - `photos` - Photo references
@@ -45,7 +45,7 @@ The codebase has been migrated from a custom ORM to Drizzle ORM with cross-platf
 - ✅ `courseStorage.ts` - Course management
 - ✅ `holeStorage.ts` - Hole management
 - ✅ `roundStorage.ts` - Round management (simplified)
-- ✅ `userRoundStorage.ts` - UserRound management
+- ✅ `playerRoundStorage.ts` - PlayerRound management
 - ✅ `userStorage.ts` - User/Player management
 - ✅ `scoreStorage.ts` - Score management
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { Text, Button, IconButton, useTheme } from 'react-native-paper';
-import { Player, Score, Course, Hole } from '@/types';
+import { Player, Course, Hole } from '@/types';
+import { Score } from '@/services/storage/roundStorage';
 import { getAllCourses, saveCourse, getCourseByName } from '@/services/storage/courseStorage';
 import HoleScoreModal from '@/components/common/HoleScoreModal';
 import NumberModal from '@/components/common/NumberModal';
@@ -338,7 +339,7 @@ export default function Scorecard({
     const score = scores.find(
       (s) => String(s.playerId) === String(playerId) && s.holeNumber === holeNumber
     );
-    return score?.throws || 0;
+    return score?.score || 0;
   };
 
   const getTotal = (playerId: string | number): number => {

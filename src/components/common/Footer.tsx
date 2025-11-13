@@ -223,7 +223,7 @@ export default function Footer({}: FooterProps) {
     const holesWithScores = new Set<number>();
     
     scores.forEach(score => {
-      if (score.throws > 0) {
+      if (score.score > 0) {
         holesWithScores.add(score.holeNumber);
       }
     });

@@ -4,7 +4,7 @@
  * Includes both UUIDs and human-readable names for merging support
  */
 
-import { User } from './storage/userStorage';
+import { UserInsert } from './storage/userStorage';
 import { EntityType } from '@/types';
 import { getStorageId } from './storage/platform/platformStorage';
 import { saveUser, getUserByName, generateUserId, getUserById } from './storage/userStorage';
@@ -131,9 +131,13 @@ export async function importPlayer(
         } else {
           // Create new player
           localPlayerId = generateUserId();
-          const newPlayer: User = {
+          const newPlayer: UserInsert = {
             id: localPlayerId,
             name: parsed.playerName,
+            notes: null,
+            latitude: null,
+            longitude: null,
+            isTeam: false,
           };
           await saveUser(newPlayer);
           
@@ -155,9 +159,13 @@ export async function importPlayer(
       localPlayerId = existingPlayer.id;
     } else {
       localPlayerId = await generateUserId();
-      const newPlayer: User = {
+      const newPlayer: UserInsert = {
         id: localPlayerId,
         name: parsed.playerName,
+        notes: null,
+        latitude: null,
+        longitude: null,
+        isTeam: false,
       };
       await saveUser(newPlayer);
       

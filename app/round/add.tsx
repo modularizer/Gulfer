@@ -6,7 +6,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { createNewRound } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getUserIdForPlayerName } from '@/services/storage/userStorage';
 import { getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
-import { saveUserRoundByUserAndRound } from '@/services/storage/userRoundStorage';
+import { savePlayerRoundByUserAndRound } from '@/services/storage/playerRoundStorage';
 import { importRound, parseExportText } from '@/services/roundExport';
 import { getImportMappingInfo, createManualMappings } from '@/services/importMapping';
 import ImportMappingDialog from '@/components/common/ImportMappingDialog';
@@ -91,8 +91,8 @@ export default function NewRoundScreen() {
         date,
       });
       
-      // Create UserRound for the player
-      await saveUserRoundByUserAndRound(playerId, newRound.id);
+      // Create PlayerRound for the player
+      await savePlayerRoundByUserAndRound(playerId, newRound.id);
       
       // Redirect to the overview page
       router.replace(`/round/${newRound.id}/overview`);

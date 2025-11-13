@@ -29,8 +29,8 @@ function isScoreComplete(score: any): boolean {
   if (score.complete !== undefined) {
     return score.complete === true;
   }
-  // Backward compatibility: if complete field is missing, infer from throws
-  return score.throws >= 1;
+  // Backward compatibility: if complete field is missing, infer from score
+  return score.score >= 1;
 }
 
 function isRoundComplete(round: Round, userId: string, expectedHoleCount: number): boolean {
@@ -409,8 +409,8 @@ export default function CornerStatisticConfigModal({
   const [percentileInput, setPercentileInput] = useState<string>(TEXT_INITIAL_PERCENTILE);
   const [roundPickerVisible, setRoundPickerVisible] = useState(false);
   const [tempSelectedRoundIds, setTempSelectedRoundIds] = useState<string[]>([]);
-  const [userRoundsModalVisible, setUserRoundsModalVisible] = useState(false);
-  const [selectedPlayerForUserRounds, setSelectedPlayerForUserRounds] = useState<Player | null>(null);
+  const [playerRoundsModalVisible, setPlayerRoundsModalVisible] = useState(false);
+  const [selectedPlayerForPlayerRounds, setSelectedPlayerForPlayerRounds] = useState<Player | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<string>(
     initialConfig ? PRESET_CUSTOM : 'Personal Best on Hole'
   );
@@ -686,11 +686,11 @@ export default function CornerStatisticConfigModal({
 
   const formatAccumulationDescription = (
     mode: AccumulationMode,
-    userRoundCount: number,
+    playerRoundCount: number,
     percentile?: number
   ): string => {
     // If only 1 user+round, just show "score from"
-    if (userRoundCount === 1) {
+    if (playerRoundCount === 1) {
       return TEXT_SCORE_FROM;
     }
 
@@ -1075,7 +1075,7 @@ export default function CornerStatisticConfigModal({
   const [previewData, setPreviewData] = useState<Array<{
     player: Player;
     rounds: Round[];
-    userRounds: Array<{ userId: string; userName: string; round: Round }>; // User+Round combinations
+    playerRounds: Array<{ userId: string; userName: string; round: Round }>; // User+Round combinations
     sampleScores: number[];
     result?: number;
   }>>([]);
@@ -1196,7 +1196,7 @@ export default function CornerStatisticConfigModal({
       const preview: Array<{
         player: Player;
         rounds: Round[];
-        userRounds: Array<{ userId: string; userName: string; round: Round }>;
+        playerRounds: Array<{ userId: string; userName: string; round: Round }>;
         sampleScores: number[];
         result?: number;
       }> = [];
@@ -1284,7 +1284,7 @@ export default function CornerStatisticConfigModal({
 
         // Step 3: Build user+round combinations based on scoreUserFilter
         // This shows which users' scores we're considering from the filtered rounds
-        const userRounds: Array<{ userId: string; userName: string; round: Round }> = [];
+        const playerRounds: Array<{ userId: string; userName: string; round: Round }> = [];
         
         // Sort rounds by date to ensure we get the correct latest/first
         const sortedSelectedRounds = [...selectedRounds].sort((a, b) => {
@@ -1315,7 +1315,7 @@ export default function CornerStatisticConfigModal({
             }
             const user = users.find(u => u.id === player.id);
             if (user && round.players.some(p => p.id === player.id)) {
-              userRounds.push({ userId: player.id, userName: user.name, round });
+              playerRounds.push({ userId: player.id, userName: user.name, round });
             }
           } else if (config.scoreUserFilter === UserFilterEnum.Everyone) {
             // For everyone, include all users from the round who have completed it
@@ -1333,7 +1333,7 @@ export default function CornerStatisticConfigModal({
               }
               const user = users.find(u => u.id === roundPlayer.id);
               if (user) {
-                userRounds.push({ userId: roundPlayer.id, userName: user.name, round });
+                playerRounds.push({ userId: roundPlayer.id, userName: user.name, round });
               }
             }
           } else if (Array.isArray(config.scoreUserFilter)) {
@@ -1355,7 +1355,7 @@ export default function CornerStatisticConfigModal({
               
               const user = users.find(u => u.id === userId);
               if (user) {
-                userRounds.push({ userId, userName: user.name, round });
+                playerRounds.push({ userId, userName: user.name, round });
               }
             }
           }
@@ -1373,14 +1373,14 @@ export default function CornerStatisticConfigModal({
             const score = round.scores?.find(
               s => s.holeNumber === 1 && s.playerId === player.id
             );
-            if (score && score.throws >= 1) {
-              sampleScores.push(score.throws);
+            if (score && score.score >= 1) {
+              sampleScores.push(score.score);
             }
           } else if (config.scoreUserFilter === UserFilterEnum.Everyone) {
             const roundScores = round.scores?.filter(
-              s => s.holeNumber === 1 && s.throws >= 1 && isRoundComplete(round, s.playerId, expectedHoleCount)
+              s => s.holeNumber === 1 && s.score >= 1 && isRoundComplete(round, s.playerId, expectedHoleCount)
             ) || [];
-            roundScores.forEach(s => sampleScores.push(s.throws));
+            roundScores.forEach(s => sampleScores.push(s.score));
           } else if (Array.isArray(config.scoreUserFilter)) {
             for (const userId of config.scoreUserFilter) {
               // Only include if this user has completed the round
@@ -1390,8 +1390,8 @@ export default function CornerStatisticConfigModal({
               const score = round.scores?.find(
                 s => s.holeNumber === 1 && s.playerId === userId
               );
-              if (score && score.throws >= 1) {
-                sampleScores.push(score.throws);
+              if (score && score.score >= 1) {
+                sampleScores.push(score.score);
               }
             }
           }
@@ -1435,7 +1435,7 @@ export default function CornerStatisticConfigModal({
         preview.push({
           player,
           rounds: selectedRounds,
-          userRounds,
+          playerRounds,
           sampleScores,
           result,
         });
@@ -2263,17 +2263,17 @@ export default function CornerStatisticConfigModal({
                       <Text style={[styles.previewPlayerName, { color: theme.colors.onSurface }]}>
                         {preview.player.name}:
                       </Text>
-                      {preview.userRounds.length > 0 ? (
-                        <View style={styles.userRoundsContainer}>
+                      {preview.playerRounds.length > 0 ? (
+                        <View style={styles.playerRoundsContainer}>
                           <Text style={[styles.previewAccumulationText, { color: theme.colors.onSurfaceVariant }]}>
                             {formatAccumulationDescription(
                               config.accumulationMode,
-                              preview.userRounds.length,
+                              preview.playerRounds.length,
                               config.percentile
                             )}{' '}
                           </Text>
-                          {preview.userRounds.slice(0, 3).map((userRound, idx) => {
-                            const date = new Date(userRound.round.date);
+                          {preview.playerRounds.slice(0, 3).map((playerRound, idx) => {
+                            const date = new Date(playerRound.round.date);
                             const dateStr = date.toLocaleDateString('en-US', {
                               month: 'short',
                               day: 'numeric',
@@ -2281,23 +2281,23 @@ export default function CornerStatisticConfigModal({
                             });
                             return (
                               <Chip
-                                key={`${userRound.userId}-${userRound.round.id}-${idx}`}
-                                style={[styles.userRoundChip, { backgroundColor: theme.colors.surfaceVariant }]}
+                                key={`${playerRound.userId}-${playerRound.round.id}-${idx}`}
+                                style={[styles.playerRoundChip, { backgroundColor: theme.colors.surfaceVariant }]}
                                 textStyle={{ color: theme.colors.onSurfaceVariant, fontSize: 12 }}
                               >
-                                {userRound.userName} • {dateStr}
+                                {playerRound.userName} • {dateStr}
                               </Chip>
                             );
                           })}
-                          {preview.userRounds.length > 3 && (
+                          {preview.playerRounds.length > 3 && (
                             <TouchableOpacity
                               onPress={() => {
-                                setSelectedPlayerForUserRounds(preview.player);
-                                setUserRoundsModalVisible(true);
+                                setSelectedPlayerForPlayerRounds(preview.player);
+                                setPlayerRoundsModalVisible(true);
                               }}
                             >
                               <Chip
-                                style={[styles.userRoundChip, { backgroundColor: theme.colors.surfaceVariant }]}
+                                style={[styles.playerRoundChip, { backgroundColor: theme.colors.surfaceVariant }]}
                                 textStyle={{ color: theme.colors.onSurfaceVariant, fontSize: 12 }}
                               >
                                 ...
@@ -2334,23 +2334,23 @@ export default function CornerStatisticConfigModal({
 
       {/* User Rounds Modal */}
       <Dialog 
-        visible={userRoundsModalVisible} 
+        visible={playerRoundsModalVisible} 
         onDismiss={() => {
-          setUserRoundsModalVisible(false);
-          setSelectedPlayerForUserRounds(null);
+          setPlayerRoundsModalVisible(false);
+          setSelectedPlayerForPlayerRounds(null);
         }} 
         style={styles.dialog}
       >
         <View style={styles.dialogHeader}>
           <Text style={[styles.dialogTitle, { color: theme.colors.onSurface }]}>
-            {selectedPlayerForUserRounds ? `${selectedPlayerForUserRounds.name}${TEXT_ROUNDS_SUFFIX}` : TEXT_USER_ROUNDS}
+            {selectedPlayerForPlayerRounds ? `${selectedPlayerForPlayerRounds.name}${TEXT_ROUNDS_SUFFIX}` : TEXT_USER_ROUNDS}
           </Text>
           <IconButton
             icon="close"
             size={24}
             onPress={() => {
-              setUserRoundsModalVisible(false);
-              setSelectedPlayerForUserRounds(null);
+              setPlayerRoundsModalVisible(false);
+              setSelectedPlayerForPlayerRounds(null);
             }}
             iconColor={theme.colors.onSurface}
           />
@@ -2358,10 +2358,10 @@ export default function CornerStatisticConfigModal({
         <Dialog.ScrollArea style={styles.scrollArea}>
           <ScrollView>
             <Dialog.Content style={styles.content}>
-              {selectedPlayerForUserRounds && previewData.find(p => p.player.id === selectedPlayerForUserRounds.id) ? (
-                <View style={styles.userRoundsModalContainer}>
-                  {previewData.find(p => p.player.id === selectedPlayerForUserRounds.id)?.userRounds.map((userRound, idx) => {
-                    const date = new Date(userRound.round.date);
+              {selectedPlayerForPlayerRounds && previewData.find(p => p.player.id === selectedPlayerForPlayerRounds.id) ? (
+                <View style={styles.playerRoundsModalContainer}>
+                  {previewData.find(p => p.player.id === selectedPlayerForPlayerRounds.id)?.playerRounds.map((playerRound, idx) => {
+                    const date = new Date(playerRound.round.date);
                     const dateStr = date.toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
@@ -2369,11 +2369,11 @@ export default function CornerStatisticConfigModal({
                     });
                     return (
                       <Chip
-                        key={`${userRound.userId}-${userRound.round.id}-${idx}`}
-                        style={[styles.userRoundChip, { backgroundColor: theme.colors.surfaceVariant, marginBottom: 8 }]}
+                        key={`${playerRound.userId}-${playerRound.round.id}-${idx}`}
+                        style={[styles.playerRoundChip, { backgroundColor: theme.colors.surfaceVariant, marginBottom: 8 }]}
                         textStyle={{ color: theme.colors.onSurfaceVariant, fontSize: 12 }}
                       >
-                        {userRound.userName} • {dateStr}
+                        {playerRound.userName} • {dateStr}
                       </Chip>
                     );
                   })}
@@ -2412,8 +2412,8 @@ export default function CornerStatisticConfigModal({
                   
                   // Calculate total scores for each player in this round
                   const playerScores = round.players.map(player => {
-                    const scores = round.scores?.filter(s => s.playerId === player.id && s.throws >= 1) || [];
-                    const totalScore = scores.reduce((sum, score) => sum + score.throws, 0);
+                    const scores = round.scores?.filter(s => s.playerId === player.id && s.score >= 1) || [];
+                    const totalScore = scores.reduce((sum, score) => sum + score.score, 0);
                     return { player, totalScore, scoreCount: scores.length };
                   });
                   
@@ -2657,7 +2657,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginLeft: 8,
   },
-  userRoundsContainer: {
+  playerRoundsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
@@ -2669,11 +2669,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
   },
-  userRoundChip: {
+  playerRoundChip: {
     margin: 0,
     height: 28,
   },
-  userRoundsModalContainer: {
+  playerRoundsModalContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,

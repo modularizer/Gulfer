@@ -62,26 +62,26 @@ export const scoreSchema = z.object({
 export type Score = z.infer<typeof scoreSchema>;
 
 /**
- * UserRound schema
+ * PlayerRound schema
  * Links a user to a round
  * Note: Scores are stored separately in their own table for better query performance
  * Extends base entity schema with relationship fields
  */
-export const userRoundSchema = baseEntitySchema.extend({
+export const playerRoundSchema = baseEntitySchema.extend({
   userId: uuidSchema,
   roundId: uuidSchema,
-  frozen: z.boolean().default(false), // Whether this UserRound is frozen (locked from further edits)
+  frozen: z.boolean().default(false), // Whether this PlayerRound is frozen (locked from further edits)
 });
 
-export type UserRound = z.infer<typeof userRoundSchema>;
+export type PlayerRound = z.infer<typeof playerRoundSchema>;
 
 // Note: GPS and gesture tracking features (Phase 2 & 3) are not yet implemented.
 // These orm can be added back when those features are implemented.
 
 /**
  * Round schema
- * Note: Scores are now stored separately in UserRound entities
- * Note: Players are computed from UserRound entities, not stored here
+ * Note: Scores are now stored separately in PlayerRound entities
+ * Note: Players are computed from PlayerRound entities, not stored here
  * Extends base entity schema with round-specific fields
  * Uses 'name' from baseEntitySchema as the display name
  */
@@ -181,7 +181,7 @@ export type ColumnVisibilityConfig = z.infer<typeof columnVisibilityConfigSchema
 /**
  * Storage schema version
  */
-export const SCHEMA_VERSION = 2; // Incremented for UserRound split
+export const SCHEMA_VERSION = 2; // Incremented for PlayerRound split
 
 /**
  * Validate and parse data with error handling

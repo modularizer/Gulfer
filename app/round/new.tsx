@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { createNewRound } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getUserIdForPlayerName } from '@/services/storage/userStorage';
 import { getLastUsedCourse, getLatestAddedCourse } from '@/services/storage/courseStorage';
-import { saveUserRoundByUserAndRound } from '@/services/storage/userRoundStorage';
+import { savePlayerRoundByUserAndRound } from '@/services/storage/playerRoundStorage';
 
 /**
  * New Round Screen - "Play Now" functionality
@@ -32,8 +32,8 @@ export default function NewRoundScreen() {
           date: Date.now(),
         });
         
-        // Create UserRound for the player
-        await saveUserRoundByUserAndRound(playerId, newRound.id);
+        // Create PlayerRound for the player
+        await savePlayerRoundByUserAndRound(playerId, newRound.id);
         
         // Redirect to the overview page
         // Use replace to avoid navigation stack issues

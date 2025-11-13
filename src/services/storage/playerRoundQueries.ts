@@ -1,5 +1,5 @@
 /**
- * Helper functions for querying userRounds (playerRounds) from the database
+ * Helper functions for querying playerRounds (playerRounds) from the database
  * These queries are optimized for corner statistics and other analytics
  */
 
@@ -12,11 +12,11 @@ export type Score = typeof schema.playerRoundHoleScores.$inferSelect;
 export type Player = typeof schema.players.$inferSelect;
 
 /**
- * Get all userRounds for a specific course
- * Returns userRounds with their scores and round information
+ * Get all playerRounds for a specific course
+ * Returns playerRounds with their scores and round information
  */
-export async function getUserRoundsForCourse(courseId: string): Promise<Array<{
-  userRound: PlayerRound;
+export async function getPlayerRoundsForCourse(courseId: string): Promise<Array<{
+  playerRound: PlayerRound;
   round: Round;
   player: { id: string; name: string };
   scores: Score[];
@@ -26,7 +26,7 @@ export async function getUserRoundsForCourse(courseId: string): Promise<Array<{
   // Query playerRounds with joins
   const results = await db
     .select({
-      userRound: schema.playerRounds,
+      playerRound: schema.playerRounds,
       round: schema.rounds,
       player: {
         id: schema.players.id,
@@ -38,9 +38,9 @@ export async function getUserRoundsForCourse(courseId: string): Promise<Array<{
     .innerJoin(schema.players, eq(schema.playerRounds.playerId, schema.players.id))
     .where(eq(schema.rounds.courseId, courseId));
   
-  // Get scores for each userRound
-  const roundIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.userRound.roundId)));
-  const playerIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.userRound.playerId)));
+  // Get scores for each playerRound
+  const roundIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.playerRound.roundId)));
+  const playerIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.playerRound.playerId)));
   
   const allScores = roundIds.length > 0 && playerIds.length > 0
     ? await db
@@ -66,11 +66,11 @@ export async function getUserRoundsForCourse(courseId: string): Promise<Array<{
   
   // Combine results - use DB types directly
   return results.map((r: typeof results[0]) => {
-    const key = `${r.userRound.playerId}:${r.userRound.roundId}`;
+    const key = `${r.playerRound.playerId}:${r.playerRound.roundId}`;
     const scores = scoresByPlayerRound.get(key) || [];
     
     return {
-      userRound: r.userRound,
+      playerRound: r.playerRound,
       round: r.round,
       player: r.player,
       scores,
@@ -79,19 +79,19 @@ export async function getUserRoundsForCourse(courseId: string): Promise<Array<{
 }
 
 /**
- * Get completed userRounds for a specific course
- * A userRound is considered complete if the player has scores for all expected holes
+ * Get completed playerRounds for a specific course
+ * A playerRound is considered complete if the player has scores for all expected holes
  */
-export async function getCompletedUserRoundsForCourse(
+export async function getCompletedPlayerRoundsForCourse(
   courseId: string,
   expectedHoleCount?: number
 ): Promise<Array<{
-  userRound: PlayerRound;
+  playerRound: PlayerRound;
   round: Round;
   player: { id: string; name: string };
   scores: Score[];
 }>> {
-  const allUserRounds = await getUserRoundsForCourse(courseId);
+  const allPlayerRounds = await getPlayerRoundsForCourse(courseId);
   
   // If expectedHoleCount not provided, calculate from holes
   let holeCount: number;
@@ -106,8 +106,8 @@ export async function getCompletedUserRoundsForCourse(
     holeCount = expectedHoleCount;
   }
   
-  // Filter to only completed userRounds
-  return allUserRounds.filter(ur => {
+  // Filter to only completed playerRounds
+  return allPlayerRounds.filter(ur => {
     const completedScores = ur.scores.filter(s => s.complete);
     const uniqueHoles = new Set(completedScores.map(s => s.holeNumber));
     return uniqueHoles.size >= holeCount;
@@ -115,15 +115,15 @@ export async function getCompletedUserRoundsForCourse(
 }
 
 /**
- * Get userRounds filtered by date range
+ * Get playerRounds filtered by date range
  */
-export async function getUserRoundsForCourseInDateRange(
+export async function getPlayerRoundsForCourseInDateRange(
   courseId: string,
   sinceDate?: number,
   untilDate?: number,
   beforeDate?: number // Exclude rounds on or after this date
 ): Promise<Array<{
-  userRound: PlayerRound;
+  playerRound: PlayerRound;
   round: Round;
   player: { id: string; name: string };
   scores: Score[];
@@ -146,7 +146,7 @@ export async function getUserRoundsForCourseInDateRange(
   
   const results = await db
     .select({
-      userRound: schema.playerRounds,
+      playerRound: schema.playerRounds,
       round: schema.rounds,
       player: {
         id: schema.players.id,
@@ -159,8 +159,8 @@ export async function getUserRoundsForCourseInDateRange(
     .where(and(...roundConditions));
   
   // Get scores
-  const roundIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.userRound.roundId)));
-  const playerIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.userRound.playerId)));
+  const roundIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.playerRound.roundId)));
+  const playerIds: string[] = Array.from(new Set(results.map((r: typeof results[0]) => r.playerRound.playerId)));
   
   const allScores = roundIds.length > 0 && playerIds.length > 0
     ? await db
@@ -186,11 +186,11 @@ export async function getUserRoundsForCourseInDateRange(
   
   // Use DB types directly
   return results.map((r: typeof results[0]) => {
-    const key = `${r.userRound.playerId}:${r.userRound.roundId}`;
+    const key = `${r.playerRound.playerId}:${r.playerRound.roundId}`;
     const scores = scoresByPlayerRound.get(key) || [];
     
     return {
-      userRound: r.userRound,
+      playerRound: r.playerRound,
       round: r.round,
       player: r.player,
       scores,

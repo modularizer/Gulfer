@@ -1,22 +1,20 @@
 /**
  * Service for computing corner statistics from round data
- * Refactored to use userRounds (playerRounds) directly from database
+ * Refactored to use playerRounds (playerRounds) directly from database
  */
 
-import type { PlayerRound, Score, Round } from './storage/userRoundQueries';
-import { 
-  getUserRoundsForCourse, 
-  getCompletedUserRoundsForCourse,
-  getUserRoundsForCourseInDateRange,
+import type { PlayerRound, Score, Round } from './storage/playerRoundQueries';
+import {
+  getPlayerRoundsForCourseInDateRange,
   getExpectedHoleCount
-} from './storage/userRoundQueries';
+} from './storage/playerRoundQueries';
 
 /**
- * UserRound data with related round, player, and scores
- * This is the standard structure returned by userRoundQueries functions
+ * PlayerRound data with related round, player, and scores
+ * This is the standard structure returned by playerRoundQueries functions
  */
-export type UserRoundData = {
-  userRound: PlayerRound;
+export type PlayerRoundData = {
+  playerRound: PlayerRound;
   round: Round;
   player: { id: string; name: string };
   scores: Score[];
@@ -83,12 +81,12 @@ function isScoreComplete(score: Score): boolean {
   }
 
 /**
- * Check if a userRound is complete (has all holes marked as complete)
+ * Check if a playerRound is complete (has all holes marked as complete)
  */
-function isUserRoundComplete(userRoundData: { scores: Score[] }, expectedHoleCount: number): boolean {
-  if (userRoundData.scores.length === 0) return false;
+function isPlayerRoundComplete(playerRoundData: { scores: Score[] }, expectedHoleCount: number): boolean {
+  if (playerRoundData.scores.length === 0) return false;
   
-  const completedScores = userRoundData.scores.filter(s => isScoreComplete(s));
+  const completedScores = playerRoundData.scores.filter(s => isScoreComplete(s));
   const uniqueHoles = new Set(completedScores.map(s => s.holeNumber));
   
   return uniqueHoles.size >= expectedHoleCount;
@@ -135,101 +133,101 @@ function getUntilTimestamp(untilDate?: UntilDateOption): number | undefined {
 }
 
 /**
- * Filter userRounds by user filter
+ * Filter playerRounds by user filter
  */
-function filterUserRoundsByUser(
-  userRounds: UserRoundData[],
+function filterPlayerRoundsByUser(
+  playerRounds: PlayerRoundData[],
   userFilter: UserFilter,
   currentUserId?: string,
   todaysPlayerIds?: string[]
-): UserRoundData[] {
+): PlayerRoundData[] {
   if (userFilter === 'everyone') {
-    return userRounds;
+    return playerRounds;
   }
   if (userFilter === 'eachUser') {
     if (currentUserId) {
-      return userRounds.filter(ur => ur.userRound.playerId === currentUserId);
+      return playerRounds.filter(ur => ur.playerRound.playerId === currentUserId);
     }
-    return userRounds;
+    return playerRounds;
   }
   if (userFilter === 'todaysPlayers') {
     if (todaysPlayerIds && todaysPlayerIds.length > 0) {
-      return userRounds.filter(ur => todaysPlayerIds.includes(ur.userRound.playerId));
+      return playerRounds.filter(ur => todaysPlayerIds.includes(ur.playerRound.playerId));
     }
-    return userRounds;
+    return playerRounds;
   }
   if (Array.isArray(userFilter) && userFilter.length > 0) {
-    return userRounds.filter(ur => userFilter.includes(ur.userRound.playerId));
+    return playerRounds.filter(ur => userFilter.includes(ur.playerRound.playerId));
   }
-  return userRounds;
+  return playerRounds;
 }
 
 /**
- * Select userRounds based on round selection criteria
+ * Select playerRounds based on round selection criteria
  */
-function selectUserRoundsByCriteria(
-  userRounds: UserRoundData[],
+function selectPlayerRoundsByCriteria(
+  playerRounds: PlayerRoundData[],
   roundSelection: RoundSelection | undefined,
   accumulationMode: AccumulationMode,
   currentUserId: string,
   expectedHoleCount: number
-): UserRoundData[] {
-  // If accumulation mode is 'latest' or 'first', we use all userRounds (they'll be sorted later)
+): PlayerRoundData[] {
+  // If accumulation mode is 'latest' or 'first', we use all playerRounds (they'll be sorted later)
   if (accumulationMode === 'latest' || accumulationMode === 'first') {
-    return userRounds;
+    return playerRounds;
   }
 
   // If no round selection provided, default to 'all'
   if (!roundSelection) {
-    return userRounds;
+    return playerRounds;
   }
 
   if (roundSelection === 'all') {
-    return userRounds;
+    return playerRounds;
   }
 
-  // Filter to only completed userRounds for the current user
-  const userUserRounds = userRounds
-    .filter(ur => ur.userRound.playerId === currentUserId)
-    .filter(ur => isUserRoundComplete(ur, expectedHoleCount));
+  // Filter to only completed playerRounds for the current user
+  const userPlayerRounds = playerRounds
+    .filter(ur => ur.playerRound.playerId === currentUserId)
+    .filter(ur => isPlayerRoundComplete(ur, expectedHoleCount));
 
   if (roundSelection === 'latest') {
-    const sorted = [...userUserRounds].sort((a, b) => b.round.date - a.round.date);
+    const sorted = [...userPlayerRounds].sort((a, b) => b.round.date - a.round.date);
     return sorted.length > 0 ? [sorted[0]] : [];
   }
 
   if (roundSelection === 'latest2') {
-    const sorted = [...userUserRounds].sort((a, b) => b.round.date - a.round.date);
+    const sorted = [...userPlayerRounds].sort((a, b) => b.round.date - a.round.date);
     return sorted.slice(0, 2);
   }
 
   if (roundSelection === 'latest3') {
-    const sorted = [...userUserRounds].sort((a, b) => b.round.date - a.round.date);
+    const sorted = [...userPlayerRounds].sort((a, b) => b.round.date - a.round.date);
     return sorted.slice(0, 3);
   }
 
   if (roundSelection === 'first') {
-    const sorted = [...userUserRounds].sort((a, b) => a.round.date - b.round.date);
+    const sorted = [...userPlayerRounds].sort((a, b) => a.round.date - b.round.date);
     return sorted.length > 0 ? [sorted[0]] : [];
   }
 
   if (roundSelection === 'bestRound' || roundSelection === 'bestRound2' || roundSelection === 'bestRounds2' || roundSelection === 'bestRounds3' || 
       roundSelection === 'worstRound' || roundSelection === 'worstRound2' || roundSelection === 'worstRounds2' || roundSelection === 'worstRounds3') {
-    // Calculate total score for each userRound
-    const userRoundsWithScores = userUserRounds.map(ur => {
+    // Calculate total score for each playerRound
+    const playerRoundsWithScores = userPlayerRounds.map(ur => {
       const completedScores = ur.scores.filter(s => isScoreComplete(s));
       const totalScore = completedScores.reduce((sum, score) => sum + score.score, 0);
       return { ...ur, totalScore, scoreCount: completedScores.length };
     }).filter(r => r.scoreCount > 0);
 
-    if (userRoundsWithScores.length === 0) {
+    if (playerRoundsWithScores.length === 0) {
       return [];
     }
 
     // Sort by total score (best = lowest, worst = highest)
     const isWorstSelection = roundSelection === 'worstRound' || roundSelection === 'worstRound2' || 
                             roundSelection === 'worstRounds2' || roundSelection === 'worstRounds3';
-    userRoundsWithScores.sort((a, b) => {
+    playerRoundsWithScores.sort((a, b) => {
       if (isWorstSelection) {
         return b.totalScore - a.totalScore; // Higher is worse
       } else {
@@ -237,23 +235,23 @@ function selectUserRoundsByCriteria(
       }
     });
 
-    // Return the appropriate userRound(s)
+    // Return the appropriate playerRound(s)
     if (roundSelection === 'bestRound' || roundSelection === 'worstRound') {
-      return [userRoundsWithScores[0]];
+      return [playerRoundsWithScores[0]];
     } else if (roundSelection === 'bestRound2' || roundSelection === 'worstRound2') {
-      return userRoundsWithScores.length > 1 ? [userRoundsWithScores[1]] : [];
+      return playerRoundsWithScores.length > 1 ? [playerRoundsWithScores[1]] : [];
     } else if (roundSelection === 'bestRounds2' || roundSelection === 'worstRounds2') {
-      return userRoundsWithScores.slice(0, 2);
+      return playerRoundsWithScores.slice(0, 2);
     } else if (roundSelection === 'bestRounds3' || roundSelection === 'worstRounds3') {
-      return userRoundsWithScores.slice(0, 3);
+      return playerRoundsWithScores.slice(0, 3);
     }
   }
 
   if (typeof roundSelection === 'object' && roundSelection.type === 'specific') {
-    return userRounds.filter(ur => roundSelection.roundIds.includes(ur.round.id));
+    return playerRounds.filter(ur => roundSelection.roundIds.includes(ur.round.id));
   }
 
-  return userRounds;
+  return playerRounds;
 }
 
 /**
@@ -285,21 +283,21 @@ function computePercentile(scores: number[], percentile: number): number {
 }
 
 /**
- * Collect scores from userRounds based on config
+ * Collect scores from playerRounds based on config
  */
-function collectScoresFromUserRounds(
+function collectScoresFromPlayerRounds(
   config: CornerConfig,
-  selectedUserRounds: UserRoundData[],
+  selectedPlayerRounds: PlayerRoundData[],
   currentPlayerId: string,
   holeNumber: number,
   expectedHoleCount: number,
   todaysPlayerIds?: string[]
-): { scores: number[]; userRounds: Array<{ userId: string; round: Round }> } {
-  const userRounds: Array<{ userId: string; round: Round }> = [];
+): { scores: number[]; playerRounds: Array<{ userId: string; round: Round }> } {
+  const playerRounds: Array<{ userId: string; round: Round }> = [];
   const scores: number[] = [];
   
-  // Sort userRounds by date to ensure we get the correct latest/first
-  const sortedSelectedUserRounds = [...selectedUserRounds].sort((a, b) => {
+  // Sort playerRounds by date to ensure we get the correct latest/first
+  const sortedSelectedPlayerRounds = [...selectedPlayerRounds].sort((a, b) => {
     if (config.accumulationMode === 'latest') {
       return b.round.date - a.round.date; // Latest = most recent first
     } else if (config.accumulationMode === 'first') {
@@ -312,15 +310,15 @@ function collectScoresFromUserRounds(
   const addedUsers = new Set<string>();
   
   // Step 1: Build user+round combinations based on scoreUserFilter
-  for (const urData of sortedSelectedUserRounds) {
-    // Check if this userRound is complete
-    if (!isUserRoundComplete(urData, expectedHoleCount)) {
+  for (const urData of sortedSelectedPlayerRounds) {
+    // Check if this playerRound is complete
+    if (!isPlayerRoundComplete(urData, expectedHoleCount)) {
       continue;
     }
     
     if (config.scoreUserFilter === 'eachUser') {
       // For eachUser, use the current player
-      if (urData.userRound.playerId !== currentPlayerId) {
+      if (urData.playerRound.playerId !== currentPlayerId) {
         continue;
       }
       // For latest/first, only add once per user
@@ -330,62 +328,62 @@ function collectScoresFromUserRounds(
         }
         addedUsers.add(currentPlayerId);
       }
-      userRounds.push({ userId: currentPlayerId, round: urData.round });
+      playerRounds.push({ userId: currentPlayerId, round: urData.round });
     } else if (config.scoreUserFilter === 'everyone') {
-      // For everyone, include all users from the userRounds
+      // For everyone, include all users from the playerRounds
       // For latest/first, only add once per user
         if (config.accumulationMode === 'latest' || config.accumulationMode === 'first') {
-        if (addedUsers.has(urData.userRound.playerId)) {
+        if (addedUsers.has(urData.playerRound.playerId)) {
             continue; // Already added this user's round
         }
-        addedUsers.add(urData.userRound.playerId);
+        addedUsers.add(urData.playerRound.playerId);
       }
-      userRounds.push({ userId: urData.userRound.playerId, round: urData.round });
+      playerRounds.push({ userId: urData.playerRound.playerId, round: urData.round });
     } else if (config.scoreUserFilter === 'todaysPlayers') {
       // For todaysPlayers, include today's players
-      if (todaysPlayerIds && todaysPlayerIds.includes(urData.userRound.playerId)) {
+      if (todaysPlayerIds && todaysPlayerIds.includes(urData.playerRound.playerId)) {
           // For latest/first, only add once per user
           if (config.accumulationMode === 'latest' || config.accumulationMode === 'first') {
-          if (addedUsers.has(urData.userRound.playerId)) {
+          if (addedUsers.has(urData.playerRound.playerId)) {
               continue; // Already added this user's round
           }
-          addedUsers.add(urData.userRound.playerId);
+          addedUsers.add(urData.playerRound.playerId);
         }
-        userRounds.push({ userId: urData.userRound.playerId, round: urData.round });
+        playerRounds.push({ userId: urData.playerRound.playerId, round: urData.round });
       }
     } else if (Array.isArray(config.scoreUserFilter)) {
       // For specific users, include those users
-      if (config.scoreUserFilter.includes(urData.userRound.playerId)) {
+      if (config.scoreUserFilter.includes(urData.playerRound.playerId)) {
         // For latest/first, only add once per user
         if (config.accumulationMode === 'latest' || config.accumulationMode === 'first') {
-          if (addedUsers.has(urData.userRound.playerId)) {
+          if (addedUsers.has(urData.playerRound.playerId)) {
             continue; // Already added this user's round
           }
-          addedUsers.add(urData.userRound.playerId);
+          addedUsers.add(urData.playerRound.playerId);
         }
-        userRounds.push({ userId: urData.userRound.playerId, round: urData.round });
+        playerRounds.push({ userId: urData.playerRound.playerId, round: urData.round });
       }
     }
   }
   
   // Step 2: Collect scores from user+round combinations
-  for (const { userId, round } of userRounds) {
-    // Find the userRound data for this userId and round
-    const urData = selectedUserRounds.find(ur => ur.userRound.playerId === userId && ur.round.id === round.id);
+  for (const { userId, round } of playerRounds) {
+    // Find the playerRound data for this userId and round
+    const urData = selectedPlayerRounds.find(ur => ur.playerRound.playerId === userId && ur.round.id === round.id);
     if (!urData) continue;
     
     if (config.userFilterMode === 'and' && Array.isArray(config.scoreUserFilter) && config.scoreUserFilter.length > 1) {
       // AND mode: Only collect if ALL selected users have scores for this hole in this round
       const allUsersHaveScores = config.scoreUserFilter.every(userId => {
-        const ur = selectedUserRounds.find(ur => ur.userRound.playerId === userId && ur.round.id === round.id);
-        if (!ur || !isUserRoundComplete(ur, expectedHoleCount)) return false;
+        const ur = selectedPlayerRounds.find(ur => ur.playerRound.playerId === userId && ur.round.id === round.id);
+        if (!ur || !isPlayerRoundComplete(ur, expectedHoleCount)) return false;
         const score = ur.scores.find(s => s.holeNumber === holeNumber);
         return score && isScoreComplete(score);
       });
       if (allUsersHaveScores) {
         // Collect scores from all selected users
         for (const userId of config.scoreUserFilter) {
-          const ur = selectedUserRounds.find(ur => ur.userRound.playerId === userId && ur.round.id === round.id);
+          const ur = selectedPlayerRounds.find(ur => ur.playerRound.playerId === userId && ur.round.id === round.id);
           if (ur) {
             const score = ur.scores.find(s => s.holeNumber === holeNumber);
           if (score && isScoreComplete(score)) {
@@ -403,7 +401,7 @@ function collectScoresFromUserRounds(
     }
   }
   
-  return { scores, userRounds };
+  return { scores, playerRounds };
 }
 
 /**
@@ -431,81 +429,81 @@ export async function computeCornerValue(
     const untilTimestamp = getUntilTimestamp(config.untilDate);
     const beforeTimestamp = currentRoundDate;
     
-    // Get userRounds for this course with date filters
-    let allUserRounds = await getUserRoundsForCourseInDateRange(
+    // Get playerRounds for this course with date filters
+    let allPlayerRounds = await getPlayerRoundsForCourseInDateRange(
       courseId,
       sinceTimestamp,
       untilTimestamp,
       beforeTimestamp
     );
     
-    // Filter to only completed userRounds
-    allUserRounds = allUserRounds.filter(ur => isUserRoundComplete(ur, expectedHoleCount));
+    // Filter to only completed playerRounds
+    allPlayerRounds = allPlayerRounds.filter(ur => isPlayerRoundComplete(ur, expectedHoleCount));
     
-    // Step 1: Filter userRounds based on roundUserFilter (who played in the rounds)
-    let roundFilteredUserRounds: typeof allUserRounds;
+    // Step 1: Filter playerRounds based on roundUserFilter (who played in the rounds)
+    let roundFilteredPlayerRounds: typeof allPlayerRounds;
     if (config.roundUserFilter === 'eachUser') {
-      // Filter to userRounds where the current player is the player
-      roundFilteredUserRounds = allUserRounds.filter(ur => ur.userRound.playerId === playerId);
+      // Filter to playerRounds where the current player is the player
+      roundFilteredPlayerRounds = allPlayerRounds.filter(ur => ur.playerRound.playerId === playerId);
     } else if (Array.isArray(config.roundUserFilter) && config.roundUserFilter.length > 1) {
       // Multiple users selected - apply AND/OR logic
       const selectedUserIds = config.roundUserFilter;
       if (config.userFilterMode === 'and') {
-        // AND: Only include rounds where ALL selected users have userRounds
+        // AND: Only include rounds where ALL selected users have playerRounds
         // Group by round and check if all users are present
-        const roundsByRoundId = new Map<string, typeof allUserRounds>();
-        for (const ur of allUserRounds) {
+        const roundsByRoundId = new Map<string, typeof allPlayerRounds>();
+        for (const ur of allPlayerRounds) {
           if (!roundsByRoundId.has(ur.round.id)) {
             roundsByRoundId.set(ur.round.id, []);
           }
           roundsByRoundId.get(ur.round.id)!.push(ur);
         }
-        roundFilteredUserRounds = allUserRounds.filter(ur => {
-          const roundUserRounds = roundsByRoundId.get(ur.round.id) || [];
-          const userIdsInRound = new Set(roundUserRounds.map(ur => ur.userRound.playerId));
+        roundFilteredPlayerRounds = allPlayerRounds.filter(ur => {
+          const roundPlayerRounds = roundsByRoundId.get(ur.round.id) || [];
+          const userIdsInRound = new Set(roundPlayerRounds.map(ur => ur.playerRound.playerId));
           return selectedUserIds.every(userId => userIdsInRound.has(userId));
         });
       } else {
-        // OR (default): Include userRounds where ANY selected user is the player
-        roundFilteredUserRounds = allUserRounds.filter(ur => selectedUserIds.includes(ur.userRound.playerId));
+        // OR (default): Include playerRounds where ANY selected user is the player
+        roundFilteredPlayerRounds = allPlayerRounds.filter(ur => selectedUserIds.includes(ur.playerRound.playerId));
       }
     } else if (config.roundUserFilter === 'todaysPlayers') {
       // For 'todaysPlayers', apply AND/OR logic based on userFilterMode
       if (todaysPlayerIds && todaysPlayerIds.length > 0) {
         if (todaysPlayerIds.length > 1 && config.userFilterMode === 'and') {
-          // AND mode: Only include rounds where ALL of today's players have userRounds
-          const roundsByRoundId = new Map<string, typeof allUserRounds>();
-          for (const ur of allUserRounds) {
+          // AND mode: Only include rounds where ALL of today's players have playerRounds
+          const roundsByRoundId = new Map<string, typeof allPlayerRounds>();
+          for (const ur of allPlayerRounds) {
             if (!roundsByRoundId.has(ur.round.id)) {
               roundsByRoundId.set(ur.round.id, []);
             }
             roundsByRoundId.get(ur.round.id)!.push(ur);
           }
-          roundFilteredUserRounds = allUserRounds.filter(ur => {
-            const roundUserRounds = roundsByRoundId.get(ur.round.id) || [];
-            const userIdsInRound = new Set(roundUserRounds.map(ur => ur.userRound.playerId));
+          roundFilteredPlayerRounds = allPlayerRounds.filter(ur => {
+            const roundPlayerRounds = roundsByRoundId.get(ur.round.id) || [];
+            const userIdsInRound = new Set(roundPlayerRounds.map(ur => ur.playerRound.playerId));
             return todaysPlayerIds.every(userId => userIdsInRound.has(userId));
           });
         } else {
-          // OR mode (default): Include userRounds where ANY of today's players is the player
-          roundFilteredUserRounds = allUserRounds.filter(ur => todaysPlayerIds.includes(ur.userRound.playerId));
+          // OR mode (default): Include playerRounds where ANY of today's players is the player
+          roundFilteredPlayerRounds = allPlayerRounds.filter(ur => todaysPlayerIds.includes(ur.playerRound.playerId));
         }
       } else {
-        roundFilteredUserRounds = allUserRounds;
+        roundFilteredPlayerRounds = allPlayerRounds;
       }
     } else {
       // Single user or everyone - use standard filter
-      roundFilteredUserRounds = filterUserRoundsByUser(
-        allUserRounds, 
+      roundFilteredPlayerRounds = filterPlayerRoundsByUser(
+        allPlayerRounds, 
         config.roundUserFilter, 
         undefined,
         todaysPlayerIds
       );
     }
 
-    // Step 2: Select userRounds based on criteria (latest, first, all, etc.)
-    const selectedUserRounds = selectUserRoundsByCriteria(
-      roundFilteredUserRounds,
+    // Step 2: Select playerRounds based on criteria (latest, first, all, etc.)
+    const selectedPlayerRounds = selectPlayerRoundsByCriteria(
+      roundFilteredPlayerRounds,
       config.roundSelection,
       config.accumulationMode,
       playerId,
@@ -513,9 +511,9 @@ export async function computeCornerValue(
     );
 
     // Step 3: Collect scores using the shared logic
-    const { scores, userRounds } = collectScoresFromUserRounds(
+    const { scores, playerRounds } = collectScoresFromPlayerRounds(
       config,
-      selectedUserRounds,
+      selectedPlayerRounds,
       playerId,
       holeNumber,
       expectedHoleCount,
@@ -681,37 +679,37 @@ export async function computeTotalCornerValues(
 }
 
 /**
- * Filter userRounds by user
+ * Filter playerRounds by user
  */
 export function filterRoundsByUser(
-  userRounds: UserRoundData[],
+  playerRounds: PlayerRoundData[],
   userFilter: UserFilter,
   currentUserId?: string,
   todaysPlayerIds?: string[]
-): UserRoundData[] {
-  return filterUserRoundsByUser(userRounds, userFilter, currentUserId, todaysPlayerIds);
+): PlayerRoundData[] {
+  return filterPlayerRoundsByUser(playerRounds, userFilter, currentUserId, todaysPlayerIds);
 }
 
 /**
- * Select userRounds based on round selection criteria
+ * Select playerRounds based on round selection criteria
  */
 export async function selectRoundsByCriteria(
-  userRounds: UserRoundData[],
+  playerRounds: PlayerRoundData[],
   roundSelection: RoundSelection | undefined,
   accumulationMode: AccumulationMode,
   currentUserId: string
-): Promise<UserRoundData[]> {
-  // Get expected hole count from the first userRound's round's course
-  if (userRounds.length === 0) {
+): Promise<PlayerRoundData[]> {
+  // Get expected hole count from the first playerRound's round's course
+  if (playerRounds.length === 0) {
     return [];
   }
   
-  const courseId = userRounds[0].round.courseId;
+  const courseId = playerRounds[0].round.courseId;
   if (!courseId) {
     return [];
   }
   
   const expectedHoleCount = await getExpectedHoleCount(courseId);
   
-  return selectUserRoundsByCriteria(userRounds, roundSelection, accumulationMode, currentUserId, expectedHoleCount);
+  return selectPlayerRoundsByCriteria(playerRounds, roundSelection, accumulationMode, currentUserId, expectedHoleCount);
 }

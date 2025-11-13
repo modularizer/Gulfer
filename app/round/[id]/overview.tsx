@@ -11,7 +11,7 @@ import NotesSection from '@/components/common/NotesSection';
 import { Scorecard } from '@/components/Scorecard';
 import { getRoundById, saveRound, generateRoundName, getCourseNameFromId, getPlayersForRound } from '@/services/storage/roundStorage';
 import { getCurrentUserName, getAllUsers, saveUser, generateUserId, getUserIdForPlayerName, User } from '@/services/storage/userStorage';
-import { saveUserRoundByUserAndRound, deleteUserRoundsByRoundId, getUserRoundsByRoundId } from '@/services/storage/userRoundStorage';
+import { savePlayerRoundByUserAndRound, deletePlayerRoundsByRoundId, getPlayerRoundsByRoundId } from '@/services/storage/playerRoundStorage';
 import { getAllCourses, getCourseById } from '@/services/storage/courseStorage';
 import { exportRound } from '@/services/roundExport';
 import { router, useLocalSearchParams, usePathname, useFocusEffect } from 'expo-router';
@@ -153,7 +153,7 @@ export default function RoundOverviewScreen() {
 
       setRound(loadedRound);
       
-      // Load players from UserRound entities
+      // Load players from PlayerRound entities
       const loadedPlayers = await getPlayersForRound(loadedRound.id);
       setPlayers(loadedPlayers);
       

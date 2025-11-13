@@ -138,7 +138,7 @@ export default function HoleScoreModal({
     const playerTotals = players.map(player => {
       const total = allScores
         .filter(s => String(s.playerId) === String(player.id))
-        .reduce((sum, s) => sum + s.throws, 0);
+        .reduce((sum, s) => sum + ((s as any).score ?? s.throws ?? 0), 0);
       return { player, total };
     }).filter(x => x.total > 0);
     

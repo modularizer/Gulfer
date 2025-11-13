@@ -101,7 +101,7 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
   const getTotalForPlayer = (playerId: string): number => {
     return round.scores
       .filter((s) => s.playerId === playerId)
-      .reduce((sum, s) => sum + s.throws, 0);
+      .reduce((sum, s) => sum + s.score, 0);
   };
 
   return (
