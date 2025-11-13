@@ -7,7 +7,7 @@
 import { defaultStorageDriver } from './drivers';
 import { UserRound, userRoundSchema } from '@/types';
 import { generateUniqueUUID } from '../../utils/uuid';
-import { TableDriver } from '@services/storage/relations/TableDriver';
+import { TableDriver } from '@services/storage/orm/TableDriver';
 
 const USER_ROUNDS_STORAGE_KEY = '@gulfer_user_rounds';
 

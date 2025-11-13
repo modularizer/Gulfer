@@ -14,10 +14,8 @@ import {
   Filter,
 } from '../filters';
 import { and, eq, ne } from '../filters/builders';
-import {IStorageDriver, LimitOffset} from '../drivers/IStorageDriver';
+import {IStorageDriver, LimitOffset, FieldSelection} from '../drivers/IStorageDriver';
 import { defaultStorageDriver } from '@services/storage/drivers/LocalStorageDriver';
-import {TableConfig} from "@services/storage/relations/tableConfig";
-import {ComputedFieldDefinition} from "@services/storage/relations/computedFields";
 
 // Re-export filter types for convenience
 export type { FilterCondition, SingleCondition, Filter };
@@ -29,7 +27,7 @@ export { ConditionOperator };
  * Storage service registry
  * Tracks all storage services to enable cascade deletes and foreign key lookups
  */
-const storageServiceRegistry = new Map<string, TableDriver<any>>();
+export const storageServiceRegistry = new Map<string, TableDriver<any>>();
 
 /**
  * Generic storage service
@@ -38,10 +36,12 @@ const storageServiceRegistry = new Map<string, TableDriver<any>>();
  */
 export class TableDriver<T extends { id: string }> {
     private driver: IStorageDriver;
+    private capabilities: ReturnType<IStorageDriver['getCapabilities']>;
 
-    constructor(private config: TableConfig<T>) {
+    constructor(private config: Table<T>) {
     // Use provided driver or default to LocalStorageDriver
-    this.driver = config.driver || defaultStorageDriver as IStorageDriver;
+    this.driver = (config.driver || defaultStorageDriver) as IStorageDriver;
+    this.capabilities = this.driver.getCapabilities();
 
     // Register this service in the global registry
     storageServiceRegistry.set(config.tableName, this);
@@ -56,55 +56,54 @@ export class TableDriver<T extends { id: string }> {
     }
 
     /**
-     * Apply computed fields to a single entity
+     * Filter entity to only include specified fields
      */
-    private async _applyComputedFields(entity: T): Promise<T> {
-        if (!this.config.computedFields || this.config.computedFields.length === 0) {
+    private _filterFields(entity: T, fields: FieldSelection): T {
+        if (fields === '*' || fields === undefined) {
             return entity;
         }
 
-        const entityWithComputed = { ...entity } as any;
-        
-        for (const definition of this.config.computedFields) {
-            const fieldName = definition.field;
-            entityWithComputed[fieldName] = await definition.generator(entity);
+        const filtered = {} as any;
+        for (const field of fields) {
+            if (field in entity) {
+                filtered[field] = (entity as any)[field];
+            }
         }
-
-        return entityWithComputed as T;
+        return filtered as T;
     }
 
     /**
-     * Apply computed fields to multiple entities
+     * Filter multiple entities to only include specified fields
      */
-    private async _applyComputedFieldsToMany(entities: T[]): Promise<T[]> {
-        if (!this.config.computedFields || this.config.computedFields.length === 0) {
+    private _filterFieldsToMany(entities: T[], fields: FieldSelection): T[] {
+        if (fields === '*' || fields === undefined) {
             return entities;
         }
 
-        return Promise.all(entities.map(entity => this._applyComputedFields(entity)));
+        return entities.map(entity => this._filterFields(entity, fields));
     }
 
-    async getAll(): Promise<T[]> {
-        const entities = await this.driver.select<T>(this.config.tableName);
-        return this._applyComputedFieldsToMany(entities);
+    async getAll(fields: FieldSelection = '*'): Promise<T[]> {
+        const entities = await this.driver.select<T>(this.config.tableName, { fields });
+        return this._filterFieldsToMany(entities, fields);
     }
 
-    async getAllWhere(filter?: Filter, {limit, offset}: LimitOffset = {}): Promise<T[]> {
-        const entities = await this.driver.select<T>(this.config.tableName, { filter, limit, offset });
-        return this._applyComputedFieldsToMany(entities);
+    async getAllWhere(fields: FieldSelection = '*', filter?: Filter, {limit, offset}: LimitOffset = {}): Promise<T[]> {
+        const entities = await this.driver.select<T>(this.config.tableName, { filter, limit, offset, fields });
+        return this._filterFieldsToMany(entities, fields);
     }
 
-    async getOneWhere(filter?: Filter): Promise<T | null> {
-        const entities = await this.getAllWhere(filter, { limit: 1 });
+    async getOneWhere(fields: FieldSelection = '*', filter?: Filter): Promise<T | null> {
+        const entities = await this.getAllWhere(fields, filter, { limit: 1 });
         return entities.length > 0 ? entities[0] : null;
     }
 
-    async getById(id: string): Promise<T | null> {
-        return await this.getOneWhere({id});
+    async getById(id: string, fields: FieldSelection = '*'): Promise<T | null> {
+        return await this.getOneWhere(fields, {id});
     }
 
-    async getByName(name: string): Promise<T | null> {
-        return await this.getOneWhere({name});
+    async getByName(name: string, fields: FieldSelection = '*'): Promise<T | null> {
+        return await this.getOneWhere(fields, {name});
     }
 
 
@@ -143,11 +142,11 @@ export class TableDriver<T extends { id: string }> {
 
     async delete(filter: Filter, cascade: boolean = true): Promise<string[]> {
         // identify records to delete
-        const recordIds = (await this.getAllWhere(filter)).map(r => r.id);
+        const recordIds = (await this.getAllWhere(undefined, filter)).map(r => r.id);
         if (!recordIds.length) return [];
 
-        // Handle cascade deletes if enabled
-        if (cascade && this.config.foreignKeys) {
+        // Handle cascade deletes if enabled (only if driver doesn't handle it natively)
+        if (cascade && !this.capabilities.handlesFKDeletionCascade && this.config.foreignKeys) {
             for (const fk of this.config.foreignKeys) {
               if (fk.cascadeDelete) {
                   for (let id of recordIds) {
@@ -184,8 +183,8 @@ export class TableDriver<T extends { id: string }> {
     private async _prepare(entity: Partial<T>, existsOk?: boolean): Promise<T> {
         let draft: any = { ...entity };
 
-        // Generate fields if needed
-        if (this.config.generatedFields) {
+        // Generate fields if needed (only if driver doesn't handle it natively)
+        if (!this.capabilities.handlesFieldGeneration && this.config.generatedFields) {
             for (const definition of this.config.generatedFields) {
                 const fieldName = definition.field as string;
 
@@ -217,8 +216,38 @@ export class TableDriver<T extends { id: string }> {
 
         const entityToSave = validation.data;
 
-        // Check unique fields
-        if (this.config.uniqueFields) {
+        // Enforce foreign key constraints (only if driver doesn't handle it natively)
+        if (!this.capabilities.enforcesForeignKeys && this.config.foreignKeys) {
+            for (const fk of this.config.foreignKeys) {
+                const fkValue = (entityToSave as any)[fk.field];
+                
+                // Only validate if FK value is provided (null/undefined are allowed if FK is optional)
+                if (fkValue !== undefined && fkValue !== null && fkValue !== '') {
+                    const referencedService = storageServiceRegistry.get(fk.referencesTableName);
+                    
+                    if (!referencedService) {
+                        throw new Error(
+                            `Foreign key "${fk.field}" references table "${fk.referencesTableName}" but service not found in registry`
+                        );
+                    }
+                    
+                    // Check if the referenced entity exists
+                    // Use getById if referencesField is 'id', otherwise use getOneWhere with filter
+                    const referencedEntity = fk.referencesField === 'id'
+                        ? await referencedService.getById(fkValue)
+                        : await referencedService.getOneWhere('*', { [fk.referencesField]: fkValue });
+                    
+                    if (!referencedEntity) {
+                        throw new Error(
+                            `Foreign key constraint violation: ${fk.field}="${fkValue}" references non-existent entity in table "${fk.referencesTableName}" (field: ${fk.referencesField})`
+                        );
+                    }
+                }
+            }
+        }
+
+        // Check unique fields (only if driver doesn't handle it natively)
+        if (!this.capabilities.enforcesUniqueConstraints && this.config.uniqueFields) {
             for (const field of this.config.uniqueFields) {
                 const fieldName = field as string;
                 const value = (entityToSave as any)[fieldName];
@@ -238,8 +267,8 @@ export class TableDriver<T extends { id: string }> {
             }
         }
 
-        // Check unique field combinations
-        if (this.config.uniqueFieldCombos) {
+        // Check unique field combinations (only if driver doesn't handle it natively)
+        if (!this.capabilities.enforcesUniqueConstraints && this.config.uniqueFieldCombos) {
             for (const combo of this.config.uniqueFieldCombos) {
                 const filterObj: Record<string, any> = {};
                 let allValuesPresent = true;

@@ -20,6 +20,15 @@ export class WebStorageDriver implements IStorageDriver {
   private storage: typeof localforage;
   private readonly STORAGE_PREFIX = '@gulfer_';
 
+  getCapabilities() {
+    return {
+      handlesFieldGeneration: false,
+      enforcesUniqueConstraints: false,
+      enforcesForeignKeys: false,
+      handlesFKDeletionCascade: false,
+    };
+  }
+
   constructor() {
     // Configure localforage
     this.storage = localforage.createInstance({

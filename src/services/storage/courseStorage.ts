@@ -6,7 +6,7 @@
 import { Course, courseSchema } from '@/types';
 import { getAllRounds } from './roundStorage';
 import { saveHoles, generateHoleId } from './holeStorage';
-import { TableDriver } from '@services/storage/relations/TableDriver';
+import { TableDriver } from '@services/storage/orm/TableDriver';
 import { defaultStorageDriver } from './drivers';
 
 // Re-export Course type from types

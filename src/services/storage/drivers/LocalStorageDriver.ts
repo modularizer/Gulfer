@@ -26,6 +26,10 @@ export class LocalStorageDriver implements IStorageDriver {
     }
   }
 
+  getCapabilities() {
+    return this.driver.getCapabilities();
+  }
+
   async select<T extends { id: string }>(
     tableName: string,
     options?: import('./IStorageDriver').SelectOptions

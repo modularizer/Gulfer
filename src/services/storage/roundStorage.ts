@@ -11,7 +11,7 @@ import { saveUserRoundByUserAndRound, getUserRoundsByRoundId } from './userRound
 import { saveScores } from './scoreStorage';
 import { getAllUsers } from './userStorage';
 import { addPhotosToEntity } from './photoStorage';
-import { TableDriver } from '@services/storage/relations/TableDriver';
+import { TableDriver } from '@services/storage/orm/TableDriver';
 
 const ROUNDS_STORAGE_KEY = '@gulfer_rounds';
 const ROUNDS_MIGRATION_VERSION_KEY = '@gulfer_rounds_migration_version';

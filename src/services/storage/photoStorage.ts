@@ -7,7 +7,7 @@
 import { defaultStorageDriver } from './drivers';
 import { Photo, photoSchema } from '@/types';
 import { generateUniqueUUID } from '../../utils/uuid';
-import { TableDriver } from '@services/storage/relations/TableDriver';
+import { TableDriver } from '@services/storage/orm/TableDriver';
 
 const PHOTOS_STORAGE_KEY = '@gulfer_photos';
 

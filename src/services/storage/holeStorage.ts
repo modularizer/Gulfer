@@ -6,7 +6,7 @@
 
 import { defaultStorageDriver } from './drivers';
 import { Hole, holeSchema } from '@/types';
-import { TableDriver } from '@services/storage/relations/TableDriver';
+import { TableDriver } from '@services/storage/orm/TableDriver';
 
 const HOLES_STORAGE_KEY = '@gulfer_holes';
 

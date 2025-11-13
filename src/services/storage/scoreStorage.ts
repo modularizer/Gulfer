@@ -5,7 +5,7 @@
  */
 
 import { Score, scoreSchema } from '@/types';
-import { TableDriver } from '@services/storage/relations/TableDriver';
+import { TableDriver } from '@services/storage/orm/TableDriver';
 
 const SCORES_STORAGE_KEY = '@gulfer_scores';
 

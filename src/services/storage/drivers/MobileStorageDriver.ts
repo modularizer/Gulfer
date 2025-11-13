@@ -19,6 +19,15 @@ import { generateUniqueUUID } from '@/utils/uuid';
 export class MobileStorageDriver implements IStorageDriver {
   private readonly STORAGE_PREFIX = '@gulfer_';
 
+  getCapabilities() {
+    return {
+      handlesFieldGeneration: false,
+      enforcesUniqueConstraints: false,
+      enforcesForeignKeys: false,
+      handlesFKDeletionCascade: false,
+    };
+  }
+
   /**
    * Convert tableName to storageKey
    * Adds the @gulfer_ prefix if not already present

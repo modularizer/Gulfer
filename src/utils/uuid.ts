@@ -9,7 +9,7 @@
  * With 64 bits of randomness, collision probability is extremely low (1 in 18+ quintillion)
  * No uniqueness checking needed
  */
-export async function generateUUID(): Promise<string> {
+export  function generateUUID(): string {
   // Generate 16 hex characters (64 bits = 18,446,744,073,709,551,616 possible values)
   // Use crypto.getRandomValues for better randomness
   const array = new Uint8Array(8);
@@ -23,18 +23,9 @@ export async function generateUUID(): Promise<string> {
   }
   
   // Convert to 16 hex characters
-  const hex = Array.from(array)
+  return Array.from(array)
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-  
-  return hex;
 }
 
-/**
- * Generate a UUID (alias for generateUUID for backward compatibility)
- * No uniqueness checking - collision probability is negligible with 16 hex characters
- */
-export async function generateUniqueUUID(_existingIds?: Set<string>): Promise<string> {
-  return generateUUID();
-}
 

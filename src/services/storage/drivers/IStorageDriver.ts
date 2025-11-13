@@ -20,10 +20,49 @@ export interface LimitOffset {
 
 
 /**
+ * Field selection type
+ * '*' or undefined means all fields, array of strings means only those fields
+ */
+export type FieldSelection = '*' | string[] | undefined;
+
+/**
  * Options for select queries
  */
 export interface SelectOptions extends LimitOffset{
   filter?: Filter;
+  fields?: FieldSelection;
+}
+
+/**
+ * Driver capabilities
+ * Indicates what features the driver handles natively
+ * If a capability is true, the driver handles it natively and TableDriver should skip it
+ * If false, TableDriver will handle the enforcement
+ */
+export interface DriverCapabilities {
+  /**
+   * Whether the driver handles field generation natively
+   * (e.g., auto-increment, generated columns)
+   */
+  handlesFieldGeneration?: boolean;
+  
+  /**
+   * Whether the driver enforces unique constraints natively
+   * (e.g., UNIQUE constraints in SQL)
+   */
+  enforcesUniqueConstraints?: boolean;
+  
+  /**
+   * Whether the driver enforces foreign key constraints natively
+   * (e.g., FOREIGN KEY constraints in SQL)
+   */
+  enforcesForeignKeys?: boolean;
+  
+  /**
+   * Whether the driver handles foreign key deletion cascades natively
+   * (e.g., ON DELETE CASCADE in SQL)
+   */
+  handlesFKDeletionCascade?: boolean;
 }
 
 /**
@@ -32,6 +71,12 @@ export interface SelectOptions extends LimitOffset{
  * Uses tableName for a database-like interface - drivers convert to storageKey internally
  */
 export interface IStorageDriver {
+  /**
+   * Get the capabilities of this driver
+   * Indicates what features are handled natively vs. requiring TableDriver enforcement
+   */
+  getCapabilities(): DriverCapabilities;
+  
   /**
    * Select entities matching the filter conditions
    * This is the core query method - implementations can optimize based on storage type

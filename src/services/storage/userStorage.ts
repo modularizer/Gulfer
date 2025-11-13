@@ -6,7 +6,7 @@
 import { defaultStorageDriver } from './drivers';
 import { User, userSchema } from '@/types';
 import { setCurrentUserId, getCurrentUserId, saveCurrentUserName as saveLegacyCurrentUserName } from './currentUserStorage';
-import { TableDriver } from '@services/storage/relations/TableDriver';
+import { TableDriver } from '@services/storage/orm/TableDriver';
 
 // Re-export User type from types
 export type { User };

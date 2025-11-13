@@ -78,7 +78,7 @@ export const userRoundSchema = baseEntitySchema.extend({
 export type UserRound = z.infer<typeof userRoundSchema>;
 
 // Note: GPS and gesture tracking features (Phase 2 & 3) are not yet implemented.
-// These relations can be added back when those features are implemented.
+// These orm can be added back when those features are implemented.
 
 /**
  * Round schema
