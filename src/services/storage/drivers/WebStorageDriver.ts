@@ -5,10 +5,10 @@
  */
 
 import localforage from 'localforage';
-import { IStorageDriver, SelectOptions } from './IStorageDriver';
+import {IStorageDriver, SelectOptions, Table} from './IStorageDriver';
 import { Filter } from '../filters';
 import { findWhere, matchExists, countWhere, evaluateCondition } from '../filters/evaluator';
-import { generateUniqueUUID } from '@/utils/uuid';
+import { generateUUID } from '@/utils/uuid';
 
 /**
  * Web storage driver
@@ -42,48 +42,23 @@ export class WebStorageDriver implements IStorageDriver {
    * Convert tableName to storageKey
    * Adds the @gulfer_ prefix if not already present
    */
-  private tableNameToStorageKey(tableName: string): string {
-    if (tableName.startsWith('@gulfer_')) {
-      return tableName;
-    }
-    return `${this.STORAGE_PREFIX}${tableName}`;
+  private tableToStorageKey({tableName, schemaName}: Table): string {
+      return `${this.STORAGE_PREFIX}_${schemaName ?? 'public'}_${tableName}`;
   }
 
   /**
    * Get a value from storage by key
    */
   private async getRaw(key: string): Promise<string | null> {
-    try {
       const value = await this.storage.getItem<string>(key);
       return value || null;
-    } catch (error) {
-      console.error(`Error getting item ${key}:`, error);
-      return null;
-    }
   }
 
   /**
    * Set a value in storage by key
    */
   private async setRaw(key: string, value: string): Promise<void> {
-    try {
       await this.storage.setItem(key, value);
-    } catch (error: any) {
-      console.error(`Error setting item ${key}:`, error);
-      
-      // Check if it's a quota exceeded error
-      if (
-        error?.name === 'QuotaExceededError' ||
-        error?.message?.includes('quota') ||
-        error?.message?.includes('QuotaExceeded')
-      ) {
-        const quotaError = new Error(`Storage quota exceeded`);
-        (quotaError as any).name = 'QuotaExceededError';
-        throw quotaError;
-      }
-      
-      throw error;
-    }
   }
 
   /**
@@ -91,11 +66,10 @@ export class WebStorageDriver implements IStorageDriver {
    * For localStorage, we fetch all then filter in memory
    */
   async select<T extends { id: string }>(
-    tableName: string,
+    table: Table,
     options?: SelectOptions
   ): Promise<T[]> {
-    try {
-      const storageKey = this.tableNameToStorageKey(tableName);
+      const storageKey = this.tableToStorageKey(table);
       const data = await this.getRaw(storageKey);
       if (!data) {
         return [];
@@ -103,10 +77,6 @@ export class WebStorageDriver implements IStorageDriver {
       
       const parsed = JSON.parse(data) as T[];
       return findWhere(parsed, options || {});
-    } catch (error) {
-      console.error(`Error selecting from ${tableName}:`, error);
-      return [];
-    }
   }
 
   /**
@@ -115,17 +85,16 @@ export class WebStorageDriver implements IStorageDriver {
    * Returns the entity with the generated ID
    */
   async insert<T extends { id?: string }>(
-    tableName: string,
+    table: Table,
     entity: T
   ): Promise<T & { id: string }> {
-    try {
-      const storageKey = this.tableNameToStorageKey(tableName);
-      const entities = await this.select<{ id: string }>(tableName);
+      const storageKey = this.tableToStorageKey(table);
+      const entities = await this.select<{ id: string }>(table);
       
       // Generate ID if missing or empty
       let entityWithId: T & { id: string };
       if (!entity.id || entity.id.trim() === '') {
-        const generatedId = await generateUniqueUUID();
+        const generatedId = await generateUUID();
         entityWithId = { ...entity, id: generatedId } as T & { id: string };
       } else {
         entityWithId = entity as T & { id: string };
@@ -135,34 +104,17 @@ export class WebStorageDriver implements IStorageDriver {
       await this.setRaw(storageKey, JSON.stringify(entities));
       
       return entityWithId;
-    } catch (error: any) {
-      console.error(`Error inserting into ${tableName}:`, error);
-      
-      // Check if it's a quota exceeded error
-      if (
-        error?.name === 'QuotaExceededError' ||
-        error?.message?.includes('quota') ||
-        error?.message?.includes('QuotaExceeded')
-      ) {
-        const quotaError = new Error(`Storage quota exceeded`);
-        (quotaError as any).name = 'QuotaExceededError';
-        throw quotaError;
-      }
-      
-      throw error;
-    }
   }
 
   /**
    * Upsert an entity (insert if new, update if exists)
    */
   async upsert<T extends { id: string }>(
-    tableName: string,
+    table: Table,
     entity: T
   ): Promise<void> {
-    try {
-      const storageKey = this.tableNameToStorageKey(tableName);
-      const entities = await this.select<T>(tableName);
+      const storageKey = this.tableToStorageKey(table);
+      const entities = await this.select<T>(table);
       const existingIndex = entities.findIndex(e => e.id === entity.id);
       
       if (existingIndex >= 0) {
@@ -172,22 +124,6 @@ export class WebStorageDriver implements IStorageDriver {
       }
       
       await this.setRaw(storageKey, JSON.stringify(entities));
-    } catch (error: any) {
-      console.error(`Error upserting into ${tableName}:`, error);
-      
-      // Check if it's a quota exceeded error
-      if (
-        error?.name === 'QuotaExceededError' ||
-        error?.message?.includes('quota') ||
-        error?.message?.includes('QuotaExceeded')
-      ) {
-        const quotaError = new Error(`Storage quota exceeded`);
-        (quotaError as any).name = 'QuotaExceededError';
-        throw quotaError;
-      }
-      
-      throw error;
-    }
   }
 
   /**
@@ -195,12 +131,11 @@ export class WebStorageDriver implements IStorageDriver {
    * Returns the number of entities deleted
    */
   async delete(
-    tableName: string,
+    table: Table,
     filter: Filter
   ): Promise<number> {
-    try {
-      const storageKey = this.tableNameToStorageKey(tableName);
-      const entities = await this.select<{ id: string }>(tableName);
+      const storageKey = this.tableToStorageKey(table);
+      const entities = await this.select<{ id: string }>(table);
       const initialCount = entities.length;
       
       // Filter out entities that match the filter
@@ -213,10 +148,6 @@ export class WebStorageDriver implements IStorageDriver {
       await this.setRaw(storageKey, JSON.stringify(filtered));
       
       return deletedCount;
-    } catch (error) {
-      console.error(`Error deleting from ${tableName}:`, error);
-      throw error;
-    }
   }
 
   /**
@@ -224,12 +155,11 @@ export class WebStorageDriver implements IStorageDriver {
    * Returns true if entity was found and deleted, false otherwise
    */
   async deleteById(
-    tableName: string,
+    table: Table,
     id: string
   ): Promise<boolean> {
-    try {
-      const storageKey = this.tableNameToStorageKey(tableName);
-      const entities = await this.select<{ id: string }>(tableName);
+      const storageKey = this.tableToStorageKey(table);
+      const entities = await this.select<{ id: string }>(table);
       const initialLength = entities.length;
       const filtered = entities.filter(e => e.id !== id);
       
@@ -239,21 +169,16 @@ export class WebStorageDriver implements IStorageDriver {
       }
       
       return false;
-    } catch (error) {
-      console.error(`Error deleting ${id} from ${tableName}:`, error);
-      throw error;
-    }
   }
 
   /**
    * Check if any entities match the filter
    */
   async exists(
-    tableName: string,
+    table: Table,
     filter: Filter
   ): Promise<boolean> {
-    try {
-      const storageKey = this.tableNameToStorageKey(tableName);
+      const storageKey = this.tableToStorageKey(table);
       const data = await this.getRaw(storageKey);
       if (!data) {
         return false;
@@ -261,21 +186,16 @@ export class WebStorageDriver implements IStorageDriver {
       
       const parsed = JSON.parse(data);
       return matchExists(parsed, filter);
-    } catch (error) {
-      console.error(`Error checking existence in ${tableName}:`, error);
-      return false;
-    }
   }
 
   /**
    * Count entities matching the filter
    */
   async count(
-    tableName: string,
+    table: Table,
     filter?: Filter
   ): Promise<number> {
-    try {
-      const storageKey = this.tableNameToStorageKey(tableName);
+      const storageKey = this.tableToStorageKey(table);
       const data = await this.getRaw(storageKey);
       if (!data) {
         return 0;
@@ -283,10 +203,6 @@ export class WebStorageDriver implements IStorageDriver {
       
       const parsed = JSON.parse(data);
       return countWhere(parsed, filter);
-    } catch (error) {
-      console.error(`Error counting in ${tableName}:`, error);
-      return 0;
-    }
   }
 
 }

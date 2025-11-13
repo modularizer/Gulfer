@@ -35,22 +35,26 @@ export class ColumnConfigBuilder<T = any> {
         return this;
     }
 
-    as(columnName: string, tableName: string, cfg?: Partial<ColumnConfig<T>> = {}): this  {
+    as(columnName: string, tableName: string, cfg?: Partial<ColumnConfig<T>> = {}) {
         return new ColumnConfigBuilder<T>({...this.config, ...cfg, columnName, tableName});
     }
 
     default(value: T | (() => T)): this {
+        //@ts-ignore
         this.config.schema = this.config.schema.default(value);
         return this;
     }
 
     required(): this {
+        //@ts-ignore
         if (this.config.schema.required) { // only optional schemas have the required function
+            //@ts-ignore
             this.config.schema = this.config.schema.required();
         }
         return this;
     }
     optional(): this {
+        //@ts-ignore
         this.config.schema = this.config.schema.optional();
         return this;
     }
@@ -62,11 +66,13 @@ export class ColumnConfigBuilder<T = any> {
     }
 
     nullable(): this {
+        //@ts-ignore
         this.config.schema = this.config.schema.nullable();
         return this;
     }
 
     notNull(): this {
+        //@ts-ignore
         this.config.schema = this.config.schema.nonnullable?.();
         return this;
     }
@@ -95,7 +101,7 @@ export class ColumnConfigBuilder<T = any> {
     ): this;
     references(
         arg1: any,
-        arg2?: any,
+        arg2: any,
         arg3: boolean
     ): this {
         let src: ColumnConfig | undefined = undefined;

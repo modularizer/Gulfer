@@ -1,4 +1,6 @@
-import {TableConfig, ResolvedTableConfig} from "@services/storage/orm/types";
+import { z } from 'zod';
+import {TableConfig, ResolvedTableConfig, ColumnConfig, RecordDump, RecordLoad, RecordCheck, ResolvedColumnConfig, Columns} from "@services/storage/orm/types";
+import {ColumnConfigBuilder} from "@services/storage/orm/column";
 
 /**
  * Storage service registry
@@ -12,6 +14,8 @@ export const getFullTableName = (tableName: string, schemaName?: string) => sche
 export class TableConfigBuilder<T = Record<string, any>> {
     public config!: ResolvedTableConfig<T>;
     public fullName!: string;
+    private _columnNames: Record<keyof T, string> = {};
+    private _columnDisplayNames: Record<string, keyof T>= {};
 
     constructor(
         cfg: TableConfig<T>
@@ -23,7 +27,8 @@ export class TableConfigBuilder<T = Record<string, any>> {
             dump: cfg.dump ?? ((x) => x),
             load: cfg.load ?? ((x) => x),
             uniqueFieldCombos: cfg.uniqueFieldCombos ?? [],
-            foreignKeys: []
+            foreignKeys: [],
+            schema: z.object(Object.fromEntries(Object.values(cfg.columns).map(([k, v]) => [k, v.schema])))
         }
         this.fullName = getFullTableName(cfg.tableName, cfg.schemaName);
         if (tableConfigRegistry[this.fullName]) {
@@ -60,23 +65,25 @@ export class TableConfigBuilder<T = Record<string, any>> {
             }
         });
 
+        this._columnNames = Object.fromEntries(Object.entries(this.columns).map(([k, v]) => [k, v.columnName]));
+        this._columnDisplayNames = Object.fromEntries(Object.entries(this.columns).map(([k, v]) => [v.columnName, k]));
 
     }
 
     // overload 1: builder callback
-    unique(builder: (table: TableConfigBuilder<T>, enforce?: boolean) => (Array<keyof T | string>)): this;
+    unique(builder: (columnNames: Record<keyof T, string>, enforce?: boolean) => (Array<keyof T | string>)): this;
 
-    // overload 2: list of fields
-    unique(...fields: (keyof T | string)[]): this;
+    // overload 2: list of columns
+    unique(...columns: Columns): this;
 
-    // overload 3: list of fields
-    unique(fields: (keyof T | string)[], enforce?: boolean): this;
+    // overload 3: list of columns
+    unique(columns: Columns, enforce?: boolean): this;
     // single implementation
     unique(
         first: any,
         ...rest: any[]
     ): this {
-        let fields: Array<keyof T | string> = [];
+        let columns: Array<keyof T | string> = [];
         let enforce = false;
 
         // CASE A: builder callback
@@ -84,7 +91,7 @@ export class TableConfigBuilder<T = Record<string, any>> {
             const maybeEnforce = rest[0];
             if (typeof maybeEnforce === "boolean") enforce = maybeEnforce;
 
-            fields = first(this);
+            columns = first(this);
         }
 
         // CASE B: array form
@@ -92,10 +99,10 @@ export class TableConfigBuilder<T = Record<string, any>> {
             const maybeEnforce = rest[0];
             if (typeof maybeEnforce === "boolean") enforce = maybeEnforce;
 
-            fields = first;
+            columns = first;
         }
 
-        // CASE C: variadic fields
+        // CASE C: variadic columns
         else {
             // last item may be enforce flag
             const last = rest[rest.length - 1];
@@ -104,11 +111,11 @@ export class TableConfigBuilder<T = Record<string, any>> {
                 rest = rest.slice(0, -1);
             }
 
-            fields = [first, ...rest];
+            columns = [first, ...rest];
         }
 
         this.config.uniqueFieldCombos.push({
-            columnNames: fields.map(c => typeof c === "string" ? c : c.columnName),
+            columnNames: this.resolveComunNames(columns),
             enforceUnique: enforce
         });
 
@@ -136,7 +143,29 @@ export class TableConfigBuilder<T = Record<string, any>> {
     }
 
     get columnNames(): Record<keyof T, string> {
-        return Object.fromEntries(Object.entries(this.columns).map(([k, v]) => [k, v.columnName]));
+        return this._columnNames;
+    }
+
+    get columnDisplayNames(): Record<string, keyof T> {
+        return this._columnDisplayNames;
+    }
+
+
+    resolveColumnName(column: ColumnConfig | ColumnConfigBuilder | string): string{
+        if (typeof column === "string") {
+            return this._columnNames[column] ?? column;
+        }
+        if (column.config){
+            column = column.config;
+        }
+        return column.columnName;
+    }
+
+    resolveColumnNames(columns: (ColumnConfig | ColumnConfigBuilder | string)[] | '*'): string{
+        if (columns === '*'){
+            return Object.values(this._columnNames);
+        }
+        return columns.map(this.resolveColumnName.bind(this))
     }
 }
 
@@ -154,7 +183,7 @@ type InferTableType<T extends Record<string, ColumnConfigBuilder<any>>> = {
 export function table(
     tableName: string,
     columns: T,
-    cfg: Partial<TableConfig>
+    cfg: Partial<TableConfig> = {}
 ): TableConfigBuilder<InferTableType<T>> {
     return new TableConfigBuilder<InferTableType<T>>({...cfg, tableName, columns});
 }

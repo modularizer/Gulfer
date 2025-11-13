@@ -1,4 +1,5 @@
 import {z} from "zod/index";
+import {ColumnConfigBuilder} from "@services/storage/orm/column";
 
 
 export type ColumnCheck<T = any, R = Record<string, any>> =
@@ -68,7 +69,7 @@ export interface ForeignKeyConfig {
 
 export interface ColumnConfig<T = any> {
     columnName: string;
-    schema: z.ZodSchema<T> | z.ZodNullable<z.ZodType<T, z.ZodTypeDef, T>>;
+    schema: z.ZodSchema<T>;
     unique?: boolean;
     enforceUnique?: boolean;
     schemaName?: string;
@@ -91,6 +92,7 @@ export interface ResolvedColumnConfig<T = any> extends ColumnConfig<T> {
 export interface TableConfig<T = Record<string, any>> {
     tableName: string;
     schemaName?: string;
+    schema: z.ZodSchema<T>;
     columns: { [K in keyof T]: ColumnConfig<T[K]> };
 
     dump?: RecordDump<T>; // serialize record before saving to storage
@@ -183,3 +185,5 @@ export interface ViewConfig<T = Record<string, any>> {
      */
     joins?: JoinConfig[];
 }
+
+export type Columns = (ColumnConfig | ColumnConfigBuilder | string)[] | '*';

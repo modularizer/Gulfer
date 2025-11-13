@@ -8,18 +8,13 @@
  * This service is driver-agnostic and works with any IStorageDriver implementation
  */
 import {
-  FilterCondition,
-  ConditionOperator,
-  SingleCondition,
   Filter,
 } from '../filters';
 import { and, eq, ne } from '../filters/builders';
 import {IStorageDriver, LimitOffset, FieldSelection} from '../drivers/IStorageDriver';
 import { defaultStorageDriver } from '@services/storage/drivers/LocalStorageDriver';
-
-// Re-export filter types for convenience
-export type { FilterCondition, SingleCondition, Filter };
-export { ConditionOperator };
+import {TableConfigBuilder} from "@services/storage/orm/table";
+import {ResolvedTableConfig, Columns} from "@services/storage/orm/types";
 
 
 
@@ -29,44 +24,41 @@ export { ConditionOperator };
  */
 export const storageServiceRegistry = new Map<string, TableDriver<any>>();
 
+
+
 /**
  * Generic storage service
  * Provides common CRUD operations for any entity type with an id field
  * This service is driver-agnostic and works with any IStorageDriver implementation
  */
 export class TableDriver<T extends { id: string }> {
-    private driver: IStorageDriver;
     private capabilities: ReturnType<IStorageDriver['getCapabilities']>;
 
-    constructor(private config: Table<T>) {
-    // Use provided driver or default to LocalStorageDriver
-    this.driver = (config.driver || defaultStorageDriver) as IStorageDriver;
-    this.capabilities = this.driver.getCapabilities();
+    constructor(private builder: TableConfigBuilder<T>, private driver: IStorageDriver = defaultStorageDriver) {
+        this.capabilities = this.driver.getCapabilities();
 
-    // Register this service in the global registry
-    storageServiceRegistry.set(config.tableName, this);
+        // Register this service in the global registry
+        storageServiceRegistry.set(builder.fullName, this);
+    }
+
+    get config(): ResolvedTableConfig<T> {
+        return this.builder.config;
     }
 
     get tableName(): string {
         return this.config.tableName;
     }
 
-    getTableName(): string {
-        return this.config.tableName;
-    }
-
     /**
      * Filter entity to only include specified fields
      */
-    private _filterFields(entity: T, fields: FieldSelection): T {
-        if (fields === '*' || fields === undefined) {
-            return entity;
-        }
+    private _resolve(entity: T, columns: Columns): T {
+        const columnNames = this.builder.resolveColumns(columns);
 
         const filtered = {} as any;
-        for (const field of fields) {
-            if (field in entity) {
-                filtered[field] = (entity as any)[field];
+        for (const cn of columnNames) {
+            if (cn in entity) {
+                filtered[this.builder.columnDisplayNames[cn]] = (entity as any)[cn];
             }
         }
         return filtered as T;
@@ -75,59 +67,57 @@ export class TableDriver<T extends { id: string }> {
     /**
      * Filter multiple entities to only include specified fields
      */
-    private _filterFieldsToMany(entities: T[], fields: FieldSelection): T[] {
-        if (fields === '*' || fields === undefined) {
-            return entities;
-        }
-
-        return entities.map(entity => this._filterFields(entity, fields));
+    private _resolveMany(entities: T[], columns: Columns): T[] {
+        return entities.map(entity => this._resolve(entity, columns));
     }
 
-    async getAll(fields: FieldSelection = '*'): Promise<T[]> {
-        const entities = await this.driver.select<T>(this.config.tableName, { fields });
-        return this._filterFieldsToMany(entities, fields);
+    async getAll(columns: Columns = '*'): Promise<T[]> {
+        const columnNames = this.builder.resolveColumns(columns);
+        const entities = await this.driver.select<T>(this.config, {  columnNames });
+        return this._resolveMany(entities, columnNames);
     }
 
-    async getAllWhere(fields: FieldSelection = '*', filter?: Filter, {limit, offset}: LimitOffset = {}): Promise<T[]> {
-        const entities = await this.driver.select<T>(this.config.tableName, { filter, limit, offset, fields });
-        return this._filterFieldsToMany(entities, fields);
+    async getAllWhere(columns: Columns = '*', filter?: Filter, {limit, offset}: LimitOffset = {}): Promise<T[]> {
+        const columnNames = this.builder.resolveColumns(columns);
+        const entities = await this.driver.select<T>(this.config, { filter, limit, offset, columnNames });
+        return this._resolveMany(entities, columnNames);
     }
 
-    async getOneWhere(fields: FieldSelection = '*', filter?: Filter): Promise<T | null> {
-        const entities = await this.getAllWhere(fields, filter, { limit: 1 });
+    async getOneWhere(columns: Columns = '*', filter?: Filter): Promise<T | null> {
+        const entities = await this.getAllWhere(columns, filter, { limit: 1 });
         return entities.length > 0 ? entities[0] : null;
     }
 
-    async getById(id: string, fields: FieldSelection = '*'): Promise<T | null> {
-        return await this.getOneWhere(fields, {id});
+    async getById(id: string, columns: Columns = '*'): Promise<T | null> {
+        return await this.getOneWhere(columns, {id});
     }
 
-    async getByName(name: string, fields: FieldSelection = '*'): Promise<T | null> {
-        return await this.getOneWhere(fields, {name});
+    async getByName(name: string, columns: Columns = '*'): Promise<T | null> {
+        return await this.getOneWhere(columns, {name});
     }
 
 
     async existsWhere(filter: Filter): Promise<boolean> {
-        return this.driver.exists(this.config.tableName, filter);
+        return this.driver.exists(this.config, filter);
     }
 
     async countAll(): Promise<number> {
-        return this.driver.count(this.config.tableName);
+        return this.driver.count(this.config);
     }
 
     async countWhere(filter: Filter): Promise<number> {
-        return this.driver.count(this.config.tableName, filter);
+        return this.driver.count(this.config, filter);
     }
 
 
     async upsert(entity: Partial<T>): Promise<void> {
         const entityToSave = await this._prepare(entity, true);
-        await this.driver.upsert(this.config.tableName, entityToSave);
+        await this.driver.upsert(this.config, entityToSave);
     }
 
     async insert(entity: Partial<T>): Promise<void> {
         const entityToSave = await this._prepare(entity, false);
-        await this.driver.insert(this.config.tableName, entityToSave);
+        await this.driver.insert(this.config, entityToSave);
     }
 
     async upsertMany(entitiesToSave: Array<Partial<T>>): Promise<void> {
@@ -161,7 +151,7 @@ export class TableDriver<T extends { id: string }> {
             }
         }
         for (let id of recordIds) {
-            await this.driver.deleteById(this.config.tableName, id);
+            await this.driver.deleteById(this.config, id);
         }
         return recordIds;
     }
@@ -181,32 +171,11 @@ export class TableDriver<T extends { id: string }> {
 
 
     private async _prepare(entity: Partial<T>, existsOk?: boolean): Promise<T> {
-        let draft: any = { ...entity };
-
-        // Generate fields if needed (only if driver doesn't handle it natively)
-        if (!this.capabilities.handlesFieldGeneration && this.config.generatedFields) {
-            for (const definition of this.config.generatedFields) {
-                const fieldName = definition.field as string;
-
-                const currentValue = draft[fieldName];
-                if (currentValue === undefined || currentValue === null || currentValue === '') {
-                    if (!definition.generator) {
-                        throw new Error(
-                            `No generator provided for generated field "${fieldName}" on ${this.config.tableName}`
-                        );
-                    }
-                    draft[fieldName] = await definition.generator(draft);
-                }
-            }
-        }
-
-        // Cleanup before validation
-        if (this.config.cleanupBeforeSave) {
-            draft = this.config.cleanupBeforeSave(draft);
-        }
 
         // Validate schema
-        const validation = this.config.schema.safeParse(draft);
+        const validation = this.config.schema.safeParse(
+            Object.fromEntries(data)
+        );
         if (!validation.success) {
             const errorMessage = validation.error.errors
                 .map(err => `${err.path.join('.')}: ${err.message}`)

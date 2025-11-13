@@ -10,15 +10,17 @@ import {
     bool,
     num,
     timestamp,
-    nonnegint, hex16, foreignKey
+    nonnegint, hex16, foreignKey, str
 } from "@services/storage/orm/commonColumns";
+import {column} from "@services/storage/orm/column";
+import {table} from "@services/storage/orm/table";
 
 
 
 const baseColumns = {
     id: uuidPK(),
     name: requiredUniqueName(),
-    notes: string('notes', {maxLength: 200}),
+    notes: str('notes', {maxLength: 200}),
     location: column('location', z.object({
         latitude: z.number().min(-90).max(90),
         longitude: z.number().min(-180).max(180),
@@ -29,14 +31,14 @@ const baseColumns = {
 export const playersTable = table('players', {
     ...baseColumns,
     isTeam: bool('is_team', false),
-}).build();
+});
 
 export const teamMembersTable = table('team_members', {
     teamId: foreignKey('team_id', playersTable),
     playerId: foreignKey('player_id', playersTable),
-}).build();
+});
 
-export const coursesTable = table('courses', baseColumns).build();
+export const coursesTable = table('courses', baseColumns);
 
 export const holesTable = table('holes', {
     ...baseColumns,

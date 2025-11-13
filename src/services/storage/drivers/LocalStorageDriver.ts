@@ -5,9 +5,10 @@
  */
 
 import { Platform } from 'react-native';
-import { IStorageDriver } from './IStorageDriver';
+import { IStorageDriver, Table, SelectOptions } from './IStorageDriver';
 import { WebStorageDriver } from './WebStorageDriver';
 import { MobileStorageDriver } from './MobileStorageDriver';
+import { Filter } from '../filters';
 
 /**
  * Local storage driver
@@ -15,69 +16,69 @@ import { MobileStorageDriver } from './MobileStorageDriver';
  * Implements IStorageDriver by delegating to WebStorageDriver or MobileStorageDriver
  */
 export class LocalStorageDriver implements IStorageDriver {
-  private driver: IStorageDriver;
+    private driver: IStorageDriver;
 
-  constructor() {
-    // Select the appropriate driver based on platform
-    if (Platform.OS === 'web') {
-      this.driver = new WebStorageDriver();
-    } else {
-      this.driver = new MobileStorageDriver();
+    constructor() {
+        // Select the appropriate driver based on platform
+        if (Platform.OS === 'web') {
+            this.driver = new WebStorageDriver();
+        } else {
+            this.driver = new MobileStorageDriver();
+        }
     }
-  }
 
-  getCapabilities() {
-    return this.driver.getCapabilities();
-  }
+    getCapabilities() {
+        return this.driver.getCapabilities();
+    }
 
-  async select<T extends { id: string }>(
-    tableName: string,
-    options?: import('./IStorageDriver').SelectOptions
-  ): Promise<T[]> {
-    return this.driver.select<T>(tableName, options);
-  }
+    async select<T extends { id: string }>(
+        table: Table,
+        options?: SelectOptions
+    ): Promise<T[]> {
+        return this.driver.select<T>(table, options);
+    }
 
-  async insert<T extends { id?: string }>(
-    tableName: string,
-    entity: T
-  ): Promise<T & { id: string }> {
-    return this.driver.insert<T>(tableName, entity);
-  }
+    async insert<T extends { id?: string }>(
+        table: Table,
+        entity: T
+    ): Promise<T & { id: string }> {
+        return this.driver.insert<T>(table, entity);
+    }
 
-  async upsert<T extends { id: string }>(
-    tableName: string,
-    entity: T
-  ): Promise<void> {
-    return this.driver.upsert<T>(tableName, entity);
-  }
+    async upsert<T extends { id: string }>(
+        table: Table,
+        entity: T
+    ): Promise<void> {
+        return this.driver.upsert<T>(table, entity);
+    }
 
-  async delete(
-    tableName: string,
-    filter: import('../filters').Filter
-  ): Promise<number> {
-    return this.driver.delete(tableName, filter);
-  }
+    async delete(
+        table: Table,
+        filter: Filter
+    ): Promise<number> {
+        return this.driver.delete(table, filter);
+    }
 
-  async deleteById(
-    tableName: string,
-    id: string
-  ): Promise<boolean> {
-    return this.driver.deleteById(tableName, id);
-  }
+    async deleteById(
+        table: Table,
+        id: string
+    ): Promise<boolean> {
+        return this.driver.deleteById(table, id);
+    }
 
-  async exists(
-    tableName: string,
-    filter: import('../filters').Filter
-  ): Promise<boolean> {
-    return this.driver.exists(tableName, filter);
-  }
+    async exists(
+        table: Table,
+        filter: Filter
+    ): Promise<boolean> {
+        return this.driver.exists(table, filter);
+    }
 
-  async count(
-    tableName: string,
-    filter?: import('../filters').Filter
-  ): Promise<number> {
-    return this.driver.count(tableName, filter);
-  }
+    async count(
+        table: Table,
+        filter?: Filter
+    ): Promise<number> {
+        return this.driver.count(table, filter);
+    }
 }
 
 /**

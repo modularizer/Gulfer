@@ -65,6 +65,11 @@ export interface DriverCapabilities {
   handlesFKDeletionCascade?: boolean;
 }
 
+export interface Table {
+    tableName: string;
+    schemaName?: string;
+}
+
 /**
  * Storage driver interface
  * All storage implementations must implement these methods
@@ -85,7 +90,7 @@ export interface IStorageDriver {
    * For localStorage: fetch all then filter in memory
    */
   select<T extends { id: string }>(
-    tableName: string,
+    table: Table,
     options?: SelectOptions
   ): Promise<T[]>;
 
@@ -96,7 +101,7 @@ export interface IStorageDriver {
    * The entity will be modified in place to include the generated ID
    */
   insert<T extends { id?: string }>(
-    tableName: string,
+    table: Table,
     entity: T
   ): Promise<T & { id: string }>;
 
@@ -105,7 +110,7 @@ export interface IStorageDriver {
    * This is the primary save operation
    */
   upsert<T extends { id: string }>(
-    tableName: string,
+    table: Table,
     entity: T
   ): Promise<void>;
 
@@ -114,7 +119,7 @@ export interface IStorageDriver {
    * Returns the number of entities deleted
    */
   delete(
-    tableName: string,
+    table: Table,
     filter: Filter
   ): Promise<number>;
 
@@ -122,7 +127,7 @@ export interface IStorageDriver {
    * Delete entity by ID
    */
   deleteById(
-    tableName: string,
+    table: Table,
     id: string
   ): Promise<boolean>;
 
@@ -130,7 +135,7 @@ export interface IStorageDriver {
    * Check if any entities match the filter
    */
   exists(
-    tableName: string,
+    table: Table,
     filter: Filter
   ): Promise<boolean>;
 
@@ -138,7 +143,7 @@ export interface IStorageDriver {
    * Count entities matching the filter
    */
   count(
-    tableName: string,
+    table: Table,
     filter?: Filter
   ): Promise<number>;
 }
