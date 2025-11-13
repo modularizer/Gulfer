@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Dimensions, Platform } from 'react-native';
 import { IconButton, useTheme as usePaperTheme } from 'react-native-paper';
-import { useTheme } from '../../../theme/ThemeContext';
+import { useTheme } from '@/theme';
 import HillShape from './HillShape';
 import CenterButton from './CenterButton';
 import { TOTAL_HEIGHT } from './hillPaths';

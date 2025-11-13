@@ -11,8 +11,6 @@ import AppLayout from '@/components/common/AppLayout';
 import { usePWARouteCache } from '@/utils/pwa';
 import { useNavigationState } from '@/hooks/useNavigationState';
 import '@/utils/suppressWarnings';
-import { migrateRoundsCourseId } from '@/services/storage/roundStorage';
-import { migrateUsersRemoveIsCurrentUser } from '@/services/storage/userStorage';
 
 function RootLayoutNav() {
   const { theme, isDark } = useTheme();
@@ -37,18 +35,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  // Run migrations on app startup
-  useEffect(() => {
-    const runMigrations = async () => {
-      try {
-        await migrateRoundsCourseId();
-        await migrateUsersRemoveIsCurrentUser();
-      } catch (error) {
-        console.error('Error running migrations:', error);
-      }
-    };
-    runMigrations();
-  }, []);
+
 
   // Inject PWA manifest and favicon links on web
   useEffect(() => {

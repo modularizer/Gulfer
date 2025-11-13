@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, IconButton, useTheme } from 'react-native-paper';
-import { Hole } from '@/types';
 import NumberModal from './NumberModal';
 import GStatsCell from './GStatsCell';
 import { computeAllHoleStatistics, HoleStatistics } from '@/services/holeStatistics';
-import { scorecardTableStyles } from '../../styles/scorecardTableStyles';
+import { scorecardTableStyles } from '@/styles/scorecardTableStyles';
 
 interface HolesTableProps {
   holes: Hole[];

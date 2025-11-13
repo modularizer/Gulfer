@@ -5,7 +5,6 @@
 
 import { useEffect, useRef } from 'react';
 import { usePathname, useRouter, useLocalSearchParams } from 'expo-router';
-import { Platform } from 'react-native';
 import { saveNavigationState, getNavigationState, buildPathWithParams } from '@/services/navigationState';
 
 let hasRestoredNavigation = false;

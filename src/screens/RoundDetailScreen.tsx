@@ -5,27 +5,22 @@ import {
   ScrollView,
   Image,
   Alert,
-  TouchableOpacity,
 } from 'react-native';
 import {
   Text,
   Card,
-  Title,
-  Paragraph,
   Button,
-  Chip,
   IconButton,
   Dialog,
   Portal,
 } from 'react-native-paper';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../App';
-import { Round } from '../types';
-import { getRoundById, deleteRound } from '../services/storage/roundStorage';
-import { formatDate } from '../utils';
-import { Scorecard } from '../components/Scorecard';
-import { useDialogStyle } from '../hooks/useDialogStyle';
+import { RootStackParamList } from '@/App';
+import {getRoundWithDetails, deleteRound, RoundWithDetails} from '@/services/storage/roundStorage';
+import { formatDate } from '@/utils';
+import { Scorecard } from '@/components/Scorecard';
+import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 type RoundDetailScreenRouteProp = RouteProp<RootStackParamList, 'RoundDetail'>;
 type RoundDetailScreenNavigationProp = StackNavigationProp<
@@ -41,7 +36,7 @@ interface Props {
 export default function RoundDetailScreen({ route, navigation }: Props) {
   const { roundId } = route.params;
   const dialogStyle = useDialogStyle();
-  const [round, setRound] = useState<Round | null>(null);
+  const [round, setRound] = useState<RoundWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -51,7 +46,7 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
 
   const loadRound = useCallback(async () => {
     try {
-      const loadedRound = await getRoundById(roundId);
+      const loadedRound = await getRoundWithDetails(roundId);
       setRound(loadedRound);
     } catch (error) {
       console.error('Error loading round:', error);
@@ -110,12 +105,12 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
         <Card.Content>
           <View style={styles.headerRow}>
             <View style={styles.headerContent}>
-              <Title style={styles.title}>{round.name}</Title>
+              <Text variant="headlineMedium" style={styles.title}>{round.name}</Text>
               {round.courseName && (
-                <Paragraph style={styles.courseName}>{round.courseName}</Paragraph>
+                <Text variant="bodyLarge" style={styles.courseName}>{round.courseName}</Text>
               )}
               <View style={styles.metaRow}>
-                <Paragraph style={styles.date}>{formatDate(round.date)}</Paragraph>
+                <Text variant="bodyMedium" style={styles.date}>{formatDate(round.date)}</Text>
               </View>
             </View>
             <IconButton
@@ -131,7 +126,7 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
       {round.photos && round.photos.length > 0 && (
         <Card style={styles.card}>
           <Card.Content>
-            <Title style={styles.sectionTitle}>Photos</Title>
+            <Text variant="titleLarge" style={styles.sectionTitle}>Photos</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               {round.photos.map((photoUri, index) => (
                 <Image
@@ -147,7 +142,7 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
 
       <Card style={styles.card}>
         <Card.Content>
-          <Title style={styles.sectionTitle}>Scorecard</Title>
+          <Text variant="titleLarge" style={styles.sectionTitle}>Scorecard</Text>
           <Scorecard
             players={round.players}
             holes={holes}
@@ -160,13 +155,13 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
             readOnly={true}
           />
           <View style={styles.totalsContainer}>
-            <Title style={styles.totalsTitle}>Totals</Title>
+            <Text variant="titleMedium" style={styles.totalsTitle}>Totals</Text>
             {round.players.map((player) => (
               <View key={player.id} style={styles.totalRow}>
-                <Paragraph style={styles.playerName}>{player.name}</Paragraph>
-                <Paragraph style={styles.totalScore}>
+                <Text variant="bodyLarge" style={styles.playerName}>{player.name}</Text>
+                <Text variant="bodyLarge" style={styles.totalScore}>
                   {getTotalForPlayer(player.id)}
-                </Paragraph>
+                </Text>
               </View>
             ))}
           </View>
@@ -178,10 +173,10 @@ export default function RoundDetailScreen({ route, navigation }: Props) {
         <Dialog visible={showDeleteDialog} onDismiss={() => setShowDeleteDialog(false)} style={dialogStyle}>
           <Dialog.Title>Delete Round</Dialog.Title>
           <Dialog.Content>
-            <Paragraph>
+            <Text variant="bodyMedium">
               Are you sure you want to delete "{round.name}"? This action cannot be
               undone.
-            </Paragraph>
+            </Text>
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setShowDeleteDialog(false)}>Cancel</Button>

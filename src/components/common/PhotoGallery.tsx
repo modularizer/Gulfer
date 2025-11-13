@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'reac
 import { IconButton, Surface, useTheme, Dialog, Portal, Button, Text } from 'react-native-paper';
 import HashedImage from './HashedImage';
 import { takePhoto, pickMultiplePhotos } from '@/services/photos/photoService';
-import { getShadowStyle } from '../../utils';
+import { getShadowStyle } from '@/utils';
 
 const { width, height } = Dimensions.get('window');
 

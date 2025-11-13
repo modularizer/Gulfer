@@ -11,14 +11,14 @@ interface HoleScoreModalProps {
   holeNumber: number;
   players: Player[];
   scores: Map<string, number>; // Map of playerId -> score
-  onScoreChange: (playerId: string | number, holeNumber: number, score: number) => void;
+  onScoreChange: (playerId: string, holeNumber: number, score: number) => void;
   onDismiss: () => void;
-  initialActivePlayerId?: string | number;
+  initialActivePlayerId?: string;
   allHoles?: number[];
   onNextHole?: (nextHoleNumber: number) => void;
   min?: number;
   max?: number;
-  allScores?: Array<{ playerId: string | number; holeNumber: number; throws: number }>; // All scores for calculating totals (Score[] format)
+  allScores?: Array<{ playerId: string; holeNumber: number; score: number }>; // All scores for calculating totals
 }
 
 export default function HoleScoreModal({
@@ -54,7 +54,7 @@ export default function HoleScoreModal({
   const generateSuccessMessage = (): string => {
     const playerScores = players.map(player => ({
       player,
-      score: scores.get(String(player.id)) || 0
+      score: scores.get(player.id) || 0
     })).filter(x => x.score > 0);
     if (!playerScores.length){
         return "";
@@ -137,8 +137,8 @@ export default function HoleScoreModal({
     // Calculate total scores for each player
     const playerTotals = players.map(player => {
       const total = allScores
-        .filter(s => String(s.playerId) === String(player.id))
-        .reduce((sum, s) => sum + ((s as any).score ?? s.throws ?? 0), 0);
+        .filter(s => s.playerId === player.id)
+        .reduce((sum, s) => sum + (s.score ?? 0), 0);
       return { player, total };
     }).filter(x => x.total > 0);
     
@@ -273,7 +273,7 @@ export default function HoleScoreModal({
         confirmedSaves.push(key);
         
         // Determine what action to take
-        const currentIndex = players.findIndex(p => String(p.id) === pending.playerId);
+        const currentIndex = players.findIndex(p => p.id === pending.playerId);
         if (currentIndex >= 0) {
           if (currentIndex === players.length - 1) {
             // Last player - close modal
@@ -281,7 +281,7 @@ export default function HoleScoreModal({
           } else {
             // Advance to next player
             const nextPlayer = players[currentIndex + 1];
-            shouldAdvanceRef.current = { playerId: String(nextPlayer.id), action: 'advance' };
+            shouldAdvanceRef.current = { playerId: nextPlayer.id, action: 'advance' };
           }
         }
       }
@@ -348,8 +348,8 @@ export default function HoleScoreModal({
       if (lastHoleRef.current !== holeNumber) {
         const newEditValues = new Map<string, string>();
         players.forEach(player => {
-          const score = scores.get(String(player.id)) || 0;
-          newEditValues.set(String(player.id), score.toString());
+          const score = scores.get(player.id) || 0;
+          newEditValues.set(player.id, score.toString());
         });
         setEditValues(newEditValues);
         lastHoleRef.current = holeNumber;
@@ -357,9 +357,9 @@ export default function HoleScoreModal({
         // Set active player: use initialActivePlayerId if provided, otherwise first player
         if (players.length > 0) {
           if (initialActivePlayerId !== undefined) {
-            setActivePlayerId(String(initialActivePlayerId));
+            setActivePlayerId(initialActivePlayerId);
           } else {
-            setActivePlayerId(String(players[0].id));
+            setActivePlayerId(players[0].id);
           }
         }
       }
@@ -382,25 +382,22 @@ export default function HoleScoreModal({
   };
 
   const handleValueChange = (playerId: string, text: string) => {
-    // Ensure playerId is a string
-    const normalizedPlayerId = String(playerId);
-    
     // If text is empty (backspace/delete), set to 0 and advance
     if (text === '' || text.length === 0) {
       const newEditValues = new Map(editValues);
-      newEditValues.set(normalizedPlayerId, '0');
+      newEditValues.set(playerId, '0');
       setEditValues(newEditValues);
       
       // Check if score already matches 0 (no need to save)
-      const currentScore = scores.get(normalizedPlayerId);
+      const currentScore = scores.get(playerId);
       if (currentScore === 0) {
         // Score already 0, proceed with advance/close immediately
-        const currentIndex = players.findIndex(p => String(p.id) === normalizedPlayerId);
+        const currentIndex = players.findIndex(p => p.id === playerId);
         if (currentIndex >= 0) {
           if (currentIndex === players.length - 1) {
             handleShowSuccess();
           } else {
-            const nextPlayerId = String(players[currentIndex + 1].id);
+            const nextPlayerId = players[currentIndex + 1].id;
             setActivePlayerId(nextPlayerId);
           }
         }
@@ -408,15 +405,15 @@ export default function HoleScoreModal({
       }
       
       // Add to pending saves - we'll wait for scores prop to update
-      const pendingKey = `${normalizedPlayerId}-${holeNumber}`;
+      const pendingKey = `${playerId}-${holeNumber}`;
       pendingSavesRef.current.set(pendingKey, {
-        playerId: normalizedPlayerId,
+        playerId: playerId,
         holeNumber,
         expectedScore: 0
       });
       
       // Save 0 immediately
-      onScoreChange(normalizedPlayerId, holeNumber, 0);
+      onScoreChange(playerId, holeNumber, 0);
       
       // The useEffect watching scores will detect when the save completes and proceed
       return;
@@ -426,29 +423,29 @@ export default function HoleScoreModal({
     const digitOnly = text.replace(/[^0-9]/g, '').slice(0, 1); // Only keep first digit
     
     const newEditValues = new Map(editValues);
-    newEditValues.set(normalizedPlayerId, digitOnly);
+    newEditValues.set(playerId, digitOnly);
     setEditValues(newEditValues);
 
     const num = parseInt(digitOnly, 10);
     if (!isNaN(num) && num >= min && num <= max) {
       console.log('[HoleScoreModal] Attempting to save score:', {
-        playerId: normalizedPlayerId,
+        playerId: playerId,
         holeNumber,
         score: num,
-        currentScoreInMap: scores.get(normalizedPlayerId)
+        currentScoreInMap: scores.get(playerId)
       });
       
       // Check if score already matches (no need to save)
-      const currentScore = scores.get(normalizedPlayerId);
+      const currentScore = scores.get(playerId);
       if (currentScore === num) {
         console.log('[HoleScoreModal] Score already matches, no save needed');
         // Score already matches, proceed with advance/close immediately
-        const currentIndex = players.findIndex(p => String(p.id) === normalizedPlayerId);
+        const currentIndex = players.findIndex(p => p.id === playerId);
         if (currentIndex >= 0) {
           if (currentIndex === players.length - 1) {
             handleShowSuccess();
           } else {
-            const nextPlayerId = String(players[currentIndex + 1].id);
+            const nextPlayerId = players[currentIndex + 1].id;
             setActivePlayerId(nextPlayerId);
           }
         }
@@ -456,22 +453,22 @@ export default function HoleScoreModal({
       }
       
       // Add to pending saves - we'll wait for scores prop to update
-      const pendingKey = `${normalizedPlayerId}-${holeNumber}`;
+      const pendingKey = `${playerId}-${holeNumber}`;
       pendingSavesRef.current.set(pendingKey, {
-        playerId: normalizedPlayerId,
+        playerId: playerId,
         holeNumber,
         expectedScore: num
       });
       
       console.log('[HoleScoreModal] Added to pending saves, calling onScoreChange:', {
-        playerId: normalizedPlayerId,
+        playerId: playerId,
         holeNumber,
         score: num,
         pendingSaves: Array.from(pendingSavesRef.current.entries())
       });
       
       // Immediately save the change - ensure playerId is normalized and pass holeNumber
-      onScoreChange(normalizedPlayerId, holeNumber, num);
+      onScoreChange(playerId, holeNumber, num);
       
       // The useEffect watching scores will detect when the save completes and proceed
     }
@@ -527,14 +524,14 @@ export default function HoleScoreModal({
     }
     
     // Check if we're on the rightmost player
-    const currentIndex = players.findIndex(p => String(p.id) === playerId);
+    const currentIndex = players.findIndex(p => p.id === playerId);
     if (currentIndex >= 0 && currentIndex === players.length - 1) {
       // We're on the rightmost player, show success then close
       handleShowSuccess();
     } else {
       // Advance to the next player
       if (currentIndex >= 0 && currentIndex < players.length - 1) {
-        const nextPlayerId = String(players[currentIndex + 1].id);
+        const nextPlayerId = players[currentIndex + 1].id;
         setActivePlayerId(nextPlayerId);
       }
     }
@@ -671,7 +668,7 @@ export default function HoleScoreModal({
               <View style={styles.tableRow}>
                 {/* Player score cells */}
                 {players.map((player, index) => {
-                  const playerId = String(player.id);
+                  const playerId = player.id;
                   const isActive = activePlayerId === playerId;
                   const editValue = editValues.get(playerId) || getScore(playerId).toString();
                   const isLastPlayer = index === players.length - 1;

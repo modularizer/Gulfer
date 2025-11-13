@@ -6,12 +6,11 @@
 import React from 'react';
 import { View, TouchableOpacity, Platform } from 'react-native';
 import { Card, Text, useTheme } from 'react-native-paper';
-import { Course, Player } from '@/types';
-import { getShadowStyle } from '../../utils';
+import { getShadowStyle } from '@/utils';
 import PlayerChip from './PlayerChip';
 import HashedImage from './HashedImage';
 import { router } from 'expo-router';
-import { encodeNameForUrl } from '../../utils/urlEncoding';
+import { encodeNameForUrl } from '@utils/urlEncoding';
 import { sharedCardStyles } from './sharedCardStyles';
 import { CardMode } from './CardModeToggle';
 

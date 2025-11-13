@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { TouchableOpacity } from 'react-native';
-import { Round, Course } from '@/types';
 import { getAllRounds, deleteRound, deleteRounds } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
 import { router, useFocusEffect } from 'expo-router';

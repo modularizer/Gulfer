@@ -5,9 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { View, TouchableOpacity, Platform } from 'react-native';
-import { Card, Text, Chip, useTheme } from 'react-native-paper';
-import { Round, Player } from '@/types';
-import { getShadowStyle } from '../../utils';
+import { Card, Text, useTheme } from 'react-native-paper';
+import { getShadowStyle } from '@/utils';
 import PlayerChip from './PlayerChip';
 import HashedImage from './HashedImage';
 import { router } from 'expo-router';

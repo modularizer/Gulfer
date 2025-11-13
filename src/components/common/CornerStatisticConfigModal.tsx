@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform } from 'react-native';
-import { Dialog, Portal, Text, useTheme, Chip, Menu, Icon, IconButton, Button, Switch } from 'react-native-paper';
+import { Dialog, Portal, Text, useTheme, Chip, Menu, Icon, IconButton, Button} from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { CornerConfig, UserFilter, AccumulationMode, RoundSelection, SinceDateOption, UntilDateOption } from '@/services/cornerStatistics';
 import { getAllUsers, User } from '@/services/storage/userStorage';

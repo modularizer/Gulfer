@@ -1,13 +1,12 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import { router, usePathname, useSegments, useFocusEffect } from 'expo-router';
 import { Linking, Platform } from 'react-native';
-import { getAllUsers, getUserById } from '@/services/storage/userStorage';
-import { encodeNameForUrl } from '../../utils/urlEncoding';
+import { getUserById } from '@/services/storage/userStorage';
+import { encodeNameForUrl } from '@utils/urlEncoding';
 import { getRoundById } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';
 import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage';
-import { Round } from '@/types';
-import { useScorecard } from '../../contexts/ScorecardContext';
+import { useScorecard } from '@/contexts/ScorecardContext';
 import HillFooter from './Footer/HillFooter';
 
 interface FooterProps {}

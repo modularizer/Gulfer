@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Dialog, Portal, TextInput, Button, Text, useTheme } from 'react-native-paper';
-import { useDialogStyle } from '../../hooks/useDialogStyle';
+import React, { useState, useEffect} from 'react';
+import { StyleSheet } from 'react-native';
+import { Dialog, Portal, TextInput, Button,  useTheme } from 'react-native-paper';
+import { useDialogStyle } from '@/hooks';
+
 interface NameUsernameDialogProps {
   visible: boolean;
   title: string;

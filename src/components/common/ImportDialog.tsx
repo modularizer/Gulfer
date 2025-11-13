@@ -6,8 +6,8 @@
 import React from 'react';
 import { Dialog, Portal, Button, Text, TextInput, useTheme } from 'react-native-paper';
 import { Platform, StyleSheet, View } from 'react-native';
-import { normalizeExportText } from '../../utils';
-import { useDialogStyle } from '../../hooks/useDialogStyle';
+import { normalizeExportText } from '@/utils';
+import { useDialogStyle } from '@/hooks';
 
 interface ImportDialogProps {
   visible: boolean;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Platform, Dimensions, StyleSheet } from 'react-native';
+import { Platform, Dimensions } from 'react-native';
 
 /**
  * Hook that returns dialog styles constrained to phone container width on big screens

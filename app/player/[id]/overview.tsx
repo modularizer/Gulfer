@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Platform, Alert, Share } from 'react-native';
+import { View, StyleSheet, Platform, Alert, Share } from 'react-native';
 import { useTheme, Text, Card, Chip, Button, Dialog, Portal } from 'react-native-paper';
 import { router, useLocalSearchParams } from 'expo-router';
-import { getAllUsers, getUserById, getUserByName, User, saveUser } from '@/services/storage/userStorage';
+import { getUserByName, User, saveUser } from '@/services/storage/userStorage';
 import { getAllRounds } from '@/services/storage/roundStorage';
-import { Round, Player, Score } from '@/types';
+import { Round } from '@/types';
 import { getAllCourses, Course } from '@/services/storage/courseStorage';
 import { getShadowStyle, getAppVersion } from '@/utils';
 import { exportPlayer } from '@/services/playerExport';
@@ -15,7 +15,6 @@ import {
   SectionTitle,
   RoundCard,
   CourseCard,
-  ErrorDialog,
   NotesSection,
   CardModeToggle,
   CardMode,

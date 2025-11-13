@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Dialog, Portal, Button, Text } from 'react-native-paper';
-import { useDialogStyle } from '../../hooks/useDialogStyle';
+import { useDialogStyle } from '@/hooks';
 
 interface ErrorDialogProps {
   visible: boolean;

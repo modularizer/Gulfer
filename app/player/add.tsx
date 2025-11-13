@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
-import { Button, Dialog, Portal, TextInput, useTheme, Text } from 'react-native-paper';
+import { Button, TextInput, useTheme, Text } from 'react-native-paper';
 import { router } from 'expo-router';
 import { User } from '@/services/storage/userStorage';
 import { saveUser, generateUserId, getUserById } from '@/services/storage/userStorage';

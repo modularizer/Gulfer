@@ -1,15 +1,28 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Image, TouchableOpacity } from 'react-native';
-import { Button, TextInput, Dialog, Portal, Paragraph, IconButton, useTheme, Text } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Alert, Image} from 'react-native';
+import { Button, TextInput, Dialog, Portal, IconButton, useTheme, Text } from 'react-native-paper';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../App';
+import { RootStackParamList } from '@/App';
 import { Scorecard } from '../components/Scorecard';
 import Footer from '../components/common/Footer';
-import { Player, Round } from '../types';
-import { Score } from '../services/storage/roundStorage';
-import { saveRound, generateRoundId } from '../services/storage/roundStorage';
-import { takePhoto, pickPhoto } from '../services/photos/photoService';
-import { useDialogStyle } from '../hooks/useDialogStyle';
+import { 
+  RoundInsert, 
+  PlayerRoundInsert, 
+  ScoreInsert,
+  saveRound, 
+  savePlayerRoundsForRound,
+  saveScoresForRound,
+  generateRoundId 
+} from '@services/storage/roundStorage';
+import type { ScorecardScore } from '@/components/Scorecard/Scorecard';
+import { saveUser, generateUserId, getUserByName } from '@services/storage/userStorage';
+import { saveCourse, getCourseByName, getAllHolesForCourse, saveHolesForCourse, generateCourseId, HoleInsert } from '@services/storage/courseStorage';
+import { takePhoto, pickPhoto } from '@services/photos/photoService';
+import { getImageByHash } from '@services/storage/photoStorage';
+import { schema, getDatabase } from '@services/storage/db';
+import { eq } from 'drizzle-orm';
+import { useDialogStyle } from '@/hooks';
+import { generateUUID } from '@/utils/uuid';
 
 type ScorecardScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -20,18 +33,23 @@ interface Props {
   navigation: ScorecardScreenNavigationProp;
 }
 
+// Simple Player type for the scorecard (just id and name)
+type Player = { id: string; name: string };
+
 export default function ScorecardScreen({ navigation }: Props) {
   const [isLandingPage, setIsLandingPage] = useState(true);
   const [players, setPlayers] = useState<Player[]>([
     { id: 'player_1', name: 'You' },
   ]);
   const [holes, setHoles] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-  const [scores, setScores] = useState<Score[]>([]);
+  // Scores state - using 'score' to match database and Scorecard
+  const [scores, setScores] = useState<Array<{ playerId: string; holeNumber: number; score: number }>>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [roundTitle, setRoundTitle] = useState('');
   const [courseName, setCourseName] = useState('');
   const [notes, setNotes] = useState('');
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [photoHashes, setPhotoHashes] = useState<string[]>([]);
+  const [photoUris, setPhotoUris] = useState<string[]>([]);
   const [playerNameDialog, setPlayerNameDialog] = useState({ visible: false, playerId: '' });
   const [newPlayerName, setNewPlayerName] = useState('');
 
@@ -40,17 +58,17 @@ export default function ScorecardScreen({ navigation }: Props) {
   const dateString = currentDate.toLocaleDateString();
   const timeString = currentDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const handleScoreChange = useCallback((playerId: string, holeNumber: number, throws: number) => {
+  const handleScoreChange = useCallback((playerId: string, holeNumber: number, score: number) => {
     setScores((prev) => {
       const existing = prev.findIndex(
         (s) => s.playerId === playerId && s.holeNumber === holeNumber
       );
       if (existing >= 0) {
         const updated = [...prev];
-        updated[existing] = { playerId, holeNumber, throws };
+        updated[existing] = { playerId, holeNumber, score };
         return updated;
       }
-      return [...prev, { playerId, holeNumber, throws }];
+      return [...prev, { playerId, holeNumber, score }];
     });
   }, []);
 
@@ -107,19 +125,162 @@ export default function ScorecardScreen({ navigation }: Props) {
 
   const handleConfirmSave = useCallback(async () => {
     try {
-      const round: Round = {
-        id: await generateRoundId(),
-        title: roundTitle.trim(),
+      const roundId = generateRoundId(); // Synchronous now
+      
+      // Ensure all players exist in the database
+      const playerIds: string[] = [];
+      for (const player of players) {
+        let userId: string;
+        // Check if player already exists
+        const existing = await getUserByName(player.name);
+        if (existing) {
+          userId = existing.id;
+        } else {
+          // Create new user/player
+          userId = generateUserId();
+          await saveUser({
+            id: userId,
+            name: player.name,
+            notes: null,
+            latitude: null,
+            longitude: null,
+            isTeam: false,
+          });
+        }
+        playerIds.push(userId);
+      }
+      
+      // Handle course - get or create
+      let courseId: string | null = null;
+      if (courseName.trim()) {
+        let course = await getCourseByName(courseName.trim());
+        if (!course) {
+          // Create new course
+          courseId = generateCourseId();
+          await saveCourse({
+            id: courseId,
+            name: courseName.trim(),
+            notes: null,
+            latitude: null,
+            longitude: null,
+          });
+          
+          // Create holes for the course based on the holes we have
+          const holeInserts: HoleInsert[] = holes.map(holeNum => ({
+            id: generateUUID(),
+            name: `Hole ${holeNum}`,
+            courseId: courseId!,
+            number: holeNum,
+            par: null,
+            distance: null,
+            notes: null,
+            latitude: null,
+            longitude: null,
+          }));
+          await saveHolesForCourse(courseId, holeInserts);
+        } else {
+          courseId = course.id;
+          // Ensure holes exist for this course
+          const existingHoles = await getAllHolesForCourse(courseId);
+          const existingHoleNumbers = new Set(existingHoles.map(h => h.number));
+          const missingHoles = holes.filter(num => !existingHoleNumbers.has(num));
+          if (missingHoles.length > 0) {
+            const newHoles: HoleInsert[] = missingHoles.map(holeNum => ({
+              id: generateUUID(),
+              name: `Hole ${holeNum}`,
+              courseId: courseId!,
+              number: holeNum,
+              par: null,
+              distance: null,
+              notes: null,
+              latitude: null,
+              longitude: null,
+            }));
+            await saveHolesForCourse(courseId, [...existingHoles.map(h => ({
+              id: h.id,
+              name: h.name,
+              courseId: h.courseId,
+              number: h.number,
+              par: h.par,
+              distance: h.distance,
+              notes: h.notes,
+              latitude: h.latitude,
+              longitude: h.longitude,
+            })), ...newHoles]);
+          }
+        }
+      }
+      
+      // Save the round
+      const roundInsert: RoundInsert = {
+        id: roundId,
+        name: roundTitle.trim(),
         date: currentDate.getTime(),
-        players,
-        scores,
-        courseName: courseName.trim() || undefined,
-        notes: notes.trim() || undefined,
-        gameType: 'disc-golf', // Default to disc-golf
-        photos: photos.length > 0 ? photos : undefined,
+        courseId: courseId,
+        notes: notes.trim() || null,
+        latitude: null,
+        longitude: null,
       };
-
-      await saveRound(round);
+      await saveRound(roundInsert);
+      
+      // Save playerRounds
+      const playerRoundInserts: PlayerRoundInsert[] = players.map((player, index) => ({
+        id: generateUUID(),
+        name: player.name,
+        roundId: roundId,
+        playerId: playerIds[index],
+        notes: null,
+        latitude: null,
+        longitude: null,
+        frozen: false,
+      }));
+      await savePlayerRoundsForRound(roundId, playerRoundInserts);
+      
+      // Save scores - need to map holeNumber to holeId and playerId
+      if (courseId && scores.length > 0) {
+        const courseHoles = await getAllHolesForCourse(courseId);
+        const holeMap = new Map(courseHoles.map(h => [h.number, h.id]));
+        
+        // Create a map from temporary player IDs to database player IDs
+        const playerIdMap = new Map(players.map((player, index) => [player.id, playerIds[index]]));
+        
+        const scoreInserts: ScoreInsert[] = scores.map(score => {
+          // Map temporary playerId to database playerId
+          const dbPlayerId = playerIdMap.get(score.playerId);
+          if (!dbPlayerId) {
+            throw new Error(`Player ID not found for score: ${score.playerId}`);
+          }
+          
+          // Get holeId from the map, or generate a placeholder if not found
+          const holeId = holeMap.get(score.holeNumber) || generateUUID();
+          return {
+            id: generateUUID(),
+            playerId: dbPlayerId,
+            roundId: roundId,
+            holeId: holeId,
+            holeNumber: score.holeNumber,
+            score: score.score,
+            complete: true,
+          };
+        });
+        await saveScoresForRound(roundId, scoreInserts);
+      }
+      
+      // Link photos to the round
+      if (photoHashes.length > 0) {
+        const db = await getDatabase();
+        
+        for (const hash of photoHashes) {
+          // Update photo record to link it to this round
+          await db.update(schema.photos)
+            .set({ 
+              refId: roundId,
+              refTable: 'rounds',
+            })
+            .where(eq(schema.photos.hash, hash));
+        }
+      }
+      
       setShowSaveDialog(false);
       Alert.alert('Success', 'Round saved successfully!', [
         {
@@ -131,7 +292,7 @@ export default function ScorecardScreen({ navigation }: Props) {
       Alert.alert('Error', 'Failed to save round. Please try again.');
       console.error('Error saving round:', error);
     }
-  }, [roundTitle, courseName, notes, players, scores, photos, navigation]);
+      }, [roundTitle, courseName, notes, players, scores, holes, photoHashes, navigation, currentDate]);
 
   const handleAddPhoto = useCallback(async () => {
     Alert.alert(
@@ -141,13 +302,23 @@ export default function ScorecardScreen({ navigation }: Props) {
         { text: 'Camera', onPress: async () => {
           const photo = await takePhoto();
           if (photo) {
-            setPhotos((prev) => [...prev, photo.uri]);
+            // Get URI for display
+            const uri = await getImageByHash(photo.hash);
+            if (uri) {
+              setPhotoHashes((prev) => [...prev, photo.hash]);
+              setPhotoUris((prev) => [...prev, uri]);
+            }
           }
         }},
         { text: 'Gallery', onPress: async () => {
           const photo = await pickPhoto();
           if (photo) {
-            setPhotos((prev) => [...prev, photo.uri]);
+            // Get URI for display
+            const uri = await getImageByHash(photo.hash);
+            if (uri) {
+              setPhotoHashes((prev) => [...prev, photo.hash]);
+              setPhotoUris((prev) => [...prev, uri]);
+            }
           }
         }},
         { text: 'Cancel', style: 'cancel' },
@@ -156,7 +327,8 @@ export default function ScorecardScreen({ navigation }: Props) {
   }, []);
 
   const handleRemovePhoto = useCallback((index: number) => {
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
+    setPhotoHashes((prev) => prev.filter((_, i) => i !== index));
+    setPhotoUris((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   const theme = useTheme();
@@ -179,9 +351,9 @@ export default function ScorecardScreen({ navigation }: Props) {
           <View style={styles.landingSection}>
             <Text style={[styles.label, { color: theme.colors.onSurface }]}>Photos</Text>
             <View style={styles.photosSection}>
-              {photos.length > 0 && (
+              {photoUris.length > 0 && (
                 <View style={styles.photosContainer}>
-                  {photos.map((uri, index) => (
+                  {photoUris.map((uri, index) => (
                     <View key={index} style={styles.photoWrapper}>
                       <Image source={{ uri }} style={styles.photoPreview} />
                       <IconButton
@@ -200,7 +372,7 @@ export default function ScorecardScreen({ navigation }: Props) {
                 onPress={handleAddPhoto}
                 style={styles.addPhotoButton}
               >
-                {photos.length === 0 ? 'Add Photo' : 'Add Another Photo'}
+                {photoUris.length === 0 ? 'Add Photo' : 'Add Another Photo'}
               </Button>
             </View>
           </View>

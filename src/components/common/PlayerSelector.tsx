@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { IconButton, Text, Menu, Dialog, Portal, Button, useTheme, Surface } from 'react-native-paper';
-import { Player, User } from '@/types';
 import { schema, getDatabase } from '@/services/storage/db';
 import { eq } from 'drizzle-orm';
 import { getCurrentUserId } from '@/services/storage/platform/currentUserStorage';
 import { generateUUID } from '@/utils/uuid';
-import { getShadowStyle } from '../../utils';
+import { getShadowStyle } from '@/utils';
 import NameUsernameDialog from './NameUsernameDialog';
 
 interface PlayerSelectorProps {

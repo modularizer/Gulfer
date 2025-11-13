@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { Button, Dialog, Portal, Text, useTheme } from 'react-native-paper';
 import { Scorecard } from '@/components/Scorecard';
-import { Player, Round } from '@/types';
 import { Score } from '@/services/storage/roundStorage';
 import { saveRound, getRoundById } from '@/services/storage/roundStorage';
 import { getAllCourses } from '@/services/storage/courseStorage';

@@ -8,8 +8,7 @@ import { schema, getDatabase } from '@/services/storage/db';
 import { eq } from 'drizzle-orm';
 import { getCurrentUserId, setCurrentUserId } from '@/services/storage/platform/currentUserStorage';
 import { generateUUID } from '@/utils/uuid';
-import { userSchema } from '@/types';
-import { useTheme } from '../../theme/ThemeContext';
+import { useTheme } from '@/theme';
 import backgroundImage from '../../../assets/background.webp';
 
 interface AppLayoutProps {

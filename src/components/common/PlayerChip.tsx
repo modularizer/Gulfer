@@ -1,9 +1,8 @@
 import React from 'react';
 import { Chip } from 'react-native-paper';
-import { Player } from '@/types';
 import { router } from 'expo-router';
 import { StyleSheet } from 'react-native';
-import { encodeNameForUrl } from '../../utils/urlEncoding';
+import { encodeNameForUrl } from '@/utils/urlEncoding';
 
 interface PlayerChipProps {
   player: Player;

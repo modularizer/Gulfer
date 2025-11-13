@@ -4,7 +4,6 @@ import { Dialog, Portal, Text, useTheme, Chip, Switch } from 'react-native-paper
 import { CornerStatisticsConfig, CornerConfig } from '@/services/cornerStatistics';
 import { ColumnVisibilityConfig } from '@/services/storage/cornerConfigStorage';
 import CornerStatisticConfigModal from './CornerStatisticConfigModal';
-import { Player } from '@/types';
 import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 interface CornerStatisticsSettingsDialogProps {

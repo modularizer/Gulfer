@@ -1,9 +1,7 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Linking, TouchableOpacity } from 'react-native';
-import { Text, Button, useTheme } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Linking} from 'react-native';
+import { Text, useTheme } from 'react-native-paper';
 import { router } from 'expo-router';
-import { getAllUsers } from '@/services/storage/userStorage';
-import { encodeNameForUrl } from '@/utils/urlEncoding';
 import DetailPageHeader from '@/components/common/DetailPageHeader';
 
 export default function AboutPage() {
@@ -24,20 +22,7 @@ export default function AboutPage() {
   };
 
   const handleBackPress = useCallback(async () => {
-    try {
-      const users = await getAllUsers();
-      const currentUser = users.find(u => u.isCurrentUser);
-      if (currentUser) {
-        // Navigate to player page using encoded name
-        router.push(`/player/${encodeNameForUrl(currentUser.name)}/overview`);
-      } else {
-        // No user set, navigate to /you page to set it
-        router.push('/player/me');
-      }
-    } catch (error) {
-      console.error('Error navigating to profile:', error);
-      router.push('/player/me');
-    }
+    router.push('/player/me');
   }, []);
 
   return (

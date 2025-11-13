@@ -4,7 +4,6 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Alert } from 'react-native';
 
 interface UseListPageOptions<T extends string | number> {
   onDelete: (ids: T[]) => Promise<void>;

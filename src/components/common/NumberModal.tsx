@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { TextInput, Dialog, Portal, IconButton } from 'react-native-paper';
-import { useDialogStyle } from '../../hooks/useDialogStyle';
+import { useDialogStyle } from '@/hooks/useDialogStyle';
 
 interface NumberModalProps {
   visible: boolean;

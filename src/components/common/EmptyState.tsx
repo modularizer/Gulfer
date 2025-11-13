@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Paragraph, useTheme } from 'react-native-paper';
+import { Text, useTheme } from 'react-native-paper';
 
 interface EmptyStateProps {
   message: string;
@@ -16,9 +16,9 @@ export default function EmptyState({ message }: EmptyStateProps) {
 
   return (
     <View style={styles.container}>
-      <Paragraph style={[styles.text, { color: theme.colors.onSurfaceVariant }]}>
+      <Text variant="bodyMedium" style={[styles.text, { color: theme.colors.onSurfaceVariant }]}>
         {message}
-      </Paragraph>
+      </Text>
     </View>
   );
 }

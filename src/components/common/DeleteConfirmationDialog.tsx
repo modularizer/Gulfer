@@ -1,6 +1,6 @@
 import React from 'react';
 import { Dialog, Button, Text, useTheme, Portal } from 'react-native-paper';
-import { useDialogStyle } from '../../hooks/useDialogStyle';
+import { useDialogStyle } from '@/hooks';
 
 interface DeleteConfirmationDialogProps {
   visible: boolean;
