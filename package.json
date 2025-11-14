@@ -11,7 +11,8 @@
     "build:web": "expo export -p web --output-dir dist && cp assets/favicon.ico dist/favicon.ico",
     "create-app-icon": "node scripts/create-app-icon.js",
     "generate-android-icons": "node scripts/generate-android-icons.js",
-    "generate-types": "npx tsx storage/sports-data/schema/tables/generate-types.ts",
+    "db:generate": "npx tsx storage/sports-data/schema/generate-all.ts",
+    "db:studio": "drizzle-kit studio",
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
     "postinstall": "patch-package"
@@ -57,6 +58,8 @@
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "babel-plugin-module-resolver": "^5.0.2",
+    "better-sqlite3": "^11.0.0",
+    "drizzle-kit": "^0.28.0",
     "eslint": "^8.57.0",
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
