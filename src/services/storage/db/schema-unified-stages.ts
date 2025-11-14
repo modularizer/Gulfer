@@ -1,7 +1,7 @@
 /**
  * Unified Stages Schema
  * 
- * This schema uses a single "stages" table to represent:
+ * This generic-sports uses a single "stages" table to represent:
  * - Events (rounds, matches, meets, tournaments)
  * - Groupings (rounds within tournaments, games within sets)
  * - Segments (holes, sets, frames, heats, games)

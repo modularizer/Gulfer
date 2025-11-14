@@ -1,6 +1,6 @@
 /**
- * EXAMPLE: Generic schema implementation
- * This is a reference implementation showing how the schema could be refactored
+ * EXAMPLE: Generic generic-sports implementation
+ * This is a reference implementation showing how the generic-sports could be refactored
  * to support multiple sports. DO NOT use directly - this is for planning purposes.
  * 
  * Key changes:
@@ -327,7 +327,7 @@ export const teamMembersRelations = relations(teamMembers, ({ one }) => ({
  * Get all top-level segments for an event (e.g., all sets in a tennis match)
  */
 export async function getTopLevelSegmentsForEvent(eventId: string) {
-  // This would be in a storage file, not schema
+  // This would be in a storage file, not generic-sports
   // Shown here for reference
   /*
   return await db

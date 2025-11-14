@@ -1,6 +1,6 @@
 /**
  * Database exports
- * Export 2-generic-sports-schema and database instance for direct Drizzle usage
+ * Export 2-generic-sports-sports-generic-sports and database instance for direct Drizzle usage
  */
 
 import { getDatabase, saveDatabase, type Database } from './adapter';
@@ -8,7 +8,7 @@ import * as schema from './schema';
 
 export { schema, getDatabase, saveDatabase, type Database };
 
-// Export 2-generic-sports-schema types for convenience
+// Export 2-generic-sports-sports-generic-sports types for convenience
 export type {
   CardModes,
   ColumnVisibilityConfig,

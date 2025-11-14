@@ -1,6 +1,6 @@
 /**
  * Navigation state persistence service
- * Uses Drizzle ORM with well-defined 2-generic-sports-schema columns
+ * Uses Drizzle ORM with well-defined 2-generic-sports-sports-generic-sports columns
  */
 
 import { getSettings, updateSettings } from './storage/settingsHelper';

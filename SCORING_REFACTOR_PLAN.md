@@ -310,7 +310,7 @@ export interface SportScoringConfig {
 ### Migration Script Example
 
 ```typescript
-// Migrate from old to new 2-generic-sports-schema
+// Migrate from old to new 2-generic-sports-sports-generic-sports
 async function migrateRoundToEvent(roundId: string) {
   const round = await getRoundById(roundId);
   if (!round) return;

@@ -573,7 +573,7 @@ export async function importRound(
         // Save playerRounds
         const playerRoundInserts: PlayerRoundInsert[] = importedPlayers.map(player => ({
             id: generateUUID(),
-            name: player.name, // Required by 2-generic-sports-schema
+            name: player.name, // Required by 2-generic-sports-sports-generic-sports
             roundId: roundId,
             playerId: player.id,
             notes: null,

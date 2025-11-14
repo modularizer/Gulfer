@@ -16,12 +16,14 @@
 import type { Config } from 'drizzle-kit';
 
 export default {
-  schema: './storage/sports-data/schema/tables/index.ts',
-  out: './storage/sports-data/migrations',
+  schema: [
+    './storage/schema/generic-sports-data/tables/index.ts',
+    './storage/schema/accounts/schema/tables/index.ts',
+  ],
+  out: './storage/schema/generic-sports-data/migrations',
   dialect: 'sqlite',
-  driver: 'better-sqlite', // For local development with Node.js only
   dbCredentials: {
-    url: './storage/sports-data/dev.db', // Local dev database (Node.js only, for drizzle-kit)
+    url: './storage/schema/generic-sports-data/dev.db', // Local dev database (Node.js only, for drizzle-kit)
   },
 } satisfies Config;
 

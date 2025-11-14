@@ -1,5 +1,9 @@
 module.exports = function(api) {
-  api.cache(true);
+  // ALWAYS disable caching in development - force fresh code on every change
+  // Only cache in production builds
+  const isProduction = process.env.NODE_ENV === 'production';
+  api.cache(isProduction);
+  
   return {
     presets: ['babel-preset-expo'],
     plugins: [
@@ -18,6 +22,8 @@ module.exports = function(api) {
           },
         },
       ],
+      // Add support for static class blocks (needed for ts-morph if it gets bundled)
+      '@babel/plugin-transform-class-static-block',
     ],
   };
 };

@@ -1,6 +1,6 @@
 /**
- * Type definitions for JSON columns in the Drizzle 2-generic-sports-schema
- * These types are used with text(columnName, { mode: 'json' }).$type<>() in 2-generic-sports-schema definitions
+ * Type definitions for JSON columns in the Drizzle 2-generic-sports-sports-generic-sports
+ * These types are used with text(columnName, { mode: 'json' }).$type<>() in 2-generic-sports-sports-generic-sports definitions
  * Note: SQLite doesn't have a native JSON type, so we use text columns with JSON mode
  */
 
@@ -46,7 +46,7 @@ export type SettingsOther = Record<string, any>;
 
 /**
  * Entity type enum
- * Maps to actual table names in the database 2-generic-sports-schema
+ * Maps to actual table names in the database 2-generic-sports-sports-generic-sports
  */
 export enum EntityType {
   Players = 'players',
@@ -63,7 +63,7 @@ export enum EntityType {
 
 /**
  * Database table types
- * Inferred from Drizzle 2-generic-sports-schema - these should be the only place $inferSelect is used
+ * Inferred from Drizzle 2-generic-sports-sports-generic-sports - these should be the only place $inferSelect is used
  */
 import type * as schema from './schema';
 
