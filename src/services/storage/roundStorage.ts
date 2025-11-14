@@ -18,7 +18,7 @@ export type Score = typeof schema.playerRoundHoleScores.$inferSelect;
 export type ScoreInsert = typeof schema.playerRoundHoleScores.$inferInsert;
 
 /**
- * Round with all related data (players, scores, course name)
+ * Round with all related storage (players, scores, course name)
  */
 export type RoundWithDetails = Round & {
   courseName?: string | null;
@@ -37,7 +37,7 @@ export async function getAllRounds(): Promise<Round[]> {
 }
 
 /**
- * Get all rounds with related data (players, scores, course name, photos)
+ * Get all rounds with related storage (players, scores, course name, photos)
  * More efficient than calling getRoundWithDetails for each round
  */
 export async function getAllRoundsWithDetails(): Promise<RoundWithDetails[]> {
@@ -96,7 +96,7 @@ export async function getAllRoundsWithDetails(): Promise<RoundWithDetails[]> {
         .where(inArray(schema.photos.refId, roundIds))
     : [];
   
-  // Group data by round
+  // Group storage by round
   const playerRoundsByRound = new Map<string, typeof playerRounds>();
   for (const pr of playerRounds) {
     if (!playerRoundsByRound.has(pr.roundId)) {
@@ -155,7 +155,7 @@ export async function getRoundById(roundId: string): Promise<Round | null> {
 }
 
 /**
- * Get round with all related data (players, scores, course name, photos)
+ * Get round with all related storage (players, scores, course name, photos)
  */
 export async function getRoundWithDetails(roundId: string): Promise<RoundWithDetails | null> {
   const db = await getDatabase();

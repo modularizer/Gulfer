@@ -1,9 +1,9 @@
 /**
  * Photo storage service
  * Handles both image storage (with file system) and photo entity management
- * Uses Drizzle ORM to store photo data
+ * Uses Drizzle ORM to store photo storage
  * On mobile: Stores file path in database, actual file in file system
- * On web: Stores base64 data in database
+ * On web: Stores base64 storage in database
  */
 
 import { schema, getDatabase } from './db';
@@ -46,7 +46,7 @@ async function hashImage(uri: string): Promise<string> {
       reader.readAsDataURL(blob);
     });
     
-    if (base64.startsWith('data:')) {
+    if (base64.startsWith('storage:')) {
       base64 = base64.split(',')[1];
     }
   } else {
@@ -83,7 +83,7 @@ export async function storeImage(uri: string): Promise<{ hash: string; fileUri: 
       const dataUri = `data:image/jpeg;base64,${existing[0].data}`;
       return { hash, fileUri: dataUri };
     } else {
-      return { hash, fileUri: existing[0].data }; // data is file path on mobile
+      return { hash, fileUri: existing[0].data }; // storage is file path on mobile
     }
   }
   
@@ -103,16 +103,16 @@ export async function storeImage(uri: string): Promise<{ hash: string; fileUri: 
       reader.readAsDataURL(blob);
     });
     
-    const cleanBase64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
+    const cleanBase64 = base64.startsWith('storage:') ? base64.split(',')[1] : base64;
     
     // Store in photos table (create or update)
     if (existing.length > 0) {
-      // Update existing photo record with data
+      // Update existing photo record with storage
       await db.update(schema.photos)
         .set({ data: cleanBase64 })
         .where(eq(schema.photos.hash, hash));
     } else {
-      // Create new photo record with data (refId can be a placeholder)
+      // Create new photo record with storage (refId can be a placeholder)
       await db.insert(schema.photos).values({
         id: generateUUID(),
         refId: generateUUID(), // Placeholder, will be updated when photo is linked to entity
@@ -139,12 +139,12 @@ export async function storeImage(uri: string): Promise<{ hash: string; fileUri: 
     
     // Store file path in photos table
     if (existing.length > 0) {
-      // Update existing photo record with data
+      // Update existing photo record with storage
       await db.update(schema.photos)
         .set({ data: fileUri })
         .where(eq(schema.photos.hash, hash));
     } else {
-      // Create new photo record with data
+      // Create new photo record with storage
       await db.insert(schema.photos).values({
         id: generateUUID(),
         refId: generateUUID(), // Placeholder
@@ -185,7 +185,7 @@ export async function getImageByHash(hash: string): Promise<string | null> {
     if (fileInfo.exists) {
       return photoData;
     }
-    // File missing, clear data from database
+    // File missing, clear storage from database
     await db.update(schema.photos)
       .set({ data: null })
       .where(eq(schema.photos.hash, hash));

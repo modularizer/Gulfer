@@ -82,7 +82,7 @@ export default function RoundCard({
                     .select()
                     .from(schema.photos)
                     .where(eq(schema.photos.refId, round.id));
-                // Photos are stored with hash, but we need the data URI for display
+                // Photos are stored with hash, but we need the storage URI for display
                 // For now, use hash if available, otherwise skip
                 setPhotos(loadedPhotos.map(p => p.hash).filter(Boolean));
             }

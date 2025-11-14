@@ -44,7 +44,7 @@ export default function Footer({}: FooterProps) {
     return null;
   }, [pathname, segments]);
   
-  // Load round data when on round overview page
+  // Load round storage when on round overview page
   const roundId = getRoundId();
   useEffect(() => {
     if (roundId) {

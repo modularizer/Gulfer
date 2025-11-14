@@ -12,7 +12,7 @@ import { normalizeExportText } from '@/utils';
 import { generateUUID } from '@/utils/uuid';
 
 /**
- * Parse exported text into structured data
+ * Parse exported text into structured storage
  * Shared by both validation and import functions
  */
 interface ParsedExportData {
@@ -183,7 +183,7 @@ export async function exportRound(roundId: string): Promise<string> {
         throw new Error('Round not found');
     }
 
-    // Load related data separately
+    // Load related storage separately
     const playerRounds = await getAllPlayerRoundsForRound(roundId);
     const scores = await getAllScoresForRound(roundId);
     const allUsers = await getAllUsers();
@@ -194,7 +194,7 @@ export async function exportRound(roundId: string): Promise<string> {
         return player ? { id: player.id, name: player.name } : { id: pr.playerId, name: 'Unknown' };
     });
 
-    // Get course data if available
+    // Get course storage if available
     let course: Course | undefined;
     let courseName: string | undefined;
 
@@ -291,7 +291,7 @@ export async function exportRound(roundId: string): Promise<string> {
             const holeCount = holes.length;
             text += `Course Holes: ${holeCount}\n`;
         } else if (scores && scores.length > 0) {
-            // If we have scores but no course data, at least show the number of holes
+            // If we have scores but no course storage, at least show the number of holes
             const maxHole = Math.max(...scores.map(s => s.holeNumber));
             text += `Course Holes: ${maxHole}\n`;
         }
@@ -309,7 +309,7 @@ export async function exportRound(roundId: string): Promise<string> {
         const maxHole = Math.max(...scores.map(s => s.holeNumber));
         text += '\nScores:\n';
 
-        // Create a map of hole data for quick lookup
+        // Create a map of hole storage for quick lookup
         const holeDataMap = new Map<number, { par?: number | null; distance?: number | null }>();
         if (course) {
             const holes = await getAllHolesForCourse(course.id);
@@ -370,7 +370,7 @@ export async function importRound(
         console.log('Export text length:', exportText.length);
         // Parse the export text using the shared parsing function
         const parsed = parseExportText(exportText);
-        console.log('Parsed data:', {
+        console.log('Parsed storage:', {
             title: parsed.title,
             dateTimestamp: parsed.dateTimestamp,
             courseName: parsed.courseName,
@@ -606,7 +606,7 @@ export async function importRound(
                 roundId: roundId,
                 holeId: holeId,
                 holeNumber: score.holeNumber,
-                score: score.throws, // Map 'throws' from parsed data to 'score' in database
+                score: score.throws, // Map 'throws' from parsed storage to 'score' in database
                 complete: true,
             };
         });

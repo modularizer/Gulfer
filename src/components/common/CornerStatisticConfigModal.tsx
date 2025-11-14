@@ -1124,7 +1124,7 @@ export default function CornerStatisticConfigModal({
         }
         
         // CRITICAL: Always exclude rounds that started at the same time or after the current round
-        // This ensures we only consider historical data, not future or concurrent rounds
+        // This ensures we only consider historical storage, not future or concurrent rounds
         if (currentRoundDate !== undefined) {
           // Exclude rounds where round.date >= currentRoundDate
           // We want rounds.date < currentRoundDate (strictly before)

@@ -135,7 +135,7 @@ export default function PlayerDetailScreen() {
     }
   }, []);
 
-  // Load player data and calculate course scores
+  // Load player storage and calculate course scores
   useEffect(() => {
     const loadPlayerData = async () => {
       if (!playerNameParam) {
@@ -213,7 +213,7 @@ export default function PlayerDetailScreen() {
         setCourseScores(courseScoresArray);
         setPlayerRounds(playerRounds.sort((a, b) => b.date - a.date));
       } catch (error) {
-        console.error('Error loading player data:', error);
+        console.error('Error loading player storage:', error);
         setTimeout(() => router.push('/player/list'), 1000);
       } finally {
         setLoading(false);
@@ -335,7 +335,7 @@ export default function PlayerDetailScreen() {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-        Alert.alert('Success', 'All data exported successfully');
+        Alert.alert('Success', 'All storage exported successfully');
       } else {
         // On mobile, use share API
         await Share.share({
@@ -344,11 +344,11 @@ export default function PlayerDetailScreen() {
         });
       }
     } catch (error) {
-      console.error('Error exporting data:', error);
+      console.error('Error exporting storage:', error);
       setErrorDialog({
         visible: true,
         title: 'Export Error',
-        message: error instanceof Error ? error.message : 'Failed to export data',
+        message: error instanceof Error ? error.message : 'Failed to export storage',
       });
     } finally {
       setIsExporting(false);
@@ -390,7 +390,7 @@ export default function PlayerDetailScreen() {
         const exportData = parseExportJson(fileContent);
         console.log('[Import] JSON parsed successfully');
         
-        // Store the data and show confirmation dialog
+        // Store the storage and show confirmation dialog
         setPendingImportData(exportData);
         setImportDialogVisible(true);
         setIsImporting(false);
@@ -417,7 +417,7 @@ export default function PlayerDetailScreen() {
       const exportData = parseExportJson(text);
       console.log('[Import] JSON parsed successfully');
       
-      // Store the data and show confirmation dialog
+      // Store the storage and show confirmation dialog
       setPendingImportData(exportData);
       setImportDialogVisible(true);
     } catch (error) {
@@ -462,7 +462,7 @@ export default function PlayerDetailScreen() {
       
       console.log('[Import] Import successful, reloading page...');
       
-      // Reload the page immediately to show the imported data
+      // Reload the page immediately to show the imported storage
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         window.location.reload();
       } else {
@@ -474,7 +474,7 @@ export default function PlayerDetailScreen() {
             {
               text: 'OK',
               onPress: () => {
-                // Refresh the current route to show imported data
+                // Refresh the current route to show imported storage
                 if (playerNameParam) {
                   router.replace(`/player/${playerNameParam}/overview`);
                 } else {
@@ -486,14 +486,14 @@ export default function PlayerDetailScreen() {
         );
       }
     } catch (error) {
-      console.error('[Import] Error importing data:', error);
+      console.error('[Import] Error importing storage:', error);
       console.error('[Import] Error stack:', error instanceof Error ? error.stack : 'No stack');
       setIsImporting(false);
       setPendingImportData(null);
       setErrorDialog({
         visible: true,
         title: 'Import Error',
-        message: error instanceof Error ? error.message : 'Failed to import data',
+        message: error instanceof Error ? error.message : 'Failed to import storage',
       });
     } finally {
       if (fileInputRef.current) {
@@ -520,7 +520,7 @@ export default function PlayerDetailScreen() {
     setIsDeleting(true);
     
     try {
-      console.log('[Delete] Starting delete all data...');
+      console.log('[Delete] Starting delete all storage...');
       
       // Clear all storage (this will delete rounds, players, courses, photos, images from storage)
       await clear();
@@ -540,10 +540,10 @@ export default function PlayerDetailScreen() {
         }
       }
       
-      console.log('[Delete] All data deleted successfully');
+      console.log('[Delete] All storage deleted successfully');
       
       // Show success message and reload
-      Alert.alert('Success', 'All data has been deleted. The app will reload.', [
+      Alert.alert('Success', 'All storage has been deleted. The app will reload.', [
         {
           text: 'OK',
           onPress: () => {
@@ -555,11 +555,11 @@ export default function PlayerDetailScreen() {
         },
       ]);
     } catch (error) {
-      console.error('[Delete] Error deleting all data:', error);
+      console.error('[Delete] Error deleting all storage:', error);
       setErrorDialog({
         visible: true,
         title: 'Delete Error',
-        message: error instanceof Error ? error.message : 'Failed to delete all data',
+        message: error instanceof Error ? error.message : 'Failed to delete all storage',
       });
     } finally {
       setIsDeleting(false);

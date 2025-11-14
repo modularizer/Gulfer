@@ -1,5 +1,5 @@
 /**
- * Service for computing corner statistics from round data
+ * Service for computing corner statistics from round storage
  * Refactored to use playerRounds (playerRounds) directly from database
  */
 
@@ -10,7 +10,7 @@ import {
 } from './storage/playerRoundQueries';
 
 /**
- * PlayerRound data with related round, player, and scores
+ * PlayerRound storage with related round, player, and scores
  * Alias for PlayerRoundWithDetails from db types
  */
 export type PlayerRoundData = PlayerRoundWithDetails;
@@ -28,7 +28,7 @@ export enum UserFilterEnum {
 }
 
 /**
- * Filter for which users' data to include
+ * Filter for which users' storage to include
  * - UserFilterEnum: Include all rounds from everyone, each user, or today's players
  * - string[]: Array of user IDs - compare each player against these users' rounds
  */
@@ -221,7 +221,7 @@ function isScoreComplete(score: Score): boolean {
 
 /**
  * Check if a playerRound is complete (has all holes marked as complete)
- * @param playerRoundData - The playerRound data with scores
+ * @param playerRoundData - The playerRound storage with scores
  * @param expectedHoleCount - The expected number of holes for the round
  * @returns True if the playerRound has all expected holes completed
  */
@@ -535,7 +535,7 @@ function collectScoresFromPlayerRounds(
   
   // Step 2: Collect scores from user+round combinations
   for (const { userId, round } of playerRounds) {
-    // Find the playerRound data for this userId and round
+    // Find the playerRound storage for this userId and round
     const urData = selectedPlayerRounds.find(ur => ur.playerRound.playerId === userId && ur.round.id === round.id);
     if (!urData) continue;
     

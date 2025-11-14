@@ -154,7 +154,7 @@ export default function Scorecard({
     resolveUserId();
   }, [currentUserId, players]);
 
-  // Load course data to get hole distances
+  // Load course storage to get hole distances
   useEffect(() => {
     const loadCourseData = async () => {
       if (courseName) {
@@ -166,7 +166,7 @@ export default function Scorecard({
             setCourseHoles(holes);
           }
         } catch (error) {
-          console.error('Error loading course data:', error);
+          console.error('Error loading course storage:', error);
         }
       }
     };
@@ -312,7 +312,7 @@ export default function Scorecard({
           try {
             // Skip computing totals if we don't have full Score objects
             // computeTotalCornerValues needs database Score type, but we only have ScorecardScore
-            // This is fine - totals are computed from historical data, not current round
+            // This is fine - totals are computed from historical storage, not current round
             const totals = {
               topLeft: { value: '', visible: false },
               topRight: { value: '', visible: false },

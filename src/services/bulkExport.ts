@@ -1,5 +1,5 @@
 /**
- * Service for bulk exporting and importing all app data
+ * Service for bulk exporting and importing all app storage
  * Uses Drizzle ORM directly
  */
 
@@ -26,14 +26,14 @@ export interface BulkExportData {
 }
 
 /**
- * Export all app data to a JSON structure
+ * Export all app storage to a JSON structure
  */
 export async function exportAllData(): Promise<BulkExportData> {
   try {
     const db = await getDatabase();
     const storageId = await getStorageId();
 
-    // Get all data using Drizzle
+    // Get all storage using Drizzle
     const rounds = await db.select().from(schema.rounds);
     const players = await db.select().from(schema.players);
     const courses = await db.select().from(schema.courses);
@@ -52,13 +52,13 @@ export async function exportAllData(): Promise<BulkExportData> {
     const allImageHashes = new Set<string>();
     photoHashesByRefId.forEach(hashes => hashes.forEach(h => allImageHashes.add(h)));
 
-    // Load all image data
+    // Load all image storage
     const images: Record<string, string> = {};
     for (const hash of allImageHashes) {
       try {
         if (Platform.OS === 'web') {
           const imageUri = await getImageByHash(hash);
-          if (imageUri && imageUri.startsWith('data:')) {
+          if (imageUri && imageUri.startsWith('storage:')) {
             images[hash] = imageUri.split(',')[1];
           }
         } else {
@@ -67,7 +67,7 @@ export async function exportAllData(): Promise<BulkExportData> {
             images[hash] = await FileSystem.readAsStringAsync(imageUri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
-          } else if (imageUri && imageUri.startsWith('data:')) {
+          } else if (imageUri && imageUri.startsWith('storage:')) {
             images[hash] = imageUri.split(',')[1];
           }
         }
@@ -87,13 +87,13 @@ export async function exportAllData(): Promise<BulkExportData> {
       images,
     };
   } catch (error) {
-    console.error('Error exporting all data:', error);
+    console.error('Error exporting all storage:', error);
     throw error;
   }
 }
 
 /**
- * Export all data to a JSON string
+ * Export all storage to a JSON string
  */
 export async function exportAllDataAsJson(): Promise<string> {
   const data = await exportAllData();
@@ -109,7 +109,7 @@ export interface ImportSummary {
 }
 
 /**
- * Import all data from exported JSON structure
+ * Import all storage from exported JSON structure
  */
 export async function importAllData(
   exportData: BulkExportData,
@@ -356,7 +356,7 @@ export async function importAllData(
 
     return summary;
   } catch (error) {
-    console.error('Error importing all data:', error);
+    console.error('Error importing all storage:', error);
     throw error;
   }
 }

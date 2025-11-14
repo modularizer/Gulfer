@@ -11,7 +11,7 @@
     "build:web": "expo export -p web --output-dir dist && cp assets/favicon.ico dist/favicon.ico",
     "create-app-icon": "node scripts/create-app-icon.js",
     "generate-android-icons": "node scripts/generate-android-icons.js",
-    "generate-types": "npx tsx src/schema/tables/generate-types.ts",
+    "generate-types": "npx tsx storage/sports-data/schema/tables/generate-types.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "type-check": "tsc --noEmit",
     "postinstall": "patch-package"

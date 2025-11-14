@@ -58,7 +58,7 @@ export async function getSettings(): Promise<typeof schema.settings.$inferSelect
 }
 
 /**
- * Update settings with partial data
+ * Update settings with partial storage
  */
 export async function updateSettings(updates: Partial<typeof schema.settings.$inferInsert>): Promise<void> {
   const { db, userId } = await getSettingsContext();

@@ -1,6 +1,6 @@
 /**
  * Course Export/Import
- * Handles exporting and importing course data in a human-readable format
+ * Handles exporting and importing course storage in a human-readable format
  * Includes both UUIDs and human-readable names for merging support
  */
 
@@ -68,7 +68,7 @@ export async function exportCourse(courseId: string): Promise<string> {
  * Parse exported course text
  */
 /**
- * Parsed hole data from export text
+ * Parsed hole storage from export text
  * Only includes fields that are parsed from the export format
  */
 export interface ParsedHole {

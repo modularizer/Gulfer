@@ -130,7 +130,7 @@ export default function RoundOverviewScreen() {
     loadCurrentUserName();
   }, []);
 
-  // Load round data - reload on mount and whenever page comes into focus
+  // Load round storage - reload on mount and whenever page comes into focus
   const loadRound = useCallback(async () => {
     if (!roundIdParam) {
       setErrorDialog({ visible: true, title: 'Error', message: 'Round ID is missing' });
@@ -212,7 +212,7 @@ export default function RoundOverviewScreen() {
     }
   }, [roundIdParam, loadRound]);
 
-  // Reload whenever page comes into focus to get latest data
+  // Reload whenever page comes into focus to get latest storage
   useFocusEffect(
     useCallback(() => {
       if (roundIdParam) {
@@ -221,7 +221,7 @@ export default function RoundOverviewScreen() {
     }, [roundIdParam, loadRound])
   );
 
-  // Save round data
+  // Save round storage
   const saveRoundData = useCallback(async () => {
     if (!round) {
       console.log('[SAVE] Round overview: No round, skipping save');
@@ -265,7 +265,7 @@ export default function RoundOverviewScreen() {
       await saveRound(updatedRound);
       console.log('[SAVE] Round overview: Successfully saved round', round.id);
       // Don't update round state here - it causes infinite loop
-      // State will be updated when data actually changes
+      // State will be updated when storage actually changes
     } catch (error) {
       console.error('[SAVE] Round overview: Failed to save round', round.id, error);
       throw error;
@@ -303,9 +303,9 @@ export default function RoundOverviewScreen() {
     }
   }, [round, loading]);
 
-  // Auto-save when data changes (including date changes) - save immediately
+  // Auto-save when storage changes (including date changes) - save immediately
   // Note: Use ref for save function to avoid infinite loop from saveRoundData changing
-  // Only save if initial load is complete (user has actually changed data)
+  // Only save if initial load is complete (user has actually changed storage)
   // round is NOT in dependencies - we only check it exists, we don't react to its changes
   useEffect(() => {
     if (round && !loading && !isSavingRef.current && initialLoadCompleteRef.current) {

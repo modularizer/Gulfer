@@ -86,7 +86,7 @@ export type PlayerRoundJoinResult = {
 
 /**
  * PlayerRound with details
- * Result type for playerRound queries that includes related data
+ * Result type for playerRound queries that includes related storage
  * Contains playerRound, round, player info, and associated scores
  */
 export type PlayerRoundWithDetails = {

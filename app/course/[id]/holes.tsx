@@ -12,7 +12,7 @@ export default function CourseHolesScreen() {
   const [distanceUnit, setDistanceUnit] = useState<'yd' | 'm'>('yd');
   const theme = useTheme();
 
-  // Load course data
+  // Load course storage
   useEffect(() => {
     const loadCourse = async () => {
       if (!courseNameParam) {

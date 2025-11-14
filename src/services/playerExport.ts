@@ -1,6 +1,6 @@
 /**
  * Player Export/Import
- * Handles exporting and importing player data in a human-readable format
+ * Handles exporting and importing player storage in a human-readable format
  * Includes both UUIDs and human-readable names for merging support
  */
 

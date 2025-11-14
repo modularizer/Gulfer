@@ -41,7 +41,7 @@ export default function CourseDetailScreen() {
   
   const { exportToClipboard } = useExport();
 
-  // Load course data
+  // Load course storage
   useEffect(() => {
     const loadCourse = async () => {
       if (!encodedNameParam) {

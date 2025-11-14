@@ -1,5 +1,5 @@
 /**
- * Service for computing corner statistics from round data
+ * Service for computing corner statistics from round storage
  * Refactored to use playerRounds (playerRounds) directly from database
  */
 
@@ -17,7 +17,7 @@ export enum UserFilterEnum {
 }
 
 /**
- * Filter for which users' data to include
+ * Filter for which users' storage to include
  * - UserFilterEnum: Include all rounds from everyone, each user, or today's players
  * - string[]: Array of user IDs - compare each player against these users' rounds
  */
