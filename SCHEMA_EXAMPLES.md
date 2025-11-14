@@ -220,3 +220,4 @@ const games = await db
 - Drop old tables
 - Remove migration code
 
+

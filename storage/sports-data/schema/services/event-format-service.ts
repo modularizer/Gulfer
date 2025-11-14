@@ -8,10 +8,9 @@
  */
 
 import { BaseTableService } from './base-table-service';
-import type { Database } from '@services/storage/db';
-import { eq, and, like } from 'drizzle-orm';
+import { eq, like } from 'drizzle-orm';
 import * as schema from '../tables';
-import type { EventFormat, Sport, ScoreFormat, EventFormatStage, EventFormatStageInsert } from '../tables';
+import type { EventFormat, Sport, ScoreFormat, EventFormatStage} from '../tables';
 import { upsertEntity } from '../query-builders';
 import { queryStages, upsertStagesWithDetails, type StageWithDetails } from '../query-builders';
 import { generateUUID } from '@utils/uuid';
@@ -225,7 +224,7 @@ export class EventFormatService extends BaseTableService<EventFormat> {
       lat: eventFormat.lat ?? 0,
       lng: eventFormat.lng ?? 0,
       metadata: eventFormat.metadata || null,
-      sportId: eventFormat.sportId || null,
+      sportId: eventFormat.sportId,
       scoreFormatId: eventFormat.scoreFormatId,
       minTeamSize: eventFormat.minTeamSize ?? null,
       maxTeamSize: eventFormat.maxTeamSize ?? null,
@@ -289,8 +288,8 @@ export class EventFormatService extends BaseTableService<EventFormat> {
       lat: eventFormat.lat ?? 0,
       lng: eventFormat.lng ?? 0,
       metadata: eventFormat.metadata || null,
-      sportId: eventFormat.sportId || null,
-      scoreFormatId: eventFormat.scoreFormatId || null,
+      sportId: eventFormat.sportId,
+      scoreFormatId: eventFormat.scoreFormatId,
     };
     
     await this.saveEventFormat(eventFormatData);

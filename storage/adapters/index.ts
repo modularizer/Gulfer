@@ -8,6 +8,6 @@ export {
  * Matches the type from @services/storage/db
  */
 import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
-import type { BaseSQLiteDatabase } from 'drizzle-orm/sql-js';
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core';
 
 export type Database = ExpoSQLiteDatabase<any> | BaseSQLiteDatabase<any, any, any>;

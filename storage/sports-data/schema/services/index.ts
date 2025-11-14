@@ -31,6 +31,9 @@ export { VenueEventFormatService } from './venue-event-format-service';
 export { ScoreFormatService } from './score-format-service';
 export { ScoringService } from './scoring-service';
 export { ImportExportService } from './import-export-service';
+
+// Convenience class that instantiates all services
+export { SportsDataServices } from './sports-data-services';
 // AccountSettingsService moved to accounts/ folder
 export type {
   ForeignStorageId,
