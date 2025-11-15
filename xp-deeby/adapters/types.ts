@@ -59,9 +59,9 @@ export interface AdapterCapabilities {
   databaseType: string;
   
   /**
-   * Platform identifier (e.g., 'web', 'mobile', 'node')
+   * Platform identifier
    */
-  platform: string;
+  platform: string; // Note: This is kept as string for backward compatibility, but should match PlatformName enum values
 }
 
 /**

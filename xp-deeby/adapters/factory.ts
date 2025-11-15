@@ -14,10 +14,10 @@ const adapterCache = new Map<AdapterType, Adapter>();
 /**
  * Detect the current platform
  */
-async function detectPlatform(): Promise<'web' | 'mobile' | 'node'> {
+export async function detectPlatform(): Promise<PlatformName> {
   // Check if we're in a browser environment
   if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
-    return 'web';
+    return PlatformName.WEB;
   }
   
   // Check if we're in React Native
@@ -25,14 +25,14 @@ async function detectPlatform(): Promise<'web' | 'mobile' | 'node'> {
     const reactNative = await import('react-native');
     const { Platform } = reactNative;
     if (Platform && Platform.OS) {
-      return Platform.OS === 'web' ? 'web' : 'mobile';
+      return Platform.OS === 'web' ? PlatformName.WEB : PlatformName.MOBILE;
     }
   } catch {
     // react-native not available
   }
   
   // Default to node for server-side
-  return 'node';
+  return PlatformName.NODE;
 }
 
 /**
@@ -46,12 +46,12 @@ export async function getAdapter(): Promise<Adapter> {
 
   // Auto-select based on platform
   const platform = await detectPlatform();
-  if (platform === 'web') {
+  if (platform === PlatformName.WEB) {
     // Use PGlite adapter for web (PostgreSQL in WASM, no COOP/COEP headers needed!)
-    const { PgliteAdapter } = await import('./pglite');
+    const { PgliteAdapter } = await import('./drivers/pglite');
     currentAdapter = new PgliteAdapter();
-  } else if (platform === 'mobile') {
-    const { SqliteMobileAdapter } = await import('./sqlite-mobile');
+  } else if (platform === PlatformName.MOBILE) {
+    const { SqliteMobileAdapter } = await import('./drivers/sqlite-mobile');
     currentAdapter = new SqliteMobileAdapter();
   } else {
     // Node.js - requires explicit adapter selection
@@ -72,44 +72,53 @@ export function setAdapter(adapter: Adapter): void {
 /**
  * Create an adapter for a specific platform
  */
-export async function createAdapter(platform: 'web' | 'mobile'): Promise<Adapter> {
-  if (platform === 'web') {
+export async function createAdapter(platform: PlatformName.WEB | PlatformName.MOBILE): Promise<Adapter> {
+  if (platform === PlatformName.WEB) {
     // Use PGlite adapter for web (PostgreSQL in WASM, no headers needed!)
-    const { PgliteAdapter } = await import('./pglite');
+    const { PgliteAdapter } = await import('./drivers/pglite');
     return new PgliteAdapter();
   } else {
-    const { SqliteMobileAdapter } = await import('./sqlite-mobile');
+    const { SqliteMobileAdapter } = await import('./drivers/sqlite-mobile');
     return new SqliteMobileAdapter();
   }
 }
 
 /**
- * Adapter type identifiers
+ * Platform identifiers
  */
-export type AdapterType = 'sqlite-web' | 'pglite' | 'sqlite-mobile' | 'postgres';
+export enum PlatformName {
+  WEB = 'web',
+  MOBILE = 'mobile',
+  NODE = 'node'
+}
 
 /**
- * Create an adapter by type string
+ * Adapter type identifiers
+ */
+export enum AdapterType {
+  PGLITE = 'pglite',
+  SQLITE_MOBILE = 'sqlite-mobile',
+  POSTGRES = 'postgres'
+}
+
+/**
+ * Create an adapter by type
  * 
- * @param type - The adapter type ('sqlite-web', 'sqlite-mobile', 'postgres')
+ * @param type - The adapter type
  * @returns The adapter instance
  */
 export async function createAdapterByType(type: AdapterType): Promise<Adapter> {
   switch (type) {
-    case 'sqlite-web': {
-      throw new Error('sqlite-web adapter (sql.js) has been removed. Use pglite for efficient persistent SQL in the browser.');
-    }
-    case 'pglite': {
-      const { PgliteAdapter } = await import('./pglite');
+    case AdapterType.PGLITE: {
+      const { PgliteAdapter } = await import('./drivers/pglite');
       return new PgliteAdapter();
     }
-    case 'sqlite-mobile': {
-      const { SqliteMobileAdapter } = await import('./sqlite-mobile');
+    case AdapterType.SQLITE_MOBILE: {
+      const { SqliteMobileAdapter } = await import('./drivers/sqlite-mobile');
       return new SqliteMobileAdapter();
     }
-    case 'postgres': {
-      const { PostgresAdapter } = await import('./postgres');
-      return new PostgresAdapter();
+    case AdapterType.POSTGRES: {
+      throw new Error('PostgresAdapter is not yet implemented. Use PGLITE for web or SQLITE_MOBILE for mobile.');
     }
     default:
       throw new Error(`Unknown adapter type: ${type}`);

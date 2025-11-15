@@ -6,8 +6,10 @@
 
 import * as SQLite from 'expo-sqlite';
 import { drizzle as drizzleExpo } from 'drizzle-orm/expo-sqlite';
+import { sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
-import type { Adapter, DatabaseAdapter, AdapterCapabilities } from './types';
+import type { Adapter, DatabaseAdapter, AdapterCapabilities } from '../types';
+import { PlatformName } from '../factory';
 
 /**
  * Base interface for database operations
@@ -34,7 +36,7 @@ export class SqliteMobileAdapter implements Adapter {
       supportsNamedDatabases: true,
       supportsGetTableNames: true,
       databaseType: 'sqlite',
-      platform: 'mobile',
+      platform: PlatformName.MOBILE,
     };
   }
 
@@ -47,7 +49,6 @@ export class SqliteMobileAdapter implements Adapter {
   async getTableNames(db: DatabaseAdapter): Promise<string[]> {
     // SQLite mobile uses the same sqlite_master table
     try {
-      const { sql } = await import('drizzle-orm');
       const result = await db.execute(
         sql`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__%'`
       ) as any[];

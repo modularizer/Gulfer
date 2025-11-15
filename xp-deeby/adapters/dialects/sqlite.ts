@@ -17,7 +17,7 @@ import { sqliteTable, text, integer, unique, real, index, customType } from 'dri
 // SQLite accepts varchar (treats it as text), but we use it for PostgreSQL compatibility
 const varchar = customType<{ data: string; config: { length?: number } }>({
   dataType(config) {
-    return typeof config.length !== 'undefined' ? `varchar(${config.length})` : 'varchar';
+    return (config && typeof config.length !== 'undefined') ? `varchar(${config.length})` : 'varchar';
   },
 });
 

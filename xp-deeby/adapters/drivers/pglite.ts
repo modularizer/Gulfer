@@ -18,7 +18,12 @@
 
 // PGlite uses import.meta which Metro doesn't support
 // Babel plugin will transform import.meta to work with Metro
-import type { Adapter, DatabaseAdapter, AdapterCapabilities } from './types';
+import type { Adapter, DatabaseAdapter, AdapterCapabilities } from '../types';
+import { PlatformName, AdapterType } from '../factory';
+import { registerDatabaseName } from '../registry-storage';
+import { PgDialect } from 'drizzle-orm/pg-core/dialect';
+import { PgDatabase } from 'drizzle-orm/pg-core/db';
+import { PgSession, PgPreparedQuery } from 'drizzle-orm/pg-core/session';
 
 // Try to import PGlite at the top level - Babel will transform import.meta
 // If this fails, we'll fall back to dynamic import
@@ -40,21 +45,15 @@ export class PgliteAdapter implements Adapter {
   // Cache database connections to avoid re-importing PGlite and creating new instances
   private connectionCache = new Map<string, DatabaseAdapter>();
   
-  // Cache PGlite module and Drizzle classes to avoid re-importing
+  // Cache PGlite module to avoid re-importing
   private pgliteModule: any = null;
-  private drizzleClasses: {
-    PgDialect: any;
-    PgDatabase: any;
-    PgSession: any;
-    PgPreparedQuery: any;
-  } | null = null;
 
   getCapabilities(): AdapterCapabilities {
     return {
       supportsNamedDatabases: true,
       supportsGetTableNames: true,
       databaseType: 'postgres', // PGlite is PostgreSQL
-      platform: 'web',
+      platform: PlatformName.WEB,
     };
   }
 
@@ -76,8 +75,7 @@ export class PgliteAdapter implements Adapter {
     // This ensures it's registered even if database creation fails
     if (typeof window !== 'undefined') {
       try {
-        const { registerDatabaseName } = await import('./list-databases');
-        await registerDatabaseName(name, 'pglite');
+        await registerDatabaseName(name, AdapterType.PGLITE);
         console.log(`[pglite] ✅ Registered database name in registry: ${name} (pglite)`);
       } catch (error) {
         // Log error but don't fail - registry is for convenience, not required
@@ -130,15 +128,7 @@ export class PgliteAdapter implements Adapter {
         throw new Error(`Failed to find PGlite in @electric-sql/pglite module. Available exports: ${Object.keys(this.pgliteModule).join(', ')}`);
       }
       
-      // Import Drizzle classes (cached after first import)
-      if (!this.drizzleClasses) {
-        const { PgDialect } = await import('drizzle-orm/pg-core/dialect');
-        const { PgDatabase } = await import('drizzle-orm/pg-core/db');
-        const { PgSession, PgPreparedQuery } = await import('drizzle-orm/pg-core/session');
-        this.drizzleClasses = { PgDialect, PgDatabase, PgSession, PgPreparedQuery };
-      }
-      
-      const { PgDialect, PgDatabase, PgSession, PgPreparedQuery } = this.drizzleClasses;
+      // Drizzle classes are already imported at top level, no need to cache
       
       // Create a minimal prepared query wrapper that uses PGlite's query method
       class PglitePreparedQuery extends PgPreparedQuery {
