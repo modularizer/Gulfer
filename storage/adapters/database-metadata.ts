@@ -5,7 +5,8 @@
  */
 
 import type { Database } from './types';
-import { getDatabaseByName, getTableNames, getAdapterByType, getDatabaseRegistryEntries } from './index';
+import { getDatabaseByName, getTableNames, getAdapterByType } from './index';
+import { getDatabaseRegistryEntries } from './list-databases';
 import { sql } from 'drizzle-orm';
 
 export interface DatabaseMetadata {

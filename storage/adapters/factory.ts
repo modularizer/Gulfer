@@ -14,7 +14,7 @@ const adapterCache = new Map<AdapterType, Adapter>();
 /**
  * Detect the current platform
  */
-function detectPlatform(): 'web' | 'mobile' | 'node' {
+async function detectPlatform(): Promise<'web' | 'mobile' | 'node'> {
   // Check if we're in a browser environment
   if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
     return 'web';
@@ -22,7 +22,8 @@ function detectPlatform(): 'web' | 'mobile' | 'node' {
   
   // Check if we're in React Native
   try {
-    const { Platform } = require('react-native');
+    const reactNative = await import('react-native');
+    const { Platform } = reactNative;
     if (Platform && Platform.OS) {
       return Platform.OS === 'web' ? 'web' : 'mobile';
     }
@@ -44,7 +45,7 @@ export async function getAdapter(): Promise<Adapter> {
   }
 
   // Auto-select based on platform
-  const platform = detectPlatform();
+  const platform = await detectPlatform();
   if (platform === 'web') {
     // Use PGlite adapter for web (PostgreSQL in WASM, no COOP/COEP headers needed!)
     const { PgliteAdapter } = await import('./pglite');

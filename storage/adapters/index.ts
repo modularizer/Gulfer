@@ -33,7 +33,10 @@ export { getAdapter, setAdapter, createAdapter, createAdapterByType, getAdapterB
 // ============================================================================
 // Database Listing Functions
 // ============================================================================
-export { listDatabases, listDatabasesWeb, registerDatabaseName, getDatabaseRegistryEntries, type DatabaseRegistryEntry } from './list-databases';
+export { listDatabases, listDatabasesWeb, registerDatabaseName, type DatabaseRegistryEntry } from './list-databases';
+// Import and re-export getDatabaseRegistryEntries directly to avoid Metro bundling issues
+import { getDatabaseRegistryEntries as _getDatabaseRegistryEntries } from './list-databases';
+export const getDatabaseRegistryEntries = _getDatabaseRegistryEntries;
 
 // ============================================================================
 // Database Metadata Functions

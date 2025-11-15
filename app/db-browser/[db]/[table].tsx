@@ -11,13 +11,13 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   SafeAreaView,
-  TextInput,
-  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getAdapterByType } from '../../../storage/adapters';
+import { getAdapterByType, getDatabaseRegistryEntries } from '../../../storage/adapters';
+import { sql } from 'drizzle-orm';
+import TableViewer from '../../../xp-deeby/components/TableViewer';
+import { useTableData } from '../../../xp-deeby/hooks/useTableData';
 
 // Memoized table item component to prevent unnecessary re-renders
 const TableItem = React.memo(({ 
@@ -118,22 +118,16 @@ export default function TableView() {
   const filterParam = useMemo(() => searchParams.filter || '', [searchParams.filter]);
   const visibleColumnsParam = useMemo(() => searchParams.visibleColumns || '', [searchParams.visibleColumns]);
   
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [tableData, setTableData] = useState<{
-    columns: string[];
-    rows: any[];
-    rowCount: number;
-  } | null>(null);
-  const [dbInstance, setDbInstance] = useState<any>(null);
-  
-  // Cache table data to avoid reloading
-  const [tableDataCache, setTableDataCache] = useState<Record<string, {
-    columns: string[];
-    rows: any[];
-    rowCount: number;
-    timestamp: number;
-  }>>({});
+  // Use the table data hook - handles all database operations
+  const tableData = useTableData({
+    dbName: dbName || '',
+    tableName: tableName || '',
+    page,
+    pageSize,
+    sortBy,
+    sortOrder,
+    filter: filterParam,
+  });
   
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -152,8 +146,6 @@ export default function TableView() {
     return null; // null means all columns visible
   }, [visibleColumnsParam]);
   
-  const [showColumnMenu, setShowColumnMenu] = useState(false);
-  
   // Sync filterText with URL param when it changes externally
   useEffect(() => {
     setFilterText(filterParam);
@@ -166,7 +158,6 @@ export default function TableView() {
       loadingTableListRef.current = true;
       
       // Get adapter type from registry
-      const { getDatabaseRegistryEntries } = await import('../../../storage/adapters');
       const entries = await getDatabaseRegistryEntries();
       const entry = entries.find(e => e.name === dbName);
       
@@ -188,7 +179,6 @@ export default function TableView() {
       const tableNames = await adapter.getTableNames(database);
       
       // Get row counts for all tables
-      const { sql } = await import('drizzle-orm');
       const counts: Record<string, number> = {};
       
       await Promise.all(
@@ -239,189 +229,9 @@ export default function TableView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dbName]);
 
-  const loadTableData = useCallback(async (targetTable?: string, useCache = true) => {
-    const currentTable = targetTable || tableName;
-    if (!dbName || !currentTable) return;
-    
-    // Check cache first (if enabled and no filter/sort changes)
-    const cacheKey = `${currentTable}-${page}-${pageSize}-${sortBy}-${sortOrder}-${filterParam}`;
-    if (useCache && tableDataCache[cacheKey]) {
-      const cached = tableDataCache[cacheKey];
-      // Use cache if less than 30 seconds old
-      if (Date.now() - cached.timestamp < 30000) {
-        setTableData(cached);
-        setLoading(false);
-        return;
-      }
-    }
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Get adapter type from registry
-      const { getDatabaseRegistryEntries } = await import('../../../storage/adapters');
-      const entries = await getDatabaseRegistryEntries();
-      const entry = entries.find(e => e.name === dbName);
-      
-      if (!entry) {
-        setError(`Database ${dbName} not found in registry`);
-        setLoading(false);
-        return;
-      }
-      
-      // Connect to database
-      const adapter = await getAdapterByType(entry.adapterType);
-      if (!adapter.getDatabaseByName) {
-        setError(`Adapter ${entry.adapterType} does not support getDatabaseByName`);
-        setLoading(false);
-        return;
-      }
-      
-      const database = await adapter.getDatabaseByName(dbName);
-      if (!dbInstance) {
-        setDbInstance(database);
-      }
-      
-      // Get column information
-      const { sql } = await import('drizzle-orm');
-      const columnInfo = await database.execute(sql.raw(`
-        SELECT column_name, data_type, is_nullable
-        FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = '${currentTable}'
-        ORDER BY ordinal_position
-      `)) as any[];
-      
-      const columns = columnInfo.map((col: any) => {
-        const colName = col.column_name || col['column_name'] || col[0];
-        return colName;
-      }).filter(Boolean);
-      
-      // Get total row count (with filter if applicable)
-      let countQuery = `SELECT COUNT(*) as count FROM "${currentTable}"`;
-      if (filterParam && filterParam.trim()) {
-        const filterLower = filterParam.toLowerCase();
-        const columnFilters = columns.map(col => 
-          `LOWER(CAST("${col}" AS TEXT)) LIKE '%${filterLower.replace(/'/g, "''")}%'`
-        ).join(' OR ');
-        countQuery += ` WHERE (${columnFilters})`;
-      }
-      
-      console.log(`[db-browser] Data count query for ${currentTable}:`, countQuery);
-      console.log(`[db-browser] Filter param:`, filterParam);
-      const countResult = await database.execute(sql.raw(countQuery)) as any[];
-      console.log(`[db-browser] Data count result for ${currentTable}:`, countResult);
-      const totalRowCount = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
-      console.log(`[db-browser] Parsed totalRowCount for ${currentTable}:`, totalRowCount, 'from raw:', countResult[0]);
-      
-      // Build query with sorting and filtering
-      let query = `SELECT * FROM "${currentTable}"`;
-      const conditions: string[] = [];
-      
-      // Apply text filter if provided
-      if (filterParam && filterParam.trim()) {
-        const filterLower = filterParam.toLowerCase();
-        const columnFilters = columns.map(col => 
-          `LOWER(CAST("${col}" AS TEXT)) LIKE '%${filterLower.replace(/'/g, "''")}%'`
-        ).join(' OR ');
-        conditions.push(`(${columnFilters})`);
-      }
-      
-      if (conditions.length > 0) {
-        query += ` WHERE ${conditions.join(' AND ')}`;
-      }
-      
-      // Apply sorting
-      if (sortBy && columns.includes(sortBy)) {
-        query += ` ORDER BY "${sortBy}" ${sortOrder.toUpperCase()}`;
-      }
-      
-      // Apply pagination
-      const offset = (page - 1) * pageSize;
-      query += ` LIMIT ${pageSize} OFFSET ${offset}`;
-      
-      console.log(`[db-browser] Data query for ${currentTable}:`, query);
-      console.log(`[db-browser] Columns:`, columns);
-      // Execute query
-      const rows = await database.execute(sql.raw(query)) as any[];
-      console.log(`[db-browser] Data query result for ${currentTable}:`, rows.length, 'rows');
-      console.log(`[db-browser] First row sample:`, rows[0]);
-      
-      // Ensure each row has an id
-      const rowsWithIds = rows.map((row, index) => ({
-        ...row,
-        id: row.id || `row-${currentTable}-${offset + index}`,
-      }));
-      
-      const newTableData = {
-        columns,
-        rows: rowsWithIds,
-        rowCount: typeof totalRowCount === 'number' ? totalRowCount : parseInt(String(totalRowCount), 10),
-      };
-      
-      // Only set as current table data if this is the active table
-      if (currentTable === tableName) {
-        setTableData(newTableData);
-      }
-      
-      // Cache the data
-      setTableDataCache(prev => ({
-        ...prev,
-        [cacheKey]: {
-          ...newTableData,
-          timestamp: Date.now(),
-        },
-      }));
-    } catch (err) {
-      console.error(`[db-browser] Error loading table data:`, err);
-      if (currentTable === tableName) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    } finally {
-      if (currentTable === tableName) {
-        setLoading(false);
-      }
-    }
-  }, [dbName, tableName, page, pageSize, sortBy, sortOrder, filterParam, dbInstance]);
 
-  // Load database and table data
-  useEffect(() => {
-    if (dbName && tableName) {
-      loadTableData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dbName, tableName, page, pageSize, sortBy, sortOrder, filterParam]);
-  
-  // Preload adjacent tables in the background
-  useEffect(() => {
-    if (tables.length > 0 && tableName && dbName) {
-      const currentIndex = tables.indexOf(tableName);
-      if (currentIndex >= 0) {
-        // Preload next 2 tables
-        const tablesToPreload = tables.slice(currentIndex + 1, currentIndex + 3);
-        tablesToPreload.forEach(table => {
-          // Preload in background without blocking
-          loadTableData(table, true).catch(() => {
-            // Silently fail preloading
-          });
-        });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tables, tableName, dbName]);
 
-  const formatValue = (value: any): string => {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'object') return JSON.stringify(value);
-    if (typeof value === 'boolean') return value ? 'true' : 'false';
-    return String(value);
-  };
-
-  const isValueNull = (value: any): boolean => {
-    return value === null || value === undefined;
-  };
-
-  const handleSort = (column: string) => {
+  const handleSort = useCallback((column: string) => {
     const newSortOrder = sortBy === column && sortOrder === 'asc' ? 'desc' : 'asc';
     const params = new URLSearchParams();
     params.set('page', '1');
@@ -432,10 +242,10 @@ export default function TableView() {
     if (visibleColumns) params.set('visibleColumns', Array.from(visibleColumns).join(','));
     
     router.push(`/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`);
-  };
+  }, [sortBy, sortOrder, pageSize, filterText, visibleColumns, dbName, tableName, router]);
 
-  const toggleColumnVisibility = (column: string) => {
-    const newVisible = visibleColumns ? new Set(visibleColumns) : new Set(tableData?.columns || []);
+  const toggleColumnVisibility = useCallback((column: string) => {
+    const newVisible = visibleColumns ? new Set(visibleColumns) : new Set(tableData.columns.map(c => c.name));
     
     if (newVisible.has(column)) {
       newVisible.delete(column);
@@ -444,7 +254,7 @@ export default function TableView() {
     }
     
     // If all columns are visible, don't include visibleColumns param
-    const allColumns = tableData?.columns || [];
+    const allColumns = tableData.columns.map(c => c.name);
     const shouldShowAll = newVisible.size === allColumns.length;
     
     const params = new URLSearchParams();
@@ -458,7 +268,7 @@ export default function TableView() {
     if (!shouldShowAll) params.set('visibleColumns', Array.from(newVisible).join(','));
     
     router.push(`/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`);
-  };
+  }, [visibleColumns, tableData.columns, page, pageSize, sortBy, sortOrder, filterText, dbName, tableName, router]);
 
   const handleFilterChange = useCallback((text: string) => {
     setFilterText(text);
@@ -486,7 +296,7 @@ export default function TableView() {
     return () => clearTimeout(timeoutId);
   }, [filterText, filterParam, dbName, tableName, pageSize, sortBy, sortOrder, visibleColumns, router]);
 
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = useCallback((newPage: number) => {
     const params = new URLSearchParams();
     params.set('page', String(newPage));
     if (pageSize !== 50) params.set('pageSize', String(pageSize));
@@ -498,15 +308,7 @@ export default function TableView() {
     if (visibleColumns) params.set('visibleColumns', Array.from(visibleColumns).join(','));
     
     router.push(`/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`);
-  };
-
-  const getVisibleColumns = () => {
-    if (!tableData) return [];
-    if (!visibleColumns) return tableData.columns;
-    return tableData.columns.filter(col => visibleColumns.has(col));
-  };
-
-  const totalPages = tableData ? Math.ceil(tableData.rowCount / pageSize) : 1;
+  }, [pageSize, sortBy, sortOrder, filterText, visibleColumns, dbName, tableName, router]);
 
   if (!dbName || !tableName) {
     return (
@@ -547,52 +349,16 @@ export default function TableView() {
           </View>
         </View>
         
-        {/* Center section - Search and Pagination */}
-        <View style={styles.headerCenter}>
-          <TextInput
-            style={styles.headerFilterInput}
-            value={filterText}
-            onChangeText={handleFilterChange}
-            placeholder="Filter rows..."
-            placeholderTextColor="#999"
-          />
-          {tableData && (
-            <View style={styles.headerPagination}>
-              <TouchableOpacity
-                style={[styles.headerPaginationButton, page === 1 && styles.headerPaginationButtonDisabled]}
-                onPress={() => handlePageChange(page - 1)}
-                disabled={page === 1}
-              >
-                <Text style={styles.headerPaginationButtonText}>‹</Text>
-              </TouchableOpacity>
-              <Text style={styles.headerPaginationText}>
-                {page}/{totalPages}
-              </Text>
-              <TouchableOpacity
-                style={[styles.headerPaginationButton, page >= totalPages && styles.headerPaginationButtonDisabled]}
-                onPress={() => handlePageChange(page + 1)}
-                disabled={page >= totalPages}
-              >
-                <Text style={styles.headerPaginationButtonText}>›</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-        
-        {/* Right section */}
-        <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => setShowColumnMenu(true)}
-          >
-            <Text style={styles.headerButtonText}>⚙</Text>
-          </TouchableOpacity>
+        {/* Center section - Database/Table name takes full space */}
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerDbName} numberOfLines={1}>{dbName}</Text>
+          <Text style={styles.headerTableName} numberOfLines={1}>{tableName}</Text>
         </View>
       </View>
 
-      {error && (
+      {tableData.error && (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Error: {error}</Text>
+          <Text style={styles.errorText}>Error: {tableData.error}</Text>
         </View>
       )}
 
@@ -651,8 +417,7 @@ export default function TableView() {
                           const newPath = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName)}`;
                           router.replace(newPath);
                         }
-                        // Load table data immediately
-                        loadTableData(tableName, false);
+                        // Table data will be loaded automatically by the hook when tableName changes
                       }}
                     />
                   );
@@ -664,135 +429,26 @@ export default function TableView() {
 
         {/* Main content */}
         <View style={styles.mainContent}>
-          {loading && !tableData ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#667eea" />
-              <Text style={styles.loadingText}>Loading...</Text>
-            </View>
-          ) : tableData ? (
-            <View style={styles.tableContainer}>
-              <ScrollView horizontal style={styles.tableScroll}>
-                <View>
-                  {/* Header */}
-                  <View style={styles.tableHeader}>
-                    {getVisibleColumns().map((col) => (
-                      <TouchableOpacity
-                        key={col}
-                        style={[styles.tableHeaderCell, { width: 150 }]}
-                        onPress={() => handleSort(col)}
-                      >
-                        <View style={styles.headerCellContent}>
-                          <Text style={styles.tableHeaderText} numberOfLines={1}>
-                            {col}
-                          </Text>
-                          {sortBy === col && (
-                            <Text style={styles.sortIndicator}>
-                              {sortOrder === 'asc' ? '↑' : '↓'}
-                            </Text>
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  {/* Rows */}
-                  <ScrollView style={styles.tableBodyScroll}>
-                    {tableData.rows.map((row) => (
-                      <View key={row.id} style={styles.tableRow}>
-                        {getVisibleColumns().map((col) => {
-                          const value = row[col];
-                          const isNull = isValueNull(value);
-                          return (
-                            <View key={col} style={[styles.tableCell, { width: 150 }]}>
-                              <Text
-                                style={[
-                                  styles.tableCellText,
-                                  isNull && styles.nullValueText,
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {isNull ? '?' : formatValue(value)}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    ))}
-                    {tableData.rows.length === 0 && (
-                      <View style={styles.emptyRow}>
-                        <Text style={styles.emptyText}>No rows found</Text>
-                      </View>
-                    )}
-                  </ScrollView>
-                </View>
-              </ScrollView>
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No table data available</Text>
-            </View>
-          )}
+          <TableViewer
+            columns={tableData.columns}
+            rows={tableData.rows}
+            totalRowCount={tableData.totalRowCount}
+            loading={tableData.loading}
+            error={tableData.error}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={handlePageChange}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSort={handleSort}
+            filterText={filterText}
+            onFilterChange={handleFilterChange}
+            visibleColumns={visibleColumns}
+            onToggleColumnVisibility={toggleColumnVisibility}
+          />
         </View>
       </View>
 
-      {/* Column visibility menu */}
-      <Modal
-        visible={showColumnMenu}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowColumnMenu(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Column Visibility</Text>
-              <TouchableOpacity
-                onPress={() => setShowColumnMenu(false)}
-                style={styles.modalCloseButton}
-              >
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalBody}>
-              {tableData?.columns.map((col) => {
-                const isVisible = !visibleColumns || visibleColumns.has(col);
-                return (
-                  <TouchableOpacity
-                    key={col}
-                    style={styles.columnMenuItem}
-                    onPress={() => toggleColumnVisibility(col)}
-                  >
-                    <Text style={styles.columnMenuCheckbox}>
-                      {isVisible ? '✓' : '○'}
-                    </Text>
-                    <Text style={styles.columnMenuText}>{col}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => {
-                  // Show all columns
-                  const params = new URLSearchParams();
-                  params.set('page', String(page));
-                  if (pageSize !== 50) params.set('pageSize', String(pageSize));
-                  if (sortBy) {
-                    params.set('sortBy', sortBy);
-                    params.set('sortOrder', sortOrder);
-                  }
-                  if (filterText) params.set('filter', filterText);
-                  // Don't include visibleColumns to show all
-                  router.push(`/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`);
-                  setShowColumnMenu(false);
-                }}
-              >
-                <Text style={styles.modalButtonText}>Show All</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

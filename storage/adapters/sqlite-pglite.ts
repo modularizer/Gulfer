@@ -75,21 +75,8 @@ export class SqlitePgliteAdapter implements Adapter {
       // Declare PGlite variable for this function scope
       let PGlite: any;
       
-      // Try ES module import first
-      let pgliteMod: any;
-      try {
-        pgliteMod = await import('@electric-sql/pglite');
-      } catch (importError: any) {
-        console.error('[sqlite-pglite] ES module import failed:', importError);
-        // Try CommonJS require as fallback
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          pgliteMod = require('@electric-sql/pglite');
-        } catch (requireError: any) {
-          console.error('[sqlite-pglite] CommonJS require also failed:', requireError);
-          throw new Error(`Failed to import @electric-sql/pglite: ES module error: ${importError?.message}, CommonJS error: ${requireError?.message}`);
-        }
-      }
+      // Use ES module import only
+      const pgliteMod = await import('@electric-sql/pglite');
       
       console.log('[sqlite-pglite] PGlite module imported, keys:', Object.keys(pgliteMod || {}));
       console.log('[sqlite-pglite] pgliteMod type:', typeof pgliteMod);

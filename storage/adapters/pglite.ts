@@ -91,20 +91,8 @@ export class PgliteAdapter implements Adapter {
       if (!this.pgliteModule) {
         console.log('[pglite] Importing @electric-sql/pglite...');
         
-        // Try ES module import first
-        try {
-          this.pgliteModule = await import('@electric-sql/pglite');
-        } catch (importError: any) {
-          console.error('[pglite] ES module import failed:', importError);
-          // Try CommonJS require as fallback
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            this.pgliteModule = require('@electric-sql/pglite');
-          } catch (requireError: any) {
-            console.error('[pglite] CommonJS require also failed:', requireError);
-            throw new Error(`Failed to import @electric-sql/pglite: ES module error: ${importError?.message}, CommonJS error: ${requireError?.message}`);
-          }
-        }
+        // Use ES module import only
+        this.pgliteModule = await import('@electric-sql/pglite');
         
         console.log('[pglite] PGlite module imported, keys:', Object.keys(this.pgliteModule || {}));
       }

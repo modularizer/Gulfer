@@ -4,7 +4,7 @@
  * Displays tables and data for a specific database.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getDatabaseByName, getTableNames, getAdapterByType, registerDatabaseName } from '../../storage/adapters';
+import { getDatabaseByName, getTableNames, getAdapterByType, registerDatabaseName, getDatabaseRegistryEntries } from '../../storage/adapters';
 import * as schema from '../../storage/schema/generic-sports-data/tables';
 import * as accountsSchema from '../../storage/schema/accounts/schema/tables';
 
@@ -65,7 +65,6 @@ export default function DbBrowserDetail() {
     
     try {
       console.log(`[db-browser] Loading row counts for ${tableNames.length} tables...`);
-      const { sql } = await import('drizzle-orm');
       const counts: Record<string, number> = {};
       
       // Get row counts for all tables in parallel
@@ -103,7 +102,6 @@ export default function DbBrowserDetail() {
       
       // Get adapter type from registry
       console.log(`[db-browser] Getting registry entries...`);
-      const { getDatabaseRegistryEntries } = await import('../../storage/adapters');
       const entries = await getDatabaseRegistryEntries();
       console.log(`[db-browser] Registry entries:`, entries);
       const entry = entries.find(e => e.name === name);

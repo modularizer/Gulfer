@@ -6,15 +6,107 @@
 
 /**
  * Check if a database is empty (has no tables or data)
+ * 
+ * Note: This function is defined here to avoid circular dependencies.
+ * It's a simple check that doesn't require importing database-metadata.
  */
 async function isDatabaseEmpty(name: string): Promise<boolean> {
   try {
+    // Import at the point of use to avoid circular dependency
+    // This is acceptable since it's only used in optional cleanup operations
     const { getDatabaseMetadata } = await import('./database-metadata');
     const metadata = await getDatabaseMetadata(name);
     return metadata.tableCount === 0 && metadata.totalRowCount === 0;
   } catch {
     // If we can't check, don't assume empty - might be in use
     return false;
+  }
+}
+
+/**
+ * Database registry entry - stores both name and adapter type
+ */
+export interface DatabaseRegistryEntry {
+  name: string;
+  adapterType: 'pglite' | 'sqlite-web' | 'sqlite-mobile' | 'postgres';
+}
+
+/**
+ * Get database registry entries with adapter types
+ * 
+ * This function must be defined early to avoid hoisting issues with Metro bundler.
+ * Using a direct export declaration that Metro can properly transform.
+ */
+export async function getDatabaseRegistryEntries(): Promise<DatabaseRegistryEntry[]> {
+  const indexedDB = typeof window !== 'undefined' ? window.indexedDB : null;
+  if (!indexedDB) {
+    return [];
+  }
+
+  try {
+    return await new Promise<DatabaseRegistryEntry[]>((resolve, reject) => {
+      const request = indexedDB.open('gulfer_registry', 2);
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        const oldVersion = event.oldVersion;
+        if (!db.objectStoreNames.contains('databases')) {
+          db.createObjectStore('databases');
+        }
+        // Migrate old format (array of strings) to new format (array of objects)
+        if (oldVersion < 2) {
+          const transaction = (event.target as IDBOpenDBRequest).transaction!;
+          const store = transaction.objectStore('databases');
+          const getRequest = store.get('list');
+          getRequest.onsuccess = () => {
+            const oldList = getRequest.result;
+            if (Array.isArray(oldList) && oldList.length > 0 && typeof oldList[0] === 'string') {
+              // Migrate: convert string array to entry array
+              const migrated: DatabaseRegistryEntry[] = (oldList as string[]).map(name => ({
+                name,
+                adapterType: 'pglite' as const
+              }));
+              store.put(migrated, 'list');
+            }
+          };
+        }
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains('databases')) {
+          resolve([]);
+          return;
+        }
+        const transaction = db.transaction(['databases'], 'readonly');
+        const store = transaction.objectStore('databases');
+        const getRequest = store.get('list');
+        getRequest.onsuccess = () => {
+          const result = getRequest.result;
+          if (!result) {
+            resolve([]);
+            return;
+          }
+          // Handle both old format (string[]) and new format (DatabaseRegistryEntry[])
+          if (Array.isArray(result)) {
+            if (result.length > 0 && typeof result[0] === 'string') {
+              // Old format - migrate on the fly
+              resolve((result as string[]).map(name => ({
+                name,
+                adapterType: 'pglite' as const
+              })));
+            } else {
+              // New format
+              resolve(result as DatabaseRegistryEntry[]);
+            }
+          } else {
+            resolve([]);
+          }
+        };
+        getRequest.onerror = () => resolve([]);
+      };
+      request.onerror = () => resolve([]);
+    });
+  } catch {
+    return [];
   }
 }
 
@@ -65,6 +157,7 @@ export async function listDatabasesWeb(): Promise<string[]> {
   }
 
   // Get registry of known databases with their adapter types
+  // Note: We call the function directly here, not through import, to avoid circular deps
   const knownDatabases = await getDatabaseRegistryEntries();
   
   // Verify each known database exists using its stored adapter type
@@ -99,96 +192,12 @@ export async function listDatabasesWeb(): Promise<string[]> {
 }
 
 /**
- * Database registry entry - stores both name and adapter type
- */
-export interface DatabaseRegistryEntry {
-  name: string;
-  adapterType: 'pglite' | 'sqlite-web' | 'sqlite-mobile' | 'postgres';
-}
-
-/**
  * Get database registry from IndexedDB
  * Returns array of database names (for backward compatibility)
  */
 async function getDatabaseRegistry(): Promise<string[]> {
   const entries = await getDatabaseRegistryEntries();
-  return entries.map(e => e.name);
-}
-
-/**
- * Get database registry entries with adapter types
- */
-export async function getDatabaseRegistryEntries(): Promise<DatabaseRegistryEntry[]> {
-  const indexedDB = typeof window !== 'undefined' ? window.indexedDB : null;
-  if (!indexedDB) {
-    return [];
-  }
-
-  try {
-    return await new Promise<DatabaseRegistryEntry[]>((resolve, reject) => {
-      const request = indexedDB.open('gulfer_registry', 2);
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        const oldVersion = event.oldVersion;
-        if (!db.objectStoreNames.contains('databases')) {
-          db.createObjectStore('databases');
-        }
-        // Migrate old format (array of strings) to new format (array of objects)
-        if (oldVersion < 2) {
-          const transaction = (event.target as IDBOpenDBRequest).transaction!;
-          const store = transaction.objectStore('databases');
-          const getRequest = store.get('list');
-          getRequest.onsuccess = () => {
-            const oldList = getRequest.result;
-            if (Array.isArray(oldList) && oldList.length > 0 && typeof oldList[0] === 'string') {
-              // Migrate: convert string array to entry array
-              const migrated: DatabaseRegistryEntry[] = (oldList as string[]).map(name => ({
-                name,
-                adapterType: 'pglite' // Default to pglite for existing entries
-              }));
-              store.put(migrated, 'list');
-            }
-          };
-        }
-      };
-      request.onsuccess = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains('databases')) {
-          resolve([]);
-          return;
-        }
-        const transaction = db.transaction(['databases'], 'readonly');
-        const store = transaction.objectStore('databases');
-        const getRequest = store.get('list');
-        getRequest.onsuccess = () => {
-          const result = getRequest.result;
-          if (!result) {
-            resolve([]);
-            return;
-          }
-          // Handle both old format (string[]) and new format (DatabaseRegistryEntry[])
-          if (Array.isArray(result)) {
-            if (result.length > 0 && typeof result[0] === 'string') {
-              // Old format - migrate on the fly
-              resolve((result as string[]).map(name => ({
-                name,
-                adapterType: 'pglite' as const
-              })));
-            } else {
-              // New format
-              resolve(result as DatabaseRegistryEntry[]);
-            }
-          } else {
-            resolve([]);
-          }
-        };
-        getRequest.onerror = () => resolve([]);
-      };
-      request.onerror = () => resolve([]);
-    });
-  } catch {
-    return [];
-  }
+  return entries.map((e: DatabaseRegistryEntry) => e.name);
 }
 
 /**
@@ -205,10 +214,10 @@ async function addToRegistry(name: string, adapterType: 'pglite' | 'sqlite-web' 
     const current = await getDatabaseRegistryEntries();
     console.log(`[registry] Current registry:`, current);
     
-    const existing = current.find(e => e.name === name);
+    const existing = current.find((e: DatabaseRegistryEntry) => e.name === name);
     if (!existing || existing.adapterType !== adapterType) {
       // Remove old entry if name exists but adapter type is different
-      const filtered = current.filter(e => e.name !== name);
+      const filtered = current.filter((e: DatabaseRegistryEntry) => e.name !== name);
       const updated: DatabaseRegistryEntry[] = [...filtered, { name, adapterType }];
       console.log(`[registry] Adding ${name} (${adapterType}) to registry. Updated list:`, updated);
       
@@ -254,7 +263,7 @@ async function addToRegistry(name: string, adapterType: 'pglite' | 'sqlite-web' 
       
       // Verify it was added
       const verify = await getDatabaseRegistryEntries();
-      const verified = verify.find(e => e.name === name && e.adapterType === adapterType);
+      const verified = verify.find((e: DatabaseRegistryEntry) => e.name === name && e.adapterType === adapterType);
       if (!verified) {
         throw new Error(`Failed to verify registration: ${name} (${adapterType}) not found in registry after adding`);
       }
@@ -279,7 +288,7 @@ async function removeFromRegistry(name: string): Promise<void> {
 
   try {
     const current = await getDatabaseRegistryEntries();
-    const updated = current.filter(e => e.name !== name);
+    const updated = current.filter((e: DatabaseRegistryEntry) => e.name !== name);
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open('gulfer_registry', 2);
       request.onupgradeneeded = (event) => {
@@ -325,4 +334,5 @@ export async function listDatabases(platform: 'web' | 'mobile' | 'node'): Promis
   // For mobile/node, we'd need platform-specific implementations
   return [];
 }
+
 
