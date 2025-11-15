@@ -11,7 +11,7 @@ export default function RootLayout() {
         }} 
       />
       <Stack.Screen 
-        name="db-browser/list" 
+        name="db-browser/index"
         options={{ 
           title: 'Database Browser',
           headerShown: false
@@ -24,6 +24,13 @@ export default function RootLayout() {
           title: ''
         }} 
       />
+        <Stack.Screen
+            name="db-browser/[db]/index"
+            options={{
+                headerShown: false,
+                title: ''
+            }}
+        />
     </Stack>
   );
 }

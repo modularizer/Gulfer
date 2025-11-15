@@ -242,6 +242,7 @@ export default function DatabaseBrowserLayout({
     const handleDatabaseSelect = useCallback((selectedDbName: string) => {
         if (selectedDbName !== dbName) {
             setShowDatabaseDropdown(false);
+            // Navigate to the database (no table selected initially)
             router.push(`/db-browser/${encodeURIComponent(selectedDbName)}`);
         } else {
             setShowDatabaseDropdown(false);
@@ -261,9 +262,13 @@ export default function DatabaseBrowserLayout({
         if (onBack) {
             onBack();
         } else {
-            router.push('/db-browser/list');
+            // If no database selected, stay on current page (no-op)
+            // Otherwise navigate to database list (which now shows the centered dropdown)
+            if (dbName) {
+                router.push('/db-browser');
+            }
         }
-    }, [router, onBack]);
+    }, [router, onBack, dbName]);
 
     // Sort tables: non-empty first, then empty tables
     const sortedTables = useMemo(() => {
@@ -277,6 +282,60 @@ export default function DatabaseBrowserLayout({
         });
         return sorted;
     }, [tables, tableRowCounts]);
+
+    // If no database selected, center the dropdown
+    if (!dbName) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.centeredContent}>
+                    {/* Database Dropdown - Centered */}
+                    <View style={styles.centeredDropdownContainer}>
+                        <TouchableOpacity
+                            style={styles.centeredDropdownButton}
+                            onPress={() => setShowDatabaseDropdown(true)}
+                        >
+                            <View style={styles.databaseDropdownContent}>
+                                <Text style={styles.databaseDropdownText} numberOfLines={1}>
+                                    Select Database
+                                </Text>
+                            </View>
+                            <Text style={styles.databaseDropdownIcon}>▼</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Database Dropdown Modal */}
+                    <Modal
+                        visible={showDatabaseDropdown}
+                        transparent={true}
+                        animationType="fade"
+                        onRequestClose={() => setShowDatabaseDropdown(false)}
+                    >
+                        <TouchableOpacity
+                            style={styles.centeredModalOverlay}
+                            activeOpacity={1}
+                            onPress={() => setShowDatabaseDropdown(false)}
+                        >
+                            <View style={styles.centeredDropdownListContainer}>
+                                <ScrollView style={styles.dropdownScroll}>
+                                    {databases.map((db) => (
+                                        <TouchableOpacity
+                                            key={db}
+                                            style={styles.dropdownItem}
+                                            onPress={() => handleDatabaseSelect(db)}
+                                        >
+                                            <Text style={styles.dropdownItemText}>
+                                                {db} ({databaseTableCounts[db] ?? 0} tables)
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -302,11 +361,13 @@ export default function DatabaseBrowserLayout({
                             >
                                 <View style={styles.databaseDropdownContent}>
                                     <Text style={styles.databaseDropdownText} numberOfLines={1}>
-                                        {dbName}
+                                        {dbName || 'Select Database'}
                                     </Text>
-                                    <Text style={styles.databaseDropdownSubtext}>
-                                        ({databaseTableCounts[dbName] ?? tables.length} tables)
-                                    </Text>
+                                    {dbName && (
+                                        <Text style={styles.databaseDropdownSubtext}>
+                                            ({databaseTableCounts[dbName] ?? tables.length} tables)
+                                        </Text>
+                                    )}
                                 </View>
                                 <Text style={styles.databaseDropdownIcon}>▼</Text>
                             </TouchableOpacity>
@@ -547,6 +608,44 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff',
         flexDirection: 'column',
+    },
+    centeredContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+    },
+    centeredDropdownContainer: {
+        width: 300,
+        maxWidth: '80%',
+    },
+    centeredDropdownButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: '#f5f5f5',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+        justifyContent: 'space-between',
+    },
+    centeredModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    centeredDropdownListContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 8,
+        width: 300,
+        maxWidth: '80%',
+        maxHeight: '60%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
     },
 });
 

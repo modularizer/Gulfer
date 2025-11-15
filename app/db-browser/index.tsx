@@ -1,3 +1,3 @@
-import XpDeebyDatabaseList from "../../xp-deeby/pages";
+import XpDeebyTableView from '../../xp-deeby/pages/xp-deeby';
 
-export default XpDeebyDatabaseList;
+export default XpDeebyTableView;
