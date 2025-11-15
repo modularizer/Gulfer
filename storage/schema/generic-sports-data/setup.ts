@@ -129,11 +129,26 @@ export async function setupDatabase(db: Database): Promise<void> {
   }
   
   try {
+    console.log(`[setupDatabase] Executing ${statements.length} CREATE statements...`);
+    let executedCount = 0;
     for (const statement of statements) {
       if (statement) {
+        const statementPreview = statement.substring(0, 100).replace(/\s+/g, ' ');
+        console.log(`[setupDatabase] Executing statement ${executedCount + 1}/${statements.length}: ${statementPreview}...`);
         await db.execute(sql.raw(statement + ';'));
+        executedCount++;
       }
     }
+    console.log(`[setupDatabase] ✅ Executed ${executedCount} CREATE statements`);
+    
+    // Verify tables were created
+    console.log('[setupDatabase] Verifying tables were created...');
+    const adapter = await getAdapter();
+    if (adapter.getTableNames) {
+      const tableNames = await adapter.getTableNames(db);
+      console.log(`[setupDatabase] Found ${tableNames.length} tables after CREATE:`, tableNames);
+    }
+    
     console.log('✅ Database schema created/verified');
   } catch (error) {
     console.error('❌ Error creating database schema:', error);
@@ -148,4 +163,5 @@ export async function setupDatabase(db: Database): Promise<void> {
   // CREATE scripts handle initial setup, migrations handle schema changes
   await runMigrations(db);
 }
+
 

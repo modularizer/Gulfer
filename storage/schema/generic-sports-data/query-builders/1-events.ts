@@ -291,10 +291,55 @@ export function queryEvents(db: Database): EventBuilder<{
       // Group results by event ID
       const eventsMap = new Map<string, EventWithDetails>();
       
+      console.log(`[queryEvents.execute] Raw query results:`, results);
+      console.log(`[queryEvents.execute] Result count:`, results.length);
+      if (results.length > 0) {
+        console.log(`[queryEvents.execute] First row keys:`, Object.keys(results[0]));
+        console.log(`[queryEvents.execute] First row sample:`, results[0]);
+      }
+      
       for (const row of results as any) {
-        // Drizzle returns snake_case keys, but we map to camelCase to match meta-types
-        const eventData = row.events;
-        if (!eventData) continue;
+        // Drizzle may return namespaced (row.events) or flat (row.id, row.name) column names
+        // Try namespaced first, then fall back to flat structure
+        let eventData = row.events || row.Events || row.events_table;
+        
+        // If no namespaced data, check if this row IS the event data (flat structure from PGLite)
+        // Event table has: id, name, notes, lat, lng, metadata, venueEventFormatId, startTime, endTime, active
+        // With joins, we need to check for event-specific columns that won't be in joined tables
+        if (!eventData && row.id) {
+          // Check if this has event-specific columns (not just joined table columns)
+          const hasEventColumns = 
+            row.venueEventFormatId !== undefined || 
+            row.venue_event_format_id !== undefined ||
+            row.startTime !== undefined ||
+            row.start_time !== undefined ||
+            row.endTime !== undefined ||
+            row.end_time !== undefined ||
+            row.active !== undefined;
+          
+          if (hasEventColumns) {
+            // Extract event data from flat structure
+            // Create event object with all event columns (both camelCase and snake_case)
+            eventData = {
+              id: row.id,
+              name: row.name ?? null,
+              notes: row.notes ?? null,
+              lat: row.lat ?? null,
+              lng: row.lng ?? null,
+              metadata: row.metadata ?? null,
+              venueEventFormatId: row.venueEventFormatId ?? row.venue_event_format_id ?? null,
+              startTime: row.startTime ?? row.start_time ?? null,
+              endTime: row.endTime ?? row.end_time ?? null,
+              active: row.active ?? null,
+            };
+          }
+        }
+        
+        if (!eventData || !eventData.id) {
+          // Skip rows without event data (shouldn't happen with left joins, but be defensive)
+          console.warn(`[queryEvents.execute] Skipping row without event data. Row keys:`, Object.keys(row));
+          continue;
+        }
         
         const eventId = eventData.id;
         

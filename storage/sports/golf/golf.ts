@@ -107,9 +107,57 @@ class Golf extends Sport {
 
     // Use golf stroke play as default
     const scoringMethod = options?.scoringMethod || golfStrokePlay;
+    
+    // Ensure scoring method is registered (creates score format in database if needed)
+    // This is idempotent - it will only create if it doesn't exist
+    await scoringMethod.register(this.db!, sportId, this.scoreFormatService);
+    
+    // Get the score format (should exist after registration)
     const scoreFormats = await this.scoreFormatService.getScoreFormatsByScoringMethod(scoringMethod.name);
-    const scoreFormat = scoreFormats.find((sf: { sportId: string; }) => sf.sportId === sportId);
-    if (!scoreFormat) throw new Error(`Score format for "${scoringMethod.name}" not found for golf`);
+    
+    // First try to find one with the exact sportId
+    let scoreFormat = scoreFormats.find((sf: { sportId: string | null; }) => sf.sportId === sportId);
+    
+    // If not found, try to find one with null sportId (generic) and update it
+    if (!scoreFormat) {
+      const genericScoreFormat = scoreFormats.find((sf: { sportId: string | null; }) => !sf.sportId || sf.sportId === null);
+      if (genericScoreFormat) {
+        // Update the generic one to be sport-specific
+        try {
+          await this.scoreFormatService.updateScoreFormat(genericScoreFormat.id, {
+            sportId: sportId,
+          });
+          scoreFormat = await this.scoreFormatService.getScoreFormat(genericScoreFormat.id);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.warn(`Failed to update generic score format to sport-specific: ${errorMessage}`);
+        }
+      }
+    }
+    
+    // If still not found, try to create it
+    if (!scoreFormat) {
+      try {
+        scoreFormat = await this.scoreFormatService.createScoreFormat({
+          name: scoringMethod.name,
+          notes: scoringMethod.description,
+          sportId: sportId,
+          scoringMethodName: scoringMethod.name,
+          metadata: null,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        throw new Error(`Score format for "${scoringMethod.name}" not found for golf and could not be created: ${errorMessage}`);
+      }
+    }
+    
+    if (!scoreFormat) {
+      // This should not happen, but provide detailed error if it does
+      const errorMessage = `Score format for "${scoringMethod.name}" was not found or created. ` +
+        `Found ${scoreFormats.length} score format(s) with this scoring method name. ` +
+        `Available score formats: ${JSON.stringify(scoreFormats.map(sf => ({ id: sf.id, sportId: sf.sportId, name: sf.name })))}`;
+      throw new Error(errorMessage);
+    }
 
     const stages: StageInput[] = Array.from({ length: numHoles }, (_, i) => ({
       number: i + 1,

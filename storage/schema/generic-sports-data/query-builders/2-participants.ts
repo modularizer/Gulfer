@@ -170,14 +170,34 @@ export function queryParticipants(db: Database) {
       
       const results = await selectQuery;
       
+      console.log(`[queryParticipants.execute] Raw query results:`, results);
+      console.log(`[queryParticipants.execute] Result count: ${results.length}`);
+      if (results.length > 0) {
+        console.log(`[queryParticipants.execute] First row keys:`, Object.keys(results[0] || {}));
+        console.log(`[queryParticipants.execute] First row sample:`, results[0]);
+      }
+      
       const participantsMap = new Map<string, ParticipantWithDetails>();
       
       for (const row of results as any) {
         // Drizzle namespaces joined results by table name
-        // When using left joins, the main table data should always be present
-        const participantData = row.participants;
+        // However, with PGLite/PostgreSQL, Drizzle may return flat column names
+        // Try namespaced first, then fall back to flat structure
+        let participantData = row.participants || row.Participants || row.participants_table;
+        
+        // If no namespaced data, check if this row IS the participant data (flat structure)
+        // Participant table has: id, name, notes, lat, lng, metadata, sex, birthday, is_team, createdAt, deletedAt
+        if (!participantData && row.id && (row.name !== undefined || row.is_team !== undefined)) {
+          // This row is the participant data itself (flat structure from PGLite)
+          participantData = row;
+        }
+        
+        console.log(`[queryParticipants.execute] Processing row, participantData:`, participantData);
+        console.log(`[queryParticipants.execute] Row keys:`, Object.keys(row));
+        
         if (!participantData || !participantData.id) {
           // Skip rows without participant data (shouldn't happen with left joins, but be defensive)
+          console.warn(`[queryParticipants.execute] Skipping row without participant data:`, row);
           continue;
         }
         
@@ -195,21 +215,57 @@ export function queryParticipants(db: Database) {
         const participant = participantsMap.get(participantId)!;
         
         // Add event if not already added
-        if (row.events) {
-          let eventEntry = participant.events.find(e => e.event.id === row.events.id);
+        // Check for both namespaced and flat column names
+        const eventData = row.events || (row.event_id ? {
+          id: row.event_id,
+          venueEventFormatId: row.venue_event_format_id,
+          name: null, // Not available in flat structure
+          notes: null,
+          startTime: row.start_time,
+          endTime: row.end_time,
+          active: row.active,
+        } : null);
+        
+        if (eventData && eventData.id) {
+          let eventEntry = participant.events.find(e => e.event.id === eventData.id);
           
           if (!eventEntry) {
             eventEntry = {
-              event: row.events,
+              event: eventData,
               scores: [],
             };
             participant.events.push(eventEntry);
           }
           
           // Add score if not already added
-          if (row.participant_event_stage_scores && 
-              !eventEntry.scores.find((s: any) => s.id === row.participant_event_stage_scores.id)) {
-            eventEntry.scores.push(row.participant_event_stage_scores);
+          // Check for both namespaced and flat column names
+          const scoreData = row.participant_event_stage_scores || (row.value !== undefined ? {
+            id: null, // May not be available in flat structure
+            participantId: participantId,
+            eventStageId: row.event_stage_id,
+            value: row.value,
+            points: row.points,
+            won: row.won,
+            lost: row.lost,
+            tied: row.tied,
+            winMargin: row.win_margin,
+            lossMargin: row.loss_margin,
+            pointsBehindPrevious: row.points_behind_previous,
+            pointsAheadOfNext: row.points_ahead_of_next,
+            completedAt: row.completed_at,
+            complete: row.complete,
+          } : null);
+          
+          if (scoreData && (scoreData.id || scoreData.value !== undefined)) {
+            // Only add if not already present (check by id if available, or by eventStageId + value)
+            const existingScore = eventEntry.scores.find((s: any) => 
+              (scoreData.id && s.id === scoreData.id) ||
+              (!scoreData.id && s.eventStageId === scoreData.eventStageId && s.value === scoreData.value)
+            );
+            
+            if (!existingScore) {
+              eventEntry.scores.push(scoreData);
+            }
           }
         }
       }

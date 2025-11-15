@@ -9,6 +9,45 @@ import type { Database } from '../../../adapters';
 import { eq, and, isNull, notInArray, SQL } from 'drizzle-orm';
 
 /**
+ * Extract detailed error information from a database error
+ */
+function extractSqlError(error: any): string {
+  if (!error) return 'Unknown error';
+  
+  const parts: string[] = [];
+  
+  // PostgreSQL error properties
+  if (error.message) parts.push(`Message: ${error.message}`);
+  if (error.code) parts.push(`Code: ${error.code}`);
+  if (error.detail) parts.push(`Detail: ${error.detail}`);
+  if (error.hint) parts.push(`Hint: ${error.hint}`);
+  if (error.position) parts.push(`Position: ${error.position}`);
+  if (error.severity) parts.push(`Severity: ${error.severity}`);
+  
+  // If it's a standard Error, include the message
+  if (error instanceof Error) {
+    if (!parts.length) {
+      parts.push(error.message);
+    }
+    if (error.stack && parts.length === 1) {
+      // Only include stack if we don't have detailed SQL error info
+      parts.push(`\nStack: ${error.stack}`);
+    }
+  }
+  
+  // If we still don't have anything, stringify the error
+  if (parts.length === 0) {
+    try {
+      parts.push(JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    } catch {
+      parts.push(String(error));
+    }
+  }
+  
+  return parts.join('\n');
+}
+
+/**
  * Result of an upsert operation
  */
 export type UpsertResult = 'insert' | 'update' | 'unchanged';
@@ -100,10 +139,15 @@ export async function upsertEntity<T extends { id: string }>(
     // Check if anything actually changed
     if (hasChanges(existingById[0], record)) {
       // Update existing record by id
-      await db.update(table)
-        .set(record)
-        .where(eq(table.id, record.id));
-      return 'update';
+      try {
+        await db.update(table)
+          .set(record)
+          .where(eq(table.id, record.id));
+        return 'update';
+      } catch (error) {
+        const sqlError = extractSqlError(error);
+        throw new Error(`Failed to update record in ${table._.name || 'table'}:\n${sqlError}\nRecord: ${JSON.stringify(record, null, 2)}`);
+      }
     } else {
       return 'unchanged';
     }
@@ -125,10 +169,15 @@ export async function upsertEntity<T extends { id: string }>(
       
       if (hasChanges(existingRecord, mergedRecord)) {
         // Update existing record
-        await db.update(table)
-          .set(mergedRecord)
-          .where(eq(table.id, existingRecord.id));
-        return 'update';
+        try {
+          await db.update(table)
+            .set(mergedRecord)
+            .where(eq(table.id, existingRecord.id));
+          return 'update';
+        } catch (error) {
+          const sqlError = extractSqlError(error);
+          throw new Error(`Failed to update record in ${table._.name || 'table'}:\n${sqlError}\nRecord: ${JSON.stringify(mergedRecord, null, 2)}`);
+        }
       } else {
         return 'unchanged';
       }
@@ -136,8 +185,13 @@ export async function upsertEntity<T extends { id: string }>(
   }
   
   // No existing record found - insert new record
-  await db.insert(table).values(record);
-  return 'insert';
+  try {
+    await db.insert(table).values(record);
+    return 'insert';
+  } catch (error) {
+    const sqlError = extractSqlError(error);
+    throw new Error(`Failed to insert record into ${table._.name || 'table'}:\n${sqlError}\nRecord: ${JSON.stringify(record, null, 2)}`);
+  }
 }
 
 /**

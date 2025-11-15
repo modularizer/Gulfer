@@ -52,7 +52,11 @@ export class VenueEventFormatService extends BaseService {
 
     // Get the venue (required - courses must always have a venue)
     if (!venueEventFormat.venueId) {
-      throw new Error('Venue event format must have a venueId');
+      throw new Error(`Venue event format must have a venueId. Data: ${JSON.stringify(venueEventFormat)}`);
+    }
+    
+    if (!venueEventFormat.eventFormatId) {
+      throw new Error(`Venue event format must have an eventFormatId. Data: ${JSON.stringify(venueEventFormat)}`);
     }
     
     // Fetch venue directly from database to avoid query builder issues
@@ -296,7 +300,33 @@ export class VenueEventFormatService extends BaseService {
       expectedMaxDuration: venueEventFormat.expectedMaxDuration ?? eventFormatWithStages.expectedMaxDuration ?? null,
     };
     
-    await this.saveVenueEventFormat(venueEventFormatData);
+    // Verify venueId and eventFormatId are set before saving
+    if (!venueEventFormatData.venueId) {
+      throw new Error(`Cannot save venue event format: venueId is missing. Data: ${JSON.stringify(venueEventFormatData)}`);
+    }
+    if (!venueEventFormatData.eventFormatId) {
+      throw new Error(`Cannot save venue event format: eventFormatId is missing. Data: ${JSON.stringify(venueEventFormatData)}`);
+    }
+    
+    try {
+      await this.saveVenueEventFormat(venueEventFormatData);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to save venue event format: ${errorMessage}. Data: ${JSON.stringify(venueEventFormatData)}`);
+    }
+    
+    // Verify it was saved correctly
+    const savedCheck = await this.getVenueEventFormat(venueEventFormatId);
+    if (!savedCheck) {
+      throw new Error(`Venue event format was saved but could not be retrieved. ID: ${venueEventFormatId}`);
+    }
+    
+    if (!savedCheck.venueId) {
+      throw new Error(`Venue event format was saved but venueId is missing. Saved data: ${JSON.stringify(savedCheck)}`);
+    }
+    if (!savedCheck.eventFormatId) {
+      throw new Error(`Venue event format was saved but eventFormatId is missing. Saved data: ${JSON.stringify(savedCheck)}`);
+    }
     
     // Create venueEventFormatStages that mirror the eventFormatStages structure
     await this.createVenueStagesFromEventStages(
@@ -308,7 +338,23 @@ export class VenueEventFormatService extends BaseService {
     // Use getVenueEventFormatWithStages to ensure all data is properly loaded
     const result = await this.getVenueEventFormatWithStages(venueEventFormatId);
     if (!result) {
-      throw new Error('Failed to create venue event format with stages');
+      // Try to get raw data to see what happened
+      let rawData: any[] = [];
+      try {
+        rawData = await this.db
+          .select()
+          .from(schema.venueEventFormats)
+          .where(eq(schema.venueEventFormats.id, venueEventFormatId))
+          .limit(1);
+      } catch (rawError) {
+        // Ignore - we'll just report the main error
+      }
+      
+      const debugInfo = rawData.length > 0 
+        ? `Venue event format was saved but could not be retrieved. Raw data: ${JSON.stringify(rawData[0])}`
+        : `Venue event format was not saved or could not be retrieved. Check SQL error above.`;
+      
+      throw new Error(`Failed to create venue event format with stages: ${debugInfo}`);
     }
     
     return result;
@@ -368,11 +414,32 @@ export class VenueEventFormatService extends BaseService {
       expectedMaxDuration: venueEventFormat.expectedMaxDuration ?? eventFormat.expectedMaxDuration ?? null,
     };
     
-    await this.saveVenueEventFormat(venueEventFormatData);
+    try {
+      await this.saveVenueEventFormat(venueEventFormatData);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to create venue event format: ${errorMessage}`);
+    }
     
     const saved = await this.getVenueEventFormat(venueEventFormatData.id!);
     if (!saved) {
-      throw new Error('Failed to create venue event format');
+      // Try to get raw data to see what happened
+      let rawData: any[] = [];
+      try {
+        rawData = await this.db
+          .select()
+          .from(schema.venueEventFormats)
+          .where(eq(schema.venueEventFormats.id, venueEventFormatData.id!))
+          .limit(1);
+      } catch (rawError) {
+        // Ignore - we'll just report the main error
+      }
+      
+      const debugInfo = rawData.length > 0 
+        ? `Venue event format was saved but could not be retrieved. Raw data: ${JSON.stringify(rawData[0])}`
+        : `Venue event format was not saved or could not be retrieved. Check SQL error above.`;
+      
+      throw new Error(`Failed to create venue event format: ${debugInfo}`);
     }
     
     return saved;

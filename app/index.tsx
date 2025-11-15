@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
 } from 'react-native';
-import { runGolfTest } from '../storage/tests/golf';
+import { runGolfTest, runBasicPgliteTest } from '../storage/tests/golf';
 import { deleteDatabaseByName } from '../storage/adapters';
 import { useRouter } from 'expo-router';
 
@@ -42,6 +42,29 @@ export default function DbTestPage() {
 
     try {
       await runGolfTest(addLog);
+      setIsComplete(true);
+    } catch (error) {
+      addLog('❌ Test failed:', 'error');
+      if (error instanceof Error) {
+        addLog(`   Error message: ${error.message}`, 'error');
+        if (error.stack) {
+          addLog(`   Stack: ${error.stack}`, 'error');
+        }
+      } else {
+        addLog(`   Error: ${JSON.stringify(error)}`, 'error');
+      }
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  const runBasicTest = async () => {
+    setIsRunning(true);
+    setIsComplete(false);
+    setLogs([]);
+
+    try {
+      await runBasicPgliteTest(addLog);
       setIsComplete(true);
     } catch (error) {
       addLog('❌ Test failed:', 'error');
@@ -92,11 +115,20 @@ export default function DbTestPage() {
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={[styles.button, isRunning && styles.buttonDisabled]}
-            onPress={runTest}
+            onPress={runBasicTest}
             disabled={isRunning}
           >
             <Text style={styles.buttonText}>
-              {isRunning ? 'Running...' : 'Run Test'}
+              {isRunning ? 'Running...' : 'Basic Test'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, styles.buttonSecondary, isRunning && styles.buttonDisabled]}
+            onPress={runTest}
+            disabled={isRunning}
+          >
+            <Text style={[styles.buttonText, styles.buttonTextSecondary]}>
+              Full Test
             </Text>
           </TouchableOpacity>
           <TouchableOpacity

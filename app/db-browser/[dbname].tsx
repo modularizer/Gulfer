@@ -64,6 +64,7 @@ export default function DbBrowserDetail() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tables, setTables] = useState<string[]>([]);
+  const [tableRowCounts, setTableRowCounts] = useState<Record<string, number>>({});
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [tableData, setTableData] = useState<TableData | null>(null);
   const [db, setDb] = useState<any>(null);
@@ -76,26 +77,103 @@ export default function DbBrowserDetail() {
 
   const loadDatabase = async (name: string) => {
     try {
+      console.log(`[db-browser] Loading database: ${name}`);
       setLoading(true);
       setError(null);
       setTableData(null);
       setSelectedTable(null);
       
-      // Register the database name so it appears in the list
-      registerDatabaseName(name);
+      // Get adapter type from registry
+      console.log(`[db-browser] Getting registry entries...`);
+      const { getDatabaseRegistryEntries } = await import('../../storage/adapters');
+      const entries = await getDatabaseRegistryEntries();
+      console.log(`[db-browser] Registry entries:`, entries);
+      const entry = entries.find(e => e.name === name);
+      console.log(`[db-browser] Found entry for ${name}:`, entry);
       
-      // Set the adapter type to match what the test uses
-      await getAdapterByType('pglite');
-      // Connect to existing database (don't set up schema)
-      const database = await getDatabaseByName(name);
+      if (!entry) {
+        const errorMsg = `Database ${name} not found in registry. Please run a test first to create the database.`;
+        console.error(`[db-browser] ${errorMsg}`);
+        setError(errorMsg);
+        setLoading(false);
+        return;
+      }
+      
+      // Use the exact adapter type from registry
+      console.log(`[db-browser] Getting adapter type: ${entry.adapterType}`);
+      const adapter = await getAdapterByType(entry.adapterType);
+      console.log(`[db-browser] Adapter obtained:`, adapter);
+      console.log(`[db-browser] Adapter capabilities:`, adapter.getCapabilities());
+      
+      // Connect to existing database using the correct adapter
+      if (!adapter.getDatabaseByName) {
+        const errorMsg = `Adapter ${entry.adapterType} does not support getDatabaseByName`;
+        console.error(`[db-browser] ${errorMsg}`);
+        setError(errorMsg);
+        setLoading(false);
+        return;
+      }
+      console.log(`[db-browser] Connecting to database ${name}...`);
+      const database = await adapter.getDatabaseByName(name);
+      console.log(`[db-browser] Database connection obtained:`, database);
       setDb(database);
       
-      const tableNames = await getTableNames(database);
+      // Get table names using the correct adapter
+      if (!adapter.getTableNames) {
+        const errorMsg = `Adapter ${entry.adapterType} does not support getTableNames`;
+        console.error(`[db-browser] ${errorMsg}`);
+        setError(errorMsg);
+        setLoading(false);
+        return;
+      }
+      console.log(`[db-browser] Getting table names...`);
+      const tableNames = await adapter.getTableNames(database);
+      console.log(`[db-browser] Table names retrieved:`, tableNames);
+      console.log(`[db-browser] Table count: ${tableNames.length}`);
       setTables(tableNames);
+      
+      // Get row counts for all tables
+      await loadTableRowCounts(database, tableNames);
     } catch (err) {
+      console.error(`[db-browser] Error loading database:`, err);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTableRowCounts = async (database: any, tableNames: string[]) => {
+    if (!database || tableNames.length === 0) return;
+    
+    try {
+      console.log(`[db-browser] Loading row counts for ${tableNames.length} tables...`);
+      const { sql } = await import('drizzle-orm');
+      const counts: Record<string, number> = {};
+      
+      // Get row counts for all tables in parallel
+      await Promise.all(
+        tableNames.map(async (tableName) => {
+          try {
+            const countResult = await database.execute(sql.raw(`
+              SELECT COUNT(*) as count FROM "${tableName}"
+            `)) as any[];
+            
+            const count = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
+            counts[tableName] = typeof count === 'number' ? count : parseInt(String(count), 10);
+            console.log(`[db-browser] Table ${tableName}: ${counts[tableName]} rows`);
+          } catch (err) {
+            console.warn(`[db-browser] Could not get row count for ${tableName}:`, err);
+            counts[tableName] = 0;
+          }
+        })
+      );
+      
+      console.log(`[db-browser] Row counts loaded:`, counts);
+      setTableRowCounts(counts);
+    } catch (err) {
+      console.error(`[db-browser] Error loading row counts:`, err);
+      // Don't fail the whole load, just set empty counts
+      setTableRowCounts({});
     }
   };
 
@@ -103,29 +181,55 @@ export default function DbBrowserDetail() {
     if (!db) return;
     
     try {
+      console.log(`[db-browser] Loading table data for: ${tableName}`);
       setLoading(true);
       setError(null);
       
-      const table = getTableSchema(tableName);
+      // Use raw SQL to query any table - no schema knowledge needed
+      const { sql } = await import('drizzle-orm');
       
-      let rows: any[] = [];
-      let rowCount = 0;
+      // Get column information from information_schema
+      console.log(`[db-browser] Getting column information for table: ${tableName}`);
+      const columnInfo = await db.execute(sql.raw(`
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = '${tableName}'
+        ORDER BY ordinal_position
+      `)) as any[];
       
-      if (!table) {
-        setError(`Table "${tableName}" not found in schema. Only tables defined in our schema can be browsed.`);
-        setLoading(false);
-        return;
+      console.log(`[db-browser] Column info:`, columnInfo);
+      const columns = columnInfo.map((col: any) => {
+        const colName = col.column_name || col['column_name'] || col[0];
+        return colName;
+      }).filter(Boolean);
+      
+      console.log(`[db-browser] Columns:`, columns);
+      
+      // Get row count
+      console.log(`[db-browser] Getting row count for table: ${tableName}`);
+      const countResult = await db.execute(sql.raw(`
+        SELECT COUNT(*) as count FROM "${tableName}"
+      `)) as any[];
+      
+      const rowCount = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
+      console.log(`[db-browser] Row count:`, rowCount);
+      
+      // Get rows (limit to 100 for display)
+      console.log(`[db-browser] Fetching rows from table: ${tableName}`);
+      const rows = await db.execute(sql.raw(`
+        SELECT * FROM "${tableName}" LIMIT 100
+      `)) as any[];
+      
+      console.log(`[db-browser] Fetched ${rows.length} rows`);
+      console.log(`[db-browser] First row sample:`, rows[0]);
+      
+      // If columns weren't found from information_schema, get them from first row
+      if (columns.length === 0 && rows.length > 0) {
+        const firstRow = rows[0];
+        const rowColumns = Object.keys(firstRow);
+        console.log(`[db-browser] Using columns from first row:`, rowColumns);
+        columns.push(...rowColumns);
       }
-      
-      // Use Drizzle query builder
-      rows = await db.select().from(table).limit(100);
-      
-      // Get total count using Drizzle (fetch all to count, but limit display)
-      const allRows = await db.select().from(table);
-      rowCount = allRows.length;
-      
-      // Get column names from the first row
-      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
       
       setTableData({
         name: tableName,
@@ -135,6 +239,7 @@ export default function DbBrowserDetail() {
       });
       setSelectedTable(tableName);
     } catch (err) {
+      console.error(`[db-browser] Error loading table data:`, err);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
@@ -168,22 +273,29 @@ export default function DbBrowserDetail() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.headerButton}
           onPress={() => router.push('/db-browser/list')}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.headerButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Database Browser</Text>
-        <Text style={styles.subtitle}>Database: {dbName}</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={styles.refreshButton}
-            onPress={() => dbName && loadDatabase(dbName)}
-            disabled={loading}
-          >
-            <Text style={styles.refreshButtonText}>Refresh</Text>
-          </TouchableOpacity>
+        <View style={styles.headerInfo}>
+          <View style={styles.headerTopRow}>
+            <Text style={styles.headerDbName} numberOfLines={1}>{dbName}</Text>
+            <Text style={styles.headerTableCount}>Tables ({tables.length})</Text>
+          </View>
+          {tableData && (
+            <Text style={styles.headerTableName} numberOfLines={1}>
+              {tableData.name} ({tableData.rowCount.toLocaleString()} rows)
+            </Text>
+          )}
         </View>
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => dbName && loadDatabase(dbName)}
+          disabled={loading}
+        >
+          <Text style={styles.headerButtonText}>↻</Text>
+        </TouchableOpacity>
       </View>
 
       {error && (
@@ -201,68 +313,115 @@ export default function DbBrowserDetail() {
 
       <View style={styles.content}>
         <View style={styles.sidebar}>
-          <Text style={styles.sidebarTitle}>Tables ({tables.length})</Text>
           <ScrollView style={styles.tableList}>
-            {tables.map((table) => (
-              <TouchableOpacity
-                key={table}
-                style={[
-                  styles.tableItem,
-                  selectedTable === table && styles.tableItemSelected,
-                ]}
-                onPress={() => loadTableData(table)}
-              >
-                <Text
-                  style={[
-                    styles.tableItemText,
-                    selectedTable === table && styles.tableItemTextSelected,
-                  ]}
-                >
-                  {table}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {(() => {
+              // Sort tables: non-empty first, then empty tables
+              const sortedTables = [...tables].sort((a, b) => {
+                const countA = tableRowCounts[a] ?? 0;
+                const countB = tableRowCounts[b] ?? 0;
+                // If both are empty or both have rows, maintain original order
+                if ((countA === 0 && countB === 0) || (countA > 0 && countB > 0)) {
+                  return 0;
+                }
+                // Empty tables go to bottom
+                return countA === 0 ? 1 : -1;
+              });
+              
+              return sortedTables.map((table) => {
+                const rowCount = tableRowCounts[table] ?? null;
+                const isEmpty = rowCount === 0;
+                return (
+                  <TouchableOpacity
+                    key={table}
+                    style={[
+                      styles.tableItem,
+                      isEmpty && styles.tableItemEmpty,
+                      selectedTable === table && styles.tableItemSelected,
+                    ]}
+                    onPress={() => loadTableData(table)}
+                  >
+                    <View style={styles.tableItemContent}>
+                      <Text
+                        style={[
+                          styles.tableItemText,
+                          isEmpty && styles.tableItemTextEmpty,
+                          selectedTable === table && styles.tableItemTextSelected,
+                        ]}
+                      >
+                        {table}
+                      </Text>
+                      {rowCount !== null && (
+                        <Text
+                          style={[
+                            styles.tableItemCount,
+                            isEmpty && styles.tableItemCountEmpty,
+                            selectedTable === table && styles.tableItemCountSelected,
+                          ]}
+                        >
+                          {rowCount.toLocaleString()}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              });
+            })()}
           </ScrollView>
         </View>
 
         <View style={styles.mainContent}>
           {tableData ? (
-            <>
-              <View style={styles.tableHeader}>
-                <Text style={styles.tableName}>{tableData.name}</Text>
-                <Text style={styles.tableCount}>
-                  {tableData.rowCount} row{tableData.rowCount !== 1 ? 's' : ''}
-                  {tableData.rows.length < tableData.rowCount && ` (showing first ${tableData.rows.length})`}
-                </Text>
-              </View>
-              <ScrollView horizontal style={styles.tableScroll}>
-                <View style={styles.table}>
-                  <View style={styles.tableRowHeader}>
-                    {tableData.columns.map((col) => (
-                      <View key={col} style={styles.tableCellHeader}>
-                        <Text style={styles.tableCellHeaderText}>{col}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  {tableData.rows.map((row, rowIndex) => (
-                    <View key={rowIndex} style={styles.tableRow}>
-                      {tableData.columns.map((col) => (
-                        <View key={col} style={styles.tableCell}>
-                          <Text style={styles.tableCellText} numberOfLines={2}>
-                            {formatValue(row[col])}
-                          </Text>
-                        </View>
-                      ))}
+            <View style={styles.tableContainer}>
+              <ScrollView horizontal style={styles.tableHeaderScroll}>
+                <View style={styles.tableRowHeader}>
+                  {tableData.columns.map((col) => (
+                    <View key={col} style={styles.tableCellHeader}>
+                      <Text 
+                        style={styles.tableCellHeaderText}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {col}
+                      </Text>
                     </View>
                   ))}
-                  {tableData.rows.length === 0 && (
-                    <View style={styles.emptyRow}>
-                      <Text style={styles.emptyText}>No rows found</Text>
-                    </View>
-                  )}
                 </View>
               </ScrollView>
-            </>
+              <ScrollView 
+                horizontal 
+                nestedScrollEnabled
+                style={styles.tableScroll}
+                contentContainerStyle={styles.tableScrollContent}
+              >
+                <ScrollView 
+                  style={styles.tableRowsScroll}
+                  nestedScrollEnabled
+                >
+                  <View style={styles.table}>
+                    {tableData.rows.map((row, rowIndex) => (
+                      <View key={rowIndex} style={styles.tableRow}>
+                        {tableData.columns.map((col) => (
+                          <View key={col} style={styles.tableCell}>
+                            <Text 
+                              style={styles.tableCellText} 
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                            >
+                              {formatValue(row[col])}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    ))}
+                    {tableData.rows.length === 0 && (
+                      <View style={styles.emptyRow}>
+                        <Text style={styles.emptyText}>No rows found</Text>
+                      </View>
+                    )}
+                  </View>
+                </ScrollView>
+              </ScrollView>
+            </View>
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>
@@ -282,50 +441,53 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
-    padding: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
     backgroundColor: '#fafafa',
+    gap: 12,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginTop: 5,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 10,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 10,
-  },
-  refreshButton: {
+  headerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
     backgroundColor: '#667eea',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  refreshButtonText: {
+  headerButtonText: {
     color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  headerInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerDbName: {
     fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  headerTableCount: {
+    fontSize: 12,
+    color: '#666',
     fontWeight: '500',
   },
-  backButton: {
-    backgroundColor: '#999',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginBottom: 10,
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
+  headerTableName: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
   errorContainer: {
     backgroundColor: '#ffebee',
@@ -356,13 +518,6 @@ const styles = StyleSheet.create({
     borderRightColor: '#e0e0e0',
     backgroundColor: '#fafafa',
   },
-  sidebarTitle: {
-    padding: 15,
-    fontSize: 16,
-    fontWeight: '600',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
   tableList: {
     flex: 1,
   },
@@ -371,37 +526,66 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
+  tableItemEmpty: {
+    opacity: 0.5,
+    backgroundColor: '#f9f9f9',
+  },
   tableItemSelected: {
     backgroundColor: '#667eea',
+    opacity: 1,
+  },
+  tableItemContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
   },
   tableItemText: {
     fontSize: 14,
     color: '#333',
+    flex: 1,
+  },
+  tableItemTextEmpty: {
+    color: '#999',
+    fontStyle: 'italic',
   },
   tableItemTextSelected: {
     color: '#fff',
     fontWeight: '500',
+    fontStyle: 'normal',
+  },
+  tableItemCount: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 8,
+  },
+  tableItemCountEmpty: {
+    color: '#bbb',
+  },
+  tableItemCountSelected: {
+    color: '#fff',
+    opacity: 0.8,
   },
   mainContent: {
     flex: 1,
     backgroundColor: '#fff',
   },
-  tableHeader: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    backgroundColor: '#fafafa',
+  tableContainer: {
+    flex: 1,
+    flexDirection: 'column',
   },
-  tableName: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 5,
-  },
-  tableCount: {
-    fontSize: 14,
-    color: '#666',
+  tableHeaderScroll: {
+    maxHeight: 50,
+    borderBottomWidth: 2,
+    borderBottomColor: '#5568d3',
   },
   tableScroll: {
+    flex: 1,
+  },
+  tableScrollContent: {
+    flexGrow: 1,
+  },
+  tableRowsScroll: {
     flex: 1,
   },
   table: {
@@ -416,13 +600,16 @@ const styles = StyleSheet.create({
   tableCellHeader: {
     padding: 12,
     minWidth: 120,
+    flex: 1,
     borderRightWidth: 1,
     borderRightColor: '#5568d3',
+    overflow: 'hidden',
   },
   tableCellHeaderText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+    flexShrink: 1,
   },
   tableRow: {
     flexDirection: 'row',
@@ -432,13 +619,16 @@ const styles = StyleSheet.create({
   tableCell: {
     padding: 12,
     minWidth: 120,
+    flex: 1,
     borderRightWidth: 1,
     borderRightColor: '#f0f0f0',
+    overflow: 'hidden',
   },
   tableCellText: {
     fontSize: 12,
     color: '#333',
     fontFamily: 'monospace',
+    flexShrink: 1,
   },
   emptyRow: {
     padding: 20,

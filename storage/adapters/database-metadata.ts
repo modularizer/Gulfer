@@ -5,7 +5,7 @@
  */
 
 import type { Database } from './types';
-import { getDatabaseByName, getTableNames, getAdapterByType } from './index';
+import { getDatabaseByName, getTableNames, getAdapterByType, getDatabaseRegistryEntries } from './index';
 import { sql } from 'drizzle-orm';
 
 export interface DatabaseMetadata {
@@ -21,14 +21,29 @@ export interface DatabaseMetadata {
  */
 export async function getDatabaseMetadata(name: string): Promise<DatabaseMetadata> {
   try {
-    // Set adapter type
-    await getAdapterByType('pglite');
+    // Get adapter type from registry
+    const entries = await getDatabaseRegistryEntries();
+    const entry = entries.find(e => e.name === name);
     
-    // Connect to database
-    const db = await getDatabaseByName(name);
+    if (!entry) {
+      console.warn(`[getDatabaseMetadata] Database ${name} not found in registry`);
+      return { tableCount: 0, totalRowCount: 0 };
+    }
+    
+    // Use the exact adapter type from registry
+    const adapter = await getAdapterByType(entry.adapterType);
+    
+    // Connect to database using the specific adapter
+    if (!adapter.getDatabaseByName) {
+      throw new Error(`Adapter ${entry.adapterType} does not support getDatabaseByName`);
+    }
+    const db = await adapter.getDatabaseByName(name);
     
     // Get table names
-    const tableNames = await getTableNames(db);
+    if (!adapter.getTableNames) {
+      throw new Error(`Adapter ${entry.adapterType} does not support getTableNames`);
+    }
+    const tableNames = await adapter.getTableNames(db);
     
     if (tableNames.length === 0) {
       return { tableCount: 0, totalRowCount: 0 };
@@ -59,7 +74,7 @@ export async function getDatabaseMetadata(name: string): Promise<DatabaseMetadat
     };
   } catch (err) {
     // Database might not exist or be accessible
-    console.warn(`Could not get metadata for database ${name}:`, err);
+    console.warn(`[getDatabaseMetadata] Could not get metadata for database ${name}:`, err);
     return { tableCount: 0, totalRowCount: 0 };
   }
 }

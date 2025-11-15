@@ -72,13 +72,17 @@ export class PgliteAdapter implements Adapter {
     if (this.connectionCache.has(name)) {
       return this.connectionCache.get(name)!;
     }
-    // Register the database name in the registry
+    // Register the database name in the registry BEFORE creating the database
+    // This ensures it's registered even if database creation fails
     if (typeof window !== 'undefined') {
       try {
         const { registerDatabaseName } = await import('./list-databases');
-        await registerDatabaseName(name);
-      } catch {
-        // Ignore errors if module not available
+        await registerDatabaseName(name, 'pglite');
+        console.log(`[pglite] ✅ Registered database name in registry: ${name} (pglite)`);
+      } catch (error) {
+        // Log error but don't fail - registry is for convenience, not required
+        console.error(`[pglite] ❌ Could not register database name in registry:`, error);
+        // Re-throw if it's a critical error, but for now just warn
       }
     }
 
@@ -152,10 +156,14 @@ export class PgliteAdapter implements Adapter {
       class PglitePreparedQuery extends PgPreparedQuery {
         private client: any;
         private dialect: any;
-        constructor(client: any, dialect: any, query: any, cache: any, queryMetadata: any, cacheConfig: any) {
-          super(query, cache, queryMetadata, cacheConfig);
+        private fields: any;
+        private customResultMapper: any;
+        constructor(client: any, dialect: any, query: any, fields: any, name: any, isResponseInArrayMode: any, customResultMapper: any, queryMetadata: any, cacheConfig: any) {
+          super(query, undefined, queryMetadata, cacheConfig);
           this.client = client;
           this.dialect = dialect;
+          this.fields = fields;
+          this.customResultMapper = customResultMapper;
         }
         
         async execute(): Promise<any> {
@@ -168,7 +176,83 @@ export class PgliteAdapter implements Adapter {
           const params = queryObj.params || [];
           
           const result = await this.client.query(sqlString, params);
-          return result.rows || [];
+          const rows = result.rows || [];
+          
+          // Apply Drizzle's column mapping if fields are provided
+          // Fields contain the schema definition with proper column name mapping
+          if (this.fields && this.fields.length > 0) {
+            // Log field structure for debugging
+            if (rows.length > 0) {
+              console.log('[PgliteAdapter] Mapping fields. First field sample:', this.fields[0]);
+              console.log('[PgliteAdapter] First row before mapping:', rows[0]);
+            }
+            
+            return rows.map((row: any) => {
+              const mapped: any = {};
+              
+              // Map each field from database column name to TypeScript property name
+              for (const field of this.fields) {
+                // Field structure: {path: Array(1), field: SQLiteText}
+                // field.field is the SQLite column definition (SQLiteText, SQLiteReal, etc.)
+                // field.field.name is the database column name (e.g., 'venue_id')
+                // The TypeScript property name comes from the path or field.name
+                let dbColumnName: string | undefined;
+                let tsPropertyName: string | undefined;
+                
+                // Get database column name from SQLite column definition
+                // SQLite column types (SQLiteText, SQLiteReal, etc.) have a 'name' property
+                if (field.field?.name) {
+                  dbColumnName = field.field.name;
+                } else if (field.sourceColumn?.name) {
+                  dbColumnName = field.sourceColumn.name;
+                } else if (field.column?.name) {
+                  dbColumnName = field.column.name;
+                }
+                
+                // Get TypeScript property name from path or field.name
+                // path is typically ['tableName', 'propertyName'] or ['propertyName']
+                if (field.path && Array.isArray(field.path) && field.path.length > 0) {
+                  // Last element of path is usually the property name
+                  tsPropertyName = field.path[field.path.length - 1];
+                } else if (field.name) {
+                  tsPropertyName = field.name;
+                } else if (field.field?.name) {
+                  // Fallback: use column name as property name
+                  tsPropertyName = field.field.name;
+                }
+                
+                if (!dbColumnName || !tsPropertyName) {
+                  console.warn('[PgliteAdapter] Cannot determine mapping for field:', JSON.stringify(field, null, 2));
+                  continue;
+                }
+                
+                // Map from database column name (snake_case) to TypeScript property name (camelCase)
+                if (row[dbColumnName] !== undefined) {
+                  mapped[tsPropertyName] = row[dbColumnName];
+                } else if (row[tsPropertyName] !== undefined) {
+                  // Already mapped or same name
+                  mapped[tsPropertyName] = row[tsPropertyName];
+                }
+              }
+              
+              // For joined tables or computed fields, preserve original keys
+              // These might be namespaced (e.g., row.venues, row.events) or flat
+              for (const key in row) {
+                if (!(key in mapped)) {
+                  mapped[key] = row[key];
+                }
+              }
+              
+              if (rows.length > 0 && rows.indexOf(row) === 0) {
+                console.log('[PgliteAdapter] First row after mapping:', mapped);
+              }
+              
+              return mapped;
+            });
+          }
+          
+          // If no fields provided, return as-is (for raw queries)
+          return rows;
         }
       }
       
@@ -183,7 +267,7 @@ export class PgliteAdapter implements Adapter {
         }
         
         prepareQuery(query: any, fields: any, name: any, isResponseInArrayMode: any, customResultMapper: any, queryMetadata: any, cacheConfig: any): any {
-          return new PglitePreparedQuery(this.client, this.dialect, query, undefined, queryMetadata, cacheConfig);
+          return new PglitePreparedQuery(this.client, this.dialect, query, fields, name, isResponseInArrayMode, customResultMapper, queryMetadata, cacheConfig);
         }
         
         async transaction(transactionFn: any, config: any): Promise<any> {
@@ -297,29 +381,60 @@ export class PgliteAdapter implements Adapter {
    */
   async getTableNames(db: DatabaseAdapter): Promise<string[]> {
     try {
+      console.log('[pglite.getTableNames] Starting...');
       const dbWithPglite = db as any;
       if (!dbWithPglite._pglite) {
+        console.warn('[pglite.getTableNames] Database does not have _pglite reference');
         return [];
       }
 
-      // Query PostgreSQL's information_schema
-      const result = await dbWithPglite._pglite.query(`
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-          AND table_type = 'BASE TABLE'
-          AND table_name NOT LIKE '__%'
-        ORDER BY table_name
+      // First, let's check all schemas
+      console.log('[pglite.getTableNames] Checking all schemas...');
+      const allSchemasResult = await dbWithPglite._pglite.query(`
+        SELECT schema_name 
+        FROM information_schema.schemata
+        ORDER BY schema_name
       `);
+      console.log('[pglite.getTableNames] Available schemas:', allSchemasResult.rows);
 
-      if (result.rows && Array.isArray(result.rows)) {
-        return result.rows.map((row: any) => row.table_name || '').filter(Boolean);
+      // Check all tables in all schemas
+      console.log('[pglite.getTableNames] Checking all tables in all schemas...');
+      const allTablesResult = await dbWithPglite._pglite.query(`
+        SELECT table_schema, table_name, table_type
+        FROM information_schema.tables 
+        WHERE table_type = 'BASE TABLE'
+        ORDER BY table_schema, table_name
+      `);
+      console.log('[pglite.getTableNames] All tables:', allTablesResult.rows);
+      
+      // Filter in JavaScript instead of SQL (PGLite WHERE clause might have issues)
+      if (allTablesResult.rows && Array.isArray(allTablesResult.rows)) {
+        console.log('[pglite.getTableNames] Filtering tables in JavaScript...');
+        const publicTables = allTablesResult.rows
+          .filter((row: any) => {
+            const schema = row.table_schema || row['table_schema'];
+            const tableName = row.table_name || row['table_name'];
+            const isPublic = schema === 'public';
+            const isNotSystemTable = tableName && !tableName.startsWith('__');
+            console.log(`[pglite.getTableNames] Row: schema="${schema}", table="${tableName}", isPublic=${isPublic}, isNotSystemTable=${isNotSystemTable}`);
+            return isPublic && isNotSystemTable;
+          })
+          .map((row: any) => {
+            const tableName = row.table_name || row['table_name'] || '';
+            console.log(`[pglite.getTableNames] Extracted table name: "${tableName}"`);
+            return tableName;
+          })
+          .filter(Boolean);
+        
+        console.log('[pglite.getTableNames] Filtered public tables:', publicTables);
+        return publicTables;
       }
 
+      console.warn('[pglite.getTableNames] No rows in allTablesResult or result.rows is not an array');
       return [];
     } catch (error) {
-      console.error('Error getting table names:', error);
-      return [];
+      console.error('[pglite.getTableNames] Error getting table names:', error);
+      throw error; // Re-throw so caller can see the error
     }
   }
 }

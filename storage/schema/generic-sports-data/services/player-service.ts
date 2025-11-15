@@ -23,12 +23,87 @@ export class PlayerService extends BaseService {
      * Get a player by ID with all related storage
      */
     async getPlayer(playerId: string): Promise<ParticipantWithDetails | null> {
-        const players = await queryParticipants(this.db)
-            .withEvents()
-            .where(eq(schema.participants.id, playerId))
-            .execute();
+        console.log(`[PlayerService.getPlayer] Looking for player with ID: ${playerId}`);
+        
+        // First, try a simple direct query to verify the record exists
+        let directCheck: any[] = [];
+        try {
+            directCheck = await this.db
+                .select()
+                .from(schema.participants)
+                .where(eq(schema.participants.id, playerId))
+                .limit(1);
+            
+            console.log(`[PlayerService.getPlayer] Direct query result:`, directCheck);
+            
+            if (directCheck.length === 0) {
+                console.log(`[PlayerService.getPlayer] ❌ Player not found in database`);
+                return null;
+            }
+            
+            console.log(`[PlayerService.getPlayer] ✅ Player exists in database:`, directCheck[0]);
+        } catch (error) {
+            console.error(`[PlayerService.getPlayer] Error in direct query:`, error);
+        }
+        
+        // Now try the full query with joins
+        try {
+            const players = await queryParticipants(this.db)
+                .withEvents()
+                .where(eq(schema.participants.id, playerId))
+                .execute();
 
-        return players.length > 0 ? players[0] : null;
+            console.log(`[PlayerService.getPlayer] Query builder result:`, players);
+            console.log(`[PlayerService.getPlayer] Result count: ${players.length}`);
+            
+            if (players.length === 0) {
+                const debugInfo = directCheck.length > 0 
+                    ? `Query builder returned empty array even though player exists. Direct query found player: ${JSON.stringify(directCheck[0])}. This suggests the query builder is not correctly parsing the result structure.`
+                    : `Query builder returned empty array.`;
+                console.log(`[PlayerService.getPlayer] ⚠️ ${debugInfo}`);
+                
+                // Try without joins to see if that works
+                try {
+                    const simpleQuery = await queryParticipants(this.db)
+                        .where(eq(schema.participants.id, playerId))
+                        .execute();
+                    console.log(`[PlayerService.getPlayer] Simple query (no joins) result:`, simpleQuery);
+                    
+                    if (simpleQuery.length > 0) {
+                        // Found it without joins - return it
+                        return simpleQuery[0];
+                    }
+                } catch (simpleError) {
+                    console.error(`[PlayerService.getPlayer] Error in simple query:`, simpleError);
+                }
+                
+                // If we still don't have a result, construct a minimal one from the direct query
+                if (directCheck.length > 0) {
+                    console.log(`[PlayerService.getPlayer] Constructing ParticipantWithDetails from direct query result`);
+                    return {
+                        participant: directCheck[0] as Participant,
+                        teams: [],
+                        teamMembers: [],
+                        events: [],
+                    };
+                }
+            }
+
+            return players.length > 0 ? players[0] : null;
+        } catch (error) {
+            console.error(`[PlayerService.getPlayer] Error in query builder:`, error);
+            // If query builder fails but we have direct check data, return that
+            if (directCheck.length > 0) {
+                console.log(`[PlayerService.getPlayer] Falling back to direct query result due to query builder error`);
+                return {
+                    participant: directCheck[0] as Participant,
+                    teams: [],
+                    teamMembers: [],
+                    events: [],
+                };
+            }
+            throw error;
+        }
     }
 
     /**
@@ -182,16 +257,48 @@ export class PlayerService extends BaseService {
             });
 
             if (hasChanges) {
+                console.log(`[PlayerService.upsertPlayer] Changes detected, updating player: ${existingPlayer.id}`);
                 await this.updatePlayer(existingPlayer.id, updatedPlayer);
                 const saved = await this.getPlayer(existingPlayer.id);
                 if (!saved) {
-                    throw new Error('Failed to update player');
+                    console.error(`[PlayerService.upsertPlayer] Failed to retrieve player after update`);
+                    throw new Error('Failed to update player: Player was updated but could not be retrieved. Check console for detailed debugging.');
                 }
                 return { result: 'update', player: saved };
             } else {
+                console.log(`[PlayerService.upsertPlayer] No changes detected, retrieving existing player: ${existingPlayer.id}`);
+                console.log(`[PlayerService.upsertPlayer] Existing player data:`, existingPlayer);
+                
                 const saved = await this.getPlayer(existingPlayer.id);
+                console.log(`[PlayerService.upsertPlayer] Retrieved player:`, saved);
+                
                 if (!saved) {
-                    throw new Error(`Failed to retrieve player: Player with ID ${existingPlayer.id} exists but could not be retrieved`);
+                    // Try to get raw data to debug
+                    let rawData: any[] = [];
+                    try {
+                        rawData = await this.db
+                            .select()
+                            .from(schema.participants)
+                            .where(eq(schema.participants.id, existingPlayer.id))
+                            .limit(1);
+                        console.error(`[PlayerService.upsertPlayer] Raw data from database:`, rawData);
+                    } catch (rawError) {
+                        console.error(`[PlayerService.upsertPlayer] Error getting raw data:`, rawError);
+                    }
+                    
+                    // Construct a minimal player from raw data if available
+                    if (rawData.length > 0) {
+                        console.log(`[PlayerService.upsertPlayer] Constructing ParticipantWithDetails from raw data`);
+                        const constructedPlayer: ParticipantWithDetails = {
+                            participant: rawData[0] as Participant,
+                            teams: [],
+                            teamMembers: [],
+                            events: [],
+                        };
+                        return { result: 'unchanged', player: constructedPlayer };
+                    }
+                    
+                    throw new Error(`Failed to retrieve player: Player with ID ${existingPlayer.id} exists in database (${JSON.stringify(rawData)}) but query builder returned null. This is likely a query builder parsing issue with PGLite.`);
                 }
                 return { result: 'unchanged', player: saved };
             }

@@ -180,12 +180,36 @@ export function queryVenues(db: Database) {
       
       const results = await selectQuery;
       
+      console.log(`[queryVenues.execute] Raw query results:`, results);
+      console.log(`[queryVenues.execute] Result count: ${results.length}`);
+      if (results.length > 0) {
+        console.log(`[queryVenues.execute] First row keys:`, Object.keys(results[0] || {}));
+        console.log(`[queryVenues.execute] First row sample:`, results[0]);
+      }
+      
       const venuesMap = new Map<string, VenueWithDetails>();
       
       for (const row of results as any) {
         // Drizzle namespaces joined results by table name
-        const venueData = row.venues;
-        if (!venueData) continue;
+        // However, with PGLite/PostgreSQL, Drizzle may return flat column names
+        // Try namespaced first, then fall back to flat structure
+        let venueData = row.venues || row.Venues || row.venues_table;
+        
+        // If no namespaced data, check if this row IS the venue data (flat structure)
+        // Venue table has: id, name, notes, lat, lng, metadata
+        if (!venueData && row.id && (row.name !== undefined || row.notes !== undefined)) {
+          // This row is the venue data itself (flat structure from PGLite)
+          venueData = row;
+        }
+        
+        console.log(`[queryVenues.execute] Processing row, venueData:`, venueData);
+        console.log(`[queryVenues.execute] Row keys:`, Object.keys(row));
+        
+        if (!venueData || !venueData.id) {
+          // Skip rows without venue data (shouldn't happen with left joins, but be defensive)
+          console.warn(`[queryVenues.execute] Skipping row without venue data:`, row);
+          continue;
+        }
         
         const venueId = venueData.id;
         

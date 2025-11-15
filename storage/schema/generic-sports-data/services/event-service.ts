@@ -135,7 +135,12 @@ export class EventService extends BaseService {
      * Create or update an event
      */
     async saveEvent(event: EventWithDetails): Promise<void> {
-        await upsertEventWithDetails(this.db, event);
+        try {
+            await upsertEventWithDetails(this.db, event);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to save event: ${errorMessage}. Event ID: ${event.event.id}`);
+        }
     }
 
     /**
@@ -253,11 +258,33 @@ export class EventService extends BaseService {
             photos: options.photos || [],
         };
 
-        await this.saveEvent(eventData);
+        try {
+            await this.saveEvent(eventData);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to create event: ${errorMessage}. Event data: ${JSON.stringify({
+                id: eventData.event.id,
+                name: eventData.event.name,
+                venueEventFormatId: eventData.event.venueEventFormatId,
+                stagesCount: eventData.stages.length
+            })}`);
+        }
 
         const saved = await this.getEvent(eventData.event.id);
         if (!saved) {
-            throw new Error('Failed to create event');
+            // Try to get raw data to see what happened
+            let rawData: any[] = [];
+            try {
+                rawData = await this.db
+                    .select()
+                    .from(schema.events)
+                    .where(eq(schema.events.id, eventData.event.id))
+                    .limit(1);
+            } catch (queryError) {
+                // Ignore query errors
+            }
+            
+            throw new Error(`Failed to create event: Event was saved but could not be retrieved. Event ID: ${eventData.event.id}. Raw data: ${JSON.stringify(rawData)}`);
         }
         
         console.log(`[createEvent] Retrieved event has ${saved.stages.length} stages`);

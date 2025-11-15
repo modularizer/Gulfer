@@ -20,8 +20,7 @@ export default function RootLayout() {
       <Stack.Screen 
         name="db-browser/[dbname]" 
         options={{ 
-          title: 'Database Browser',
-          headerShown: true 
+          headerShown: false 
         }} 
       />
     </Stack>
