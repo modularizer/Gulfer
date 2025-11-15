@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import {getAdapterByType, getDatabaseRegistryEntries} from "../../adapters";
+import {getAdapterByType, getRegistryEntries} from "../../adapters";
 import {sql} from "drizzle-orm";
 
 
@@ -74,7 +74,7 @@ export default function XpDeebyDatabase() {
 
             // Get adapter type from registry
             console.log(`[db-browser] Getting registry entries...`);
-            const entries = await getDatabaseRegistryEntries();
+            const entries = await getRegistryEntries();
             console.log(`[db-browser] Registry entries:`, entries);
             const entry = entries.find(e => e.name === name);
             console.log(`[db-browser] Found entry for ${name}:`, entry);

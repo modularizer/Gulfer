@@ -7,11 +7,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { sql } from 'drizzle-orm';
-import {getAdapterByType, getDatabaseRegistryEntries} from "../adapters";
+import {getAdapterByType, getRegistryEntries} from "../adapters";
 
 export interface TableColumn {
   name: string;
   label?: string;
+  dataType?: string;
 }
 
 export interface TableRow {
@@ -76,7 +77,7 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       setError(null);
       
       // Get adapter type from registry
-      const entries = await getDatabaseRegistryEntries();
+      const entries = await getRegistryEntries();
       const entry = entries.find((e: any) => e.name === dbName);
       
       if (!entry) {
@@ -105,18 +106,12 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       
       const tableColumns: TableColumn[] = columnInfo.map((col: any) => {
         const colName = col.column_name || col['column_name'] || col[0];
-        return { name: colName };
+        const dataType = col.data_type || col['data_type'] || col[1];
+        return { name: colName, dataType };
       }).filter(Boolean);
       
-      // Get total row count (with filter if applicable)
+      // Get total row count - no filtering here, that's done client-side
       let countQuery = `SELECT COUNT(*) as count FROM "${currentTable}"`;
-      if (filter && filter.trim()) {
-        const filterLower = filter.toLowerCase();
-        const columnFilters = tableColumns.map(col => 
-          `LOWER(CAST("${col.name}" AS TEXT)) LIKE '%${filterLower.replace(/'/g, "''")}%'`
-        ).join(' OR ');
-        countQuery += ` WHERE (${columnFilters})`;
-      }
       
       console.log(`[useTableData] Count query for ${currentTable}:`, countQuery);
       const countResult = await database.execute(sql.raw(countQuery)) as any[];
@@ -125,31 +120,18 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       const parsedTotalCount = typeof totalCount === 'number' ? totalCount : parseInt(String(totalCount), 10);
       console.log(`[useTableData] Parsed totalCount for ${currentTable}:`, parsedTotalCount, 'from raw:', countResult[0]);
       
-      // Build query with sorting and filtering
+      // Build query - no client-side filtering or sorting here
+      // Those are handled in the TableViewer component
       let query = `SELECT * FROM "${currentTable}"`;
-      const conditions: string[] = [];
       
-      // Apply text filter if provided
-      if (filter && filter.trim()) {
-        const filterLower = filter.toLowerCase();
-        const columnFilters = tableColumns.map(col => 
-          `LOWER(CAST("${col.name}" AS TEXT)) LIKE '%${filterLower.replace(/'/g, "''")}%'`
-        ).join(' OR ');
-        conditions.push(`(${columnFilters})`);
+      // Only apply pagination if we're actually paginating
+      // When not paginated (totalRowCount <= pageSize and page === 1), load all rows
+      // for client-side filtering/sorting. Otherwise, paginate.
+      const isPaginated = parsedTotalCount > pageSize || page > 1;
+      if (isPaginated) {
+        const offset = (page - 1) * pageSize;
+        query += ` LIMIT ${pageSize} OFFSET ${offset}`;
       }
-      
-      if (conditions.length > 0) {
-        query += ` WHERE ${conditions.join(' AND ')}`;
-      }
-      
-      // Apply sorting
-      if (sortBy && tableColumns.some(col => col.name === sortBy)) {
-        query += ` ORDER BY "${sortBy}" ${sortOrder.toUpperCase()}`;
-      }
-      
-      // Apply pagination
-      const offset = (page - 1) * pageSize;
-      query += ` LIMIT ${pageSize} OFFSET ${offset}`;
       
       console.log(`[useTableData] Data query for ${currentTable}:`, query);
       const queryRows = await database.execute(sql.raw(query)) as any[];

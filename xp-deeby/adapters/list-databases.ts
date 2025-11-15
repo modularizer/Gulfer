@@ -4,7 +4,7 @@
  * Cross-platform functions to list available databases.
  */
 import { getAdapterByType, detectPlatform, PlatformName } from "./factory";
-import { getDatabaseRegistryEntries, removeFromRegistry } from "./registry-storage";
+import { getRegistryEntries, removeFromRegistry } from "./registry-storage";
 
 
 
@@ -37,7 +37,7 @@ export async function listDatabasesNode(): Promise<string[]> {
  */
 async function listDatabasesForPlatform(platform: PlatformName): Promise<string[]> {
   // Get registry of known databases with their adapter types
-  const knownDatabases = await getDatabaseRegistryEntries();
+  const knownDatabases = await getRegistryEntries();
   
   // Verify each known database exists using its stored adapter type
   const existingDatabases: string[] = [];

@@ -38,7 +38,7 @@ export { getAdapter, setAdapter, createAdapter, createAdapterByType, getAdapterB
 // Database Listing Functions
 // ============================================================================
 export { listDatabases, listDatabasesWeb } from './list-databases';
-export { registerDatabaseName, getDatabaseRegistryEntries, type DatabaseRegistryEntry } from './registry-storage';
+export { registerDatabaseName, getRegistryEntries, type DatabaseRegistryEntry } from './registry-storage';
 
 // ============================================================================
 // Database Metadata Functions

@@ -14,10 +14,61 @@ import {
     SafeAreaView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getAdapterByType, getDatabaseRegistryEntries } from '../../adapters';
+import { getAdapterByType, getRegistryEntries } from '../../adapters';
 import { sql } from 'drizzle-orm';
-import TableViewer from '../..//components/TableViewer';
+import TableViewer from '../../components/TableViewer';
 import { useTableData } from '../../hooks/useTableData';
+
+/**
+ * Finds the shortest safe separator that doesn't appear in any column name.
+ * Starts with a single underscore and increases until finding a safe one.
+ */
+function findSafeSeparator(columnNames: string[]): string {
+    if (columnNames.length === 0) return '_';
+    
+    let separator = '_';
+    let attempts = 0;
+    const maxAttempts = 100; // Safety limit
+    
+    while (attempts < maxAttempts) {
+        // Check if any column name contains this separator
+        const isSafe = !columnNames.some(name => name.includes(separator));
+        
+        if (isSafe) {
+            return separator;
+        }
+        
+        // Try with one more underscore
+        separator += '_';
+        attempts++;
+    }
+    
+    // Fallback (should never reach here)
+    return separator;
+}
+
+/**
+ * Parses a column list from URL params. Tries common separators from longest to shortest
+ * to avoid false matches (e.g., if separator is "__", we don't want to match "_" first).
+ */
+function parseColumnList(param: string): string[] {
+    if (!param) return [];
+    // Try separators from longest to shortest to avoid false matches
+    const separators = ['_____', '____', '___', '__', '_'];
+    for (const sep of separators) {
+        // Check if separator appears as a delimiter (not just anywhere in the string)
+        // We look for the pattern: something + separator + something
+        if (param.includes(sep)) {
+            const parts = param.split(sep);
+            // If we get multiple parts, this is likely the separator
+            if (parts.length > 1) {
+                return parts;
+            }
+        }
+    }
+    // Fallback: if no separator found, treat as single column
+    return [param];
+}
 
 // Memoized table item component to prevent unnecessary re-renders
 const TableItem = React.memo(({
@@ -81,6 +132,7 @@ export default function XpDeebyTableView() {
         sortOrder?: 'asc' | 'desc';
         filter?: string;
         visibleColumns?: string;
+        columnOrder?: string;
     }>();
 
     const dbName = db ? decodeURIComponent(db) : null;
@@ -110,15 +162,29 @@ export default function XpDeebyTableView() {
 
     const tableName = currentTableName;
 
-    // Extract stable values from searchParams to avoid recreating callbacks
-    const page = useMemo(() => parseInt(searchParams.page || '1', 10), [searchParams.page]);
-    const pageSize = useMemo(() => parseInt(searchParams.pageSize || '50', 10), [searchParams.pageSize]);
-    const sortBy = useMemo(() => searchParams.sortBy || null, [searchParams.sortBy]);
-    const sortOrder = useMemo(() => (searchParams.sortOrder as 'asc' | 'desc') || 'asc', [searchParams.sortOrder]);
-    const filterParam = useMemo(() => searchParams.filter || '', [searchParams.filter]);
-    const visibleColumnsParam = useMemo(() => searchParams.visibleColumns || '', [searchParams.visibleColumns]);
+    // Local state for all table controls (not driven by URL)
+    const [page, setPage] = useState(() => parseInt(searchParams.page || '1', 10));
+    const [pageSize, setPageSize] = useState(() => parseInt(searchParams.pageSize || '100', 10));
+    const [sortBy, setSortBy] = useState<string | null>(() => searchParams.sortBy || null);
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (searchParams.sortOrder as 'asc' | 'desc') || 'asc');
+    const [filterText, setFilterText] = useState(() => searchParams.filter || '');
+    
+    const [visibleColumns, setVisibleColumns] = useState<Set<string> | null>(() => {
+        const param = searchParams.visibleColumns || '';
+        if (param) {
+            return new Set(parseColumnList(param));
+        }
+        return null; // null means all columns visible
+    });
+    const [columnOrder, setColumnOrder] = useState<string[] | undefined>(() => {
+        const param = searchParams.columnOrder || '';
+        if (param) {
+            return parseColumnList(param);
+        }
+        return undefined;
+    });
 
-    // Use the table data hook - handles all database operations
+    // Use the table data hook - handles all database operations (reads from local state)
     const tableData = useTableData({
         dbName: dbName || '',
         tableName: tableName || '',
@@ -126,8 +192,18 @@ export default function XpDeebyTableView() {
         pageSize,
         sortBy,
         sortOrder,
-        filter: filterParam,
+        filter: filterText,
     });
+
+    // Find the shortest safe separator for column names (memoized)
+    const columnSeparator = useMemo(() => {
+        const columnNames = tableData.columns.map(c => c.name);
+        return findSafeSeparator(columnNames);
+    }, [tableData.columns]);
+
+    // Check if we're in paginated mode (more rows than pageSize or on page > 1)
+    // When paginated, sorting and filtering require full database queries which aren't ready yet
+    const isPaginated = tableData.totalRowCount > pageSize || page > 1;
 
     // Sidebar state
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -135,21 +211,47 @@ export default function XpDeebyTableView() {
     const [tableRowCounts, setTableRowCounts] = useState<Record<string, number>>({});
     const loadingTableListRef = useRef(false);
 
-    // Filter state
-    const [filterText, setFilterText] = useState(filterParam);
-
-    // Column visibility state
-    const visibleColumns = useMemo(() => {
-        if (visibleColumnsParam) {
-            return new Set(visibleColumnsParam.split(','));
+    // Function to silently update URL without triggering reloads
+    const updateURLSilently = useCallback((updates: {
+        page?: number;
+        pageSize?: number;
+        sortBy?: string | null;
+        sortOrder?: 'asc' | 'desc';
+        filter?: string;
+        visibleColumns?: Set<string> | null;
+        columnOrder?: string[] | undefined;
+    }) => {
+        if (typeof window === 'undefined') return;
+        
+        const params = new URLSearchParams();
+        
+        const finalPage = updates.page !== undefined ? updates.page : page;
+        const finalPageSize = updates.pageSize !== undefined ? updates.pageSize : pageSize;
+        const finalSortBy = updates.sortBy !== undefined ? updates.sortBy : sortBy;
+        const finalSortOrder = updates.sortOrder !== undefined ? updates.sortOrder : sortOrder;
+        const finalFilter = updates.filter !== undefined ? updates.filter : filterText;
+        const finalVisibleColumns = updates.visibleColumns !== undefined ? updates.visibleColumns : visibleColumns;
+        const finalColumnOrder = updates.columnOrder !== undefined ? updates.columnOrder : columnOrder;
+        
+        params.set('page', String(finalPage));
+        if (finalPageSize !== 100) params.set('pageSize', String(finalPageSize));
+        if (finalSortBy) {
+            params.set('sortBy', finalSortBy);
+            params.set('sortOrder', finalSortOrder);
         }
-        return null; // null means all columns visible
-    }, [visibleColumnsParam]);
-
-    // Sync filterText with URL param when it changes externally
-    useEffect(() => {
-        setFilterText(filterParam);
-    }, [filterParam]);
+        if (finalFilter) params.set('filter', finalFilter);
+        
+        if (finalVisibleColumns) {
+            const allColumns = tableData.columns.map(c => c.name);
+            if (finalVisibleColumns.size !== allColumns.length) {
+                params.set('visibleColumns', Array.from(finalVisibleColumns).join(columnSeparator));
+            }
+        }
+        if (finalColumnOrder) params.set('columnOrder', finalColumnOrder.join(columnSeparator));
+        
+        const newUrl = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`;
+        window.history.replaceState({}, '', newUrl);
+    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, dbName, tableName, tableData.columns, columnSeparator]);
 
     const loadTableList = useCallback(async () => {
         if (!dbName || loadingTableListRef.current) return;
@@ -158,7 +260,7 @@ export default function XpDeebyTableView() {
             loadingTableListRef.current = true;
 
             // Get adapter type from registry
-            const entries = await getDatabaseRegistryEntries();
+            const entries = await getRegistryEntries();
             const entry = entries.find(e => e.name === dbName);
 
             if (!entry) {
@@ -233,16 +335,20 @@ export default function XpDeebyTableView() {
 
     const handleSort = useCallback((column: string) => {
         const newSortOrder = sortBy === column && sortOrder === 'asc' ? 'desc' : 'asc';
-        const params = new URLSearchParams();
-        params.set('page', '1');
-        if (pageSize !== 50) params.set('pageSize', String(pageSize));
-        params.set('sortBy', column);
-        params.set('sortOrder', newSortOrder);
-        if (filterText) params.set('filter', filterText);
-        if (visibleColumns) params.set('visibleColumns', Array.from(visibleColumns).join(','));
+        setSortBy(column);
+        setSortOrder(newSortOrder);
+        setPage(1); // Reset to first page when sorting
+        updateURLSilently({ sortBy: column, sortOrder: newSortOrder, page: 1 });
+    }, [sortBy, sortOrder, updateURLSilently]);
 
-        router.push(`/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`);
-    }, [sortBy, sortOrder, pageSize, filterText, visibleColumns, dbName, tableName, router]);
+    // External sort handler for when paginated (database-level sorting)
+    const handleSortExternal = useCallback((column: string, order: 'asc' | 'desc') => {
+        setSortBy(column);
+        setSortOrder(order);
+        setPage(1); // Reset to first page when sorting
+        updateURLSilently({ sortBy: column, sortOrder: order, page: 1 });
+        // The useTableData hook will automatically re-fetch with the new sort parameters
+    }, [updateURLSilently]);
 
     const toggleColumnVisibility = useCallback((column: string) => {
         const newVisible = visibleColumns ? new Set(visibleColumns) : new Set(tableData.columns.map(c => c.name));
@@ -253,62 +359,44 @@ export default function XpDeebyTableView() {
             newVisible.add(column);
         }
 
-        // If all columns are visible, don't include visibleColumns param
-        const allColumns = tableData.columns.map(c => c.name);
-        const shouldShowAll = newVisible.size === allColumns.length;
+        setVisibleColumns(newVisible);
+        updateURLSilently({ visibleColumns: newVisible });
+    }, [visibleColumns, tableData.columns, updateURLSilently]);
 
-        const params = new URLSearchParams();
-        params.set('page', String(page));
-        if (pageSize !== 50) params.set('pageSize', String(pageSize));
-        if (sortBy) {
-            params.set('sortBy', sortBy);
-            params.set('sortOrder', sortOrder);
-        }
-        if (filterText) params.set('filter', filterText);
-        if (!shouldShowAll) params.set('visibleColumns', Array.from(newVisible).join(','));
-
-        router.push(`/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`);
-    }, [visibleColumns, tableData.columns, page, pageSize, sortBy, sortOrder, filterText, dbName, tableName, router]);
+    const handleColumnOrderChange = useCallback((newOrder: string[]) => {
+        setColumnOrder(newOrder);
+        updateURLSilently({ columnOrder: newOrder });
+    }, [updateURLSilently]);
 
     const handleFilterChange = useCallback((text: string) => {
         setFilterText(text);
+        setPage(1); // Reset to first page when filtering
     }, []);
 
-    // Debounced filter effect - only update URL if filterText differs from filterParam
+    // External filter handler for when paginated (database-level filtering)
+    const handleFilterExternal = useCallback((text: string) => {
+        setFilterText(text);
+        setPage(1); // Reset to first page when filtering
+        // Update URL immediately for external filter
+        updateURLSilently({ filter: text, page: 1 });
+        // The useTableData hook will automatically re-fetch with the new filter
+    }, [updateURLSilently]);
+
+    // Debounced filter effect - update URL silently after user stops typing (only for non-paginated mode)
     useEffect(() => {
-        // Skip if filterText matches filterParam (to avoid loops)
-        if (filterText === filterParam) return;
-
+        if (isPaginated) return; // Skip debounced update when paginated (use external handler instead)
+        
         const timeoutId = setTimeout(() => {
-            const params = new URLSearchParams();
-            params.set('page', '1');
-            if (pageSize !== 50) params.set('pageSize', String(pageSize));
-            if (sortBy) {
-                params.set('sortBy', sortBy);
-                params.set('sortOrder', sortOrder);
-            }
-            if (filterText) params.set('filter', filterText);
-            if (visibleColumns) params.set('visibleColumns', Array.from(visibleColumns).join(','));
-
-            router.push(`/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`);
+            updateURLSilently({ filter: filterText, page: 1 });
         }, 500);
 
         return () => clearTimeout(timeoutId);
-    }, [filterText, filterParam, dbName, tableName, pageSize, sortBy, sortOrder, visibleColumns, router]);
+    }, [filterText, updateURLSilently, isPaginated]);
 
     const handlePageChange = useCallback((newPage: number) => {
-        const params = new URLSearchParams();
-        params.set('page', String(newPage));
-        if (pageSize !== 50) params.set('pageSize', String(pageSize));
-        if (sortBy) {
-            params.set('sortBy', sortBy);
-            params.set('sortOrder', sortOrder);
-        }
-        if (filterText) params.set('filter', filterText);
-        if (visibleColumns) params.set('visibleColumns', Array.from(visibleColumns).join(','));
-
-        router.push(`/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`);
-    }, [pageSize, sortBy, sortOrder, filterText, visibleColumns, dbName, tableName, router]);
+        setPage(newPage);
+        updateURLSilently({ page: newPage });
+    }, [updateURLSilently]);
 
     if (!dbName || !tableName) {
         return (
@@ -441,10 +529,16 @@ export default function XpDeebyTableView() {
                         sortBy={sortBy}
                         sortOrder={sortOrder}
                         onSort={handleSort}
+                        sortDisabled={isPaginated}
+                        onSortExternal={isPaginated ? handleSortExternal : undefined}
                         filterText={filterText}
                         onFilterChange={handleFilterChange}
+                        filterDisabled={isPaginated}
+                        onFilterExternal={isPaginated ? handleFilterExternal : undefined}
                         visibleColumns={visibleColumns}
                         onToggleColumnVisibility={toggleColumnVisibility}
+                        columnOrder={columnOrder}
+                        onColumnOrderChange={handleColumnOrderChange}
                     />
                 </View>
             </View>

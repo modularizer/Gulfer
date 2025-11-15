@@ -4,7 +4,7 @@
  * Functions to get metadata about databases (table count, row count, etc.)
  */
 import { getAdapterByType } from './index';
-import { getDatabaseRegistryEntries } from './list-databases';
+import { getRegistryEntries } from './registry-storage';
 import { sql } from 'drizzle-orm';
 
 export interface DatabaseMetadata {
@@ -21,7 +21,7 @@ export interface DatabaseMetadata {
 export async function getDatabaseMetadata(name: string): Promise<DatabaseMetadata> {
     try {
         // Get adapter type from registry
-        const entries = await getDatabaseRegistryEntries();
+        const entries = await getRegistryEntries();
         const entry = entries.find(e => e.name === name);
 
         if (!entry) {

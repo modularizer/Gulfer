@@ -92,10 +92,6 @@ export async function removeFromRegistry(name: string): Promise<void> {
   }
 }
 
-/**
- * Get database registry entries (alias for getRegistryEntries for backward compatibility)
- */
-export const getDatabaseRegistryEntries = getRegistryEntries;
 
 // ============================================================================
 // Web Implementation (IndexedDB)
