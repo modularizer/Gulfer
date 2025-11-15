@@ -116,10 +116,10 @@ export default function XpDeebyDatabase() {
             )}
 
             {!loading && (
-                <View style={styles.emptyState}>
-                    <Text style={styles.emptyStateText}>
-                        Select a table from the sidebar to view its data
-                    </Text>
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyStateText}>
+                            Select a table from the sidebar to view its data
+                        </Text>
                     <TouchableOpacity
                         style={styles.queryToolButton}
                         onPress={() => router.push(`/db-browser/${encodeURIComponent(dbName)}/query`)}

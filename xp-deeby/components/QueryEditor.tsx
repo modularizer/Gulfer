@@ -46,6 +46,20 @@ export default function QueryEditor({
     const [resizeStartY, setResizeStartY] = useState(0);
     const [resizeStartHeight, setResizeStartHeight] = useState(40);
     const inputRef = useRef<TextInput>(null);
+    const domElementRef = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+    const handlerRef = useRef<((e: Event) => void) | null>(null);
+    const valueRef = useRef(value);
+    const disabledRef = useRef(disabled);
+    const loadingRef = useRef(loading);
+    const onExecuteRef = useRef(onExecute);
+    
+    // Keep refs in sync
+    useEffect(() => {
+        valueRef.current = value;
+        disabledRef.current = disabled;
+        loadingRef.current = loading;
+        onExecuteRef.current = onExecute;
+    }, [value, disabled, loading, onExecute]);
     const minHeight = 40;
     const maxAutoHeight = 120; // ~5 lines at 24px line height
     const maxManualHeight = 400;
@@ -109,84 +123,93 @@ export default function QueryEditor({
         };
     }, [isResizing, resizeStartY, resizeStartHeight]);
 
-    // Handle keyboard submit (Enter) and newline (Shift+Enter)
-    // Use useEffect to attach event listener directly to DOM element for React Native Web
+    // Set up ref callback to capture DOM element directly
+    const setInputRef = useCallback((node: TextInput | null) => {
+        inputRef.current = node;
+        
+        if (Platform.OS === 'web' && node) {
+            // Try to get the underlying DOM element
+            const nodeAny = node as any;
+            const findDOMElement = (): HTMLTextAreaElement | HTMLInputElement | null => {
+                // Try various ways React Native Web exposes the DOM node
+                let domNode = nodeAny._node || 
+                             nodeAny._nativeNode || 
+                             nodeAny._internalFiberInstanceHandleDEV?.stateNode ||
+                             (nodeAny.setNativeProps ? nodeAny : null);
+                
+                // If it's already a textarea/input, return it
+                if (domNode && (domNode.tagName === 'TEXTAREA' || domNode.tagName === 'INPUT')) {
+                    return domNode;
+                }
+                
+                // Try to find textarea/input inside
+                if (domNode && typeof domNode.querySelector === 'function') {
+                    return domNode.querySelector('textarea') || domNode.querySelector('input');
+                }
+                
+                return null;
+            };
+            
+            // Remove old listener if it exists
+            if (domElementRef.current && handlerRef.current) {
+                domElementRef.current.removeEventListener('keydown', handlerRef.current, true);
+                handlerRef.current = null;
+            }
+            
+            // Try immediately and with a small delay
+            const tryAttach = () => {
+                const domEl = findDOMElement();
+                if (domEl) {
+                    // Remove old listener if switching elements
+                    if (domElementRef.current && domElementRef.current !== domEl && handlerRef.current) {
+                        domElementRef.current.removeEventListener('keydown', handlerRef.current, true);
+                    }
+                    
+                    domElementRef.current = domEl;
+                    
+                    // Create new handler that uses refs for latest values
+                    const handleKeyDown = (e: Event) => {
+                        const keyEvent = e as KeyboardEvent;
+                        // Enter without Shift: submit query
+                        if (keyEvent.key === 'Enter' && !keyEvent.shiftKey) {
+                            keyEvent.preventDefault();
+                            keyEvent.stopPropagation();
+                            if (valueRef.current.trim() && !disabledRef.current && !loadingRef.current) {
+                                onExecuteRef.current();
+                            }
+                            return;
+                        }
+                        // Cmd/Ctrl + Enter: also submit
+                        if ((keyEvent.metaKey || keyEvent.ctrlKey) && keyEvent.key === 'Enter') {
+                            keyEvent.preventDefault();
+                            keyEvent.stopPropagation();
+                            if (valueRef.current.trim() && !disabledRef.current && !loadingRef.current) {
+                                onExecuteRef.current();
+                            }
+                        }
+                    };
+                    
+                    handlerRef.current = handleKeyDown;
+                    domEl.addEventListener('keydown', handleKeyDown, true);
+                }
+            };
+            
+            tryAttach();
+            setTimeout(tryAttach, 50);
+            setTimeout(tryAttach, 200);
+        }
+    }, []); // Only run once when ref is set, handler uses refs for values
+
+    // Clean up event listener when component unmounts
     useEffect(() => {
-        if (Platform.OS !== 'web') return;
-
-        // Try to find the actual input element
-        const findInputElement = (): HTMLTextAreaElement | HTMLInputElement | null => {
-            if (!inputRef.current) return null;
-            
-            const inputElement = inputRef.current as any;
-            
-            // Try different ways to access the DOM node
-            let domNode = inputElement._node || 
-                         inputElement._nativeNode || 
-                         (inputElement.setNativeProps ? inputElement : null);
-            
-            // If we have a ref, try to find the textarea/input inside it
-            if (domNode && typeof domNode.querySelector === 'function') {
-                const textarea = domNode.querySelector('textarea') || domNode.querySelector('input');
-                if (textarea) return textarea;
-            }
-            
-            // Try direct access
-            if (domNode && (domNode.tagName === 'TEXTAREA' || domNode.tagName === 'INPUT')) {
-                return domNode;
-            }
-            
-            // Fallback: search by finding the input container
-            const container = inputRef.current as any;
-            if (container && container._nativeNode) {
-                const textarea = container._nativeNode.querySelector?.('textarea') || 
-                                container._nativeNode.querySelector?.('input');
-                if (textarea) return textarea;
-            }
-            
-            return null;
-        };
-
-        // Use a small delay to ensure the DOM is ready
-        let cleanup: (() => void) | null = null;
-        const timeoutId = setTimeout(() => {
-            const inputEl = findInputElement();
-            if (!inputEl) return;
-
-            const handleKeyDown = (e: Event) => {
-                const keyEvent = e as KeyboardEvent;
-                // Enter without Shift: submit query
-                if (keyEvent.key === 'Enter' && !keyEvent.shiftKey) {
-                    keyEvent.preventDefault();
-                    keyEvent.stopPropagation();
-                    if (value.trim() && !disabled && !loading) {
-                        onExecute();
-                    }
-                    return;
-                }
-                // Shift+Enter: allow normal newline (no preventDefault)
-                // Cmd/Ctrl + Enter: also submit (for convenience)
-                if ((keyEvent.metaKey || keyEvent.ctrlKey) && keyEvent.key === 'Enter') {
-                    keyEvent.preventDefault();
-                    keyEvent.stopPropagation();
-                    if (value.trim() && !disabled && !loading) {
-                        onExecute();
-                    }
-                }
-            };
-
-            inputEl.addEventListener('keydown', handleKeyDown, true);
-
-            cleanup = () => {
-                inputEl.removeEventListener('keydown', handleKeyDown, true);
-            };
-        }, 100);
-
         return () => {
-            clearTimeout(timeoutId);
-            if (cleanup) cleanup();
+            if (domElementRef.current && handlerRef.current) {
+                domElementRef.current.removeEventListener('keydown', handlerRef.current, true);
+                domElementRef.current = null;
+                handlerRef.current = null;
+            }
         };
-    }, [onExecute, value, disabled, loading, inputRef]);
+    }, []);
 
     return (
         <View style={styles.container}>
@@ -206,9 +229,30 @@ export default function QueryEditor({
                     <Text style={styles.expandButtonIcon}>◀</Text>
                 </TouchableOpacity>
             )}
-            <View style={styles.inputContainer}>
+            <View 
+                style={styles.inputContainer}
+                {...(Platform.OS === 'web' ? {
+                    onKeyDown: (e: any) => {
+                        const event = e.nativeEvent || e;
+                        // Enter without Shift: submit query
+                        if (event.key === 'Enter' && !event.shiftKey) {
+                            e.preventDefault?.();
+                            if (value.trim() && !disabled && !loading) {
+                                onExecute();
+                            }
+                        }
+                        // Cmd/Ctrl + Enter: also submit
+                        else if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                            e.preventDefault?.();
+                            if (value.trim() && !disabled && !loading) {
+                                onExecute();
+                            }
+                        }
+                    }
+                } : {})}
+            >
                 <TextInput
-                    ref={inputRef}
+                    ref={setInputRef}
                     style={[
                         styles.input,
                         { height: Math.max(height, minHeight) },

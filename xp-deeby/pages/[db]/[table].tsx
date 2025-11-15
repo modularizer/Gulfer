@@ -75,24 +75,24 @@ function parseQuery(query: string): { tableName: string | null; isComplex: boole
  */
 function findSafeSeparator(columnNames: string[]): string {
     if (columnNames.length === 0) return '_';
-
+    
     let separator = '_';
     let attempts = 0;
     const maxAttempts = 100; // Safety limit
-
+    
     while (attempts < maxAttempts) {
         // Check if any column name contains this separator
         const isSafe = !columnNames.some(name => name.includes(separator));
-
+        
         if (isSafe) {
             return separator;
         }
-
+        
         // Try with one more underscore
         separator += '_';
         attempts++;
     }
-
+    
     // Fallback (should never reach here)
     return separator;
 }
@@ -170,7 +170,7 @@ export default function XpDeebyTableView() {
     const [sortBy, setSortBy] = useState<string | null>(() => searchParams.sortBy || null);
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (searchParams.sortOrder as 'asc' | 'desc') || 'asc');
     const [filterText, setFilterText] = useState(() => searchParams.filter || '');
-
+    
     const [visibleColumns, setVisibleColumns] = useState<Set<string> | null>(() => {
         const param = searchParams.visibleColumns || '';
         if (param) {
@@ -185,7 +185,7 @@ export default function XpDeebyTableView() {
         }
         return undefined;
     });
-
+    
     // Parse column widths from URL (format: "col1:150,col2:200")
     const [columnWidths, setColumnWidths] = useState<Map<string, number>>(() => {
         const param = searchParams.columnWidths || '';
@@ -676,9 +676,9 @@ export default function XpDeebyTableView() {
         columnWidths?: Map<string, number>;
     }) => {
         if (typeof window === 'undefined') return;
-
+        
         const params = new URLSearchParams();
-
+        
         const finalPage = updates.page !== undefined ? updates.page : page;
         const finalPageSize = updates.pageSize !== undefined ? updates.pageSize : pageSize;
         const finalSortBy = updates.sortBy !== undefined ? updates.sortBy : sortBy;
@@ -687,7 +687,7 @@ export default function XpDeebyTableView() {
         const finalVisibleColumns = updates.visibleColumns !== undefined ? updates.visibleColumns : visibleColumns;
         const finalColumnOrder = updates.columnOrder !== undefined ? updates.columnOrder : columnOrder;
         const finalColumnWidths = updates.columnWidths !== undefined ? updates.columnWidths : columnWidths;
-
+        
         params.set('page', String(finalPage));
         if (finalPageSize !== 100) params.set('pageSize', String(finalPageSize));
         if (finalSortBy) {
@@ -695,7 +695,7 @@ export default function XpDeebyTableView() {
             params.set('sortOrder', finalSortOrder);
         }
         if (finalFilter) params.set('filter', finalFilter);
-
+        
         if (finalVisibleColumns && queryResults) {
             const allColumns = queryResults.columns.map(c => c.name);
             if (finalVisibleColumns.size !== allColumns.length) {
@@ -703,7 +703,7 @@ export default function XpDeebyTableView() {
             }
         }
         if (finalColumnOrder) params.set('columnOrder', finalColumnOrder.join(columnSeparator));
-
+        
         // Encode column widths (format: "col1:150,col2:200")
         if (finalColumnWidths.size > 0) {
             const widthPairs: string[] = [];
@@ -712,7 +712,7 @@ export default function XpDeebyTableView() {
             });
             params.set('columnWidths', widthPairs.join(','));
         }
-
+        
         const newUrl = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`;
         window.history.replaceState({}, '', newUrl);
     }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, columnWidths, dbName, tableName, queryResults, columnSeparator]);
@@ -787,7 +787,7 @@ export default function XpDeebyTableView() {
     // Debounced filter effect - update URL silently after user stops typing (only for non-paginated mode)
     useEffect(() => {
         if (isPaginated) return; // Skip debounced update when paginated (use external handler instead)
-
+        
         const timeoutId = setTimeout(() => {
             updateURLSilently({ filter: filterText, page: 1 });
         }, 500);
@@ -811,7 +811,7 @@ export default function XpDeebyTableView() {
         setVisibleColumns(null); // null means all columns visible
         setColumnOrder(undefined);
         setColumnWidths(new Map());
-
+        
         // Navigate to clean URL without any search params
         const cleanUrl = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}`;
         if (typeof window !== 'undefined') {
@@ -833,7 +833,7 @@ export default function XpDeebyTableView() {
             const newPath = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(selectedTableName)}`;
             // Use replaceState to silently update URL without triggering any events
             window.history.replaceState({}, '', newPath);
-        }
+                                }
 
         // Update ref immediately (synchronous, no re-render)
         currentTableNameRef.current = selectedTableName;
@@ -841,14 +841,14 @@ export default function XpDeebyTableView() {
         // Batch all state updates in a single React update cycle
         // React 18+ automatically batches these, so this causes only ONE re-render
         setCurrentTableName(selectedTableName);
-        setPage(1);
-        setPageSize(100);
-        setSortBy(null);
-        setSortOrder('asc');
-        setFilterText('');
+                                                    setPage(1);
+                                                    setPageSize(100);
+                                                    setSortBy(null);
+                                                    setSortOrder('asc');
+                                                    setFilterText('');
         setVisibleColumns(null);
-        setColumnOrder(undefined);
-        setColumnWidths(new Map());
+                                                    setColumnOrder(undefined);
+                                                    setColumnWidths(new Map());
         setQueryError(null);
         setQueryResults(null);
         queryForCurrentResultsRef.current = '';
@@ -894,8 +894,8 @@ export default function XpDeebyTableView() {
             {queryError && (
                 <View style={styles.errorContainer}>
                     <Text style={styles.errorText}>Error: {queryError}</Text>
-                </View>
-            )}
+                    </View>
+                )}
 
             {/* Results */}
             {queryResults && (() => {
@@ -907,7 +907,7 @@ export default function XpDeebyTableView() {
                 
                 return (
                     <View style={[styles.resultsContainer, { opacity }]}>
-                        <TableViewer
+                    <TableViewer
                         columns={queryResults.columns}
                         rows={queryResults.rows}
                         totalRowCount={queryResults.totalRowCount}
@@ -937,7 +937,7 @@ export default function XpDeebyTableView() {
                         columnWidths={columnWidths}
                         onColumnWidthsChange={handleColumnWidthsChange}
                     />
-                    </View>
+                </View>
                 );
             })()}
         </DatabaseBrowserLayout>
