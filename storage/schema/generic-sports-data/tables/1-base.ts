@@ -1,4 +1,4 @@
-import {text, varchar, real, jsonb, uuidPK, table, index} from '../../../../xp-deeby/adapters/schema';
+import {text, varchar, real, jsonb, uuidPK, table, index} from '../../../../xp-deeby/adapters';
 
 export const baseColumns = {
     id: uuidPK('id'), // 16 hex character UUID

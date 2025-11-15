@@ -3,7 +3,7 @@
 // Participants Table (stores players AND teams)
 // ============================================================================
 import {baseColumns, latLngIdx} from "../1-base";
-import {index, integer, table, text, timestamp, unique} from "../../../../../xp-deeby/adapters/schema";
+import {index, integer, table, text, timestamp, unique} from "../../../../../xp-deeby/adapters";
 
 export enum Sex {
     MALE = 'MALE',
