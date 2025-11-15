@@ -88,6 +88,32 @@ export interface Adapter {
    * Only available if supportsGetTableNames is true
    */
   getTableNames?(db: DatabaseAdapter): Promise<string[]>;
+  
+  /**
+   * Get all view names in the database
+   * Optional - only available if the database supports views
+   */
+  getViewNames?(db: DatabaseAdapter): Promise<string[]>;
+  
+  /**
+   * Get all materialized view names in the database
+   * Optional - only available if the database supports materialized views (e.g., PostgreSQL)
+   */
+  getMaterializedViewNames?(db: DatabaseAdapter): Promise<string[]>;
+  
+  /**
+   * Get column information for a table
+   * Returns column names and data types in a dialect-agnostic format
+   * 
+   * @param db - The database instance
+   * @param tableName - The name of the table
+   * @returns Array of column information objects
+   */
+  getTableColumns?(db: DatabaseAdapter, tableName: string): Promise<Array<{
+    name: string;
+    dataType: string;
+    isNullable: boolean;
+  }>>;
 }
 
 /**

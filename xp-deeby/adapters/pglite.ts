@@ -77,8 +77,9 @@ export class PgliteAdapter implements Adapter {
     // This ensures it's registered even if database creation fails
     if (typeof window !== 'undefined') {
       try {
-        const { registerDatabaseName } = await import('./list-databases');
-        await registerDatabaseName(name, 'pglite');
+        const { registerDatabaseName } = await import('./registry-storage');
+        const { AdapterType } = await import('./factory');
+        await registerDatabaseName(name, AdapterType.PGLITE);
         console.log(`[pglite] ✅ Registered database name in registry: ${name} (pglite)`);
       } catch (error) {
         // Log error but don't fail - registry is for convenience, not required
@@ -406,6 +407,141 @@ export class PgliteAdapter implements Adapter {
     } catch (error) {
       console.error('[pglite.getTableNames] Error getting table names:', error);
       throw error; // Re-throw so caller can see the error
+    }
+  }
+
+  /**
+   * Get all view names in the database
+   * 
+   * Queries PostgreSQL's information_schema to get all user views.
+   * 
+   * @param db - The database instance (must be from this adapter)
+   * @returns Array of view names (excluding system views)
+   */
+  async getViewNames(db: DatabaseAdapter): Promise<string[]> {
+    try {
+      const dbWithPglite = db as any;
+      if (!dbWithPglite._pglite) {
+        return [];
+      }
+
+      const result = await dbWithPglite._pglite.query(`
+        SELECT table_schema, table_name
+        FROM information_schema.views 
+        ORDER BY table_schema, table_name
+      `);
+      
+      if (result.rows && Array.isArray(result.rows)) {
+        const publicViews = result.rows
+          .filter((row: any) => {
+            const schema = row.table_schema || row['table_schema'];
+            const viewName = row.table_name || row['table_name'];
+            const isPublic = schema === 'public';
+            const isNotSystemView = viewName && !viewName.startsWith('__');
+            return isPublic && isNotSystemView;
+          })
+          .map((row: any) => {
+            const viewName = row.table_name || row['table_name'] || '';
+            return viewName;
+          })
+          .filter(Boolean);
+        
+        return publicViews;
+      }
+
+      return [];
+    } catch (error) {
+      console.error('[pglite.getViewNames] Error getting view names:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get all materialized view names in the database
+   * 
+   * Queries PostgreSQL's information_schema to get all materialized views.
+   * 
+   * @param db - The database instance (must be from this adapter)
+   * @returns Array of materialized view names (excluding system views)
+   */
+  async getMaterializedViewNames(db: DatabaseAdapter): Promise<string[]> {
+    try {
+      const dbWithPglite = db as any;
+      if (!dbWithPglite._pglite) {
+        return [];
+      }
+
+      const result = await dbWithPglite._pglite.query(`
+        SELECT schemaname, matviewname
+        FROM pg_matviews 
+        ORDER BY schemaname, matviewname
+      `);
+      
+      if (result.rows && Array.isArray(result.rows)) {
+        const publicMatViews = result.rows
+          .filter((row: any) => {
+            const schema = row.schemaname || row['schemaname'];
+            const matViewName = row.matviewname || row['matviewname'];
+            const isPublic = schema === 'public';
+            const isNotSystemView = matViewName && !matViewName.startsWith('__');
+            return isPublic && isNotSystemView;
+          })
+          .map((row: any) => {
+            const matViewName = row.matviewname || row['matviewname'] || '';
+            return matViewName;
+          })
+          .filter(Boolean);
+        
+        return publicMatViews;
+      }
+
+      return [];
+    } catch (error) {
+      console.error('[pglite.getMaterializedViewNames] Error getting materialized view names:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get column information for a table
+   * 
+   * Queries PostgreSQL's information_schema to get column metadata.
+   * 
+   * @param db - The database instance (must be from this adapter)
+   * @param tableName - The name of the table
+   * @returns Array of column information objects
+   */
+  async getTableColumns(db: DatabaseAdapter, tableName: string): Promise<Array<{
+    name: string;
+    dataType: string;
+    isNullable: boolean;
+  }>> {
+    try {
+      const dbWithPglite = db as any;
+      if (!dbWithPglite._pglite) {
+        return [];
+      }
+
+      const result = await dbWithPglite._pglite.query(`
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1
+        ORDER BY ordinal_position
+      `, [tableName]);
+      
+      if (result.rows && Array.isArray(result.rows)) {
+        return result.rows.map((row: any) => {
+          const name = row.column_name || row['column_name'] || '';
+          const dataType = row.data_type || row['data_type'] || '';
+          const isNullable = (row.is_nullable || row['is_nullable']) === 'YES';
+          return { name, dataType, isNullable };
+        }).filter((col: any) => col.name);
+      }
+
+      return [];
+    } catch (error) {
+      console.error('[pglite.getTableColumns] Error getting table columns:', error);
+      return [];
     }
   }
 }

@@ -108,10 +108,22 @@ export default function DatabaseBrowserLayout({
     const initialCollapsed = searchParams.sidebarCollapsed === 'true';
     const [sidebarCollapsed, setSidebarCollapsed] = useState(initialCollapsed);
     const [tables, setTables] = useState<string[]>([]);
+    const [views, setViews] = useState<string[]>([]);
+    const [materializedViews, setMaterializedViews] = useState<string[]>([]);
     const [tableRowCounts, setTableRowCounts] = useState<Record<string, number>>({});
     const [databases, setDatabases] = useState<string[]>([]);
     const [databaseTableCounts, setDatabaseTableCounts] = useState<Record<string, number>>({});
     const [showDatabaseDropdown, setShowDatabaseDropdown] = useState(false);
+    const [isPostgres, setIsPostgres] = useState(false);
+    const [sectionsCollapsed, setSectionsCollapsed] = useState<{
+        tables: boolean;
+        views: boolean;
+        materializedViews: boolean;
+    }>({
+        tables: false,
+        views: false,
+        materializedViews: false,
+    });
     const loadingTableListRef = useRef(false);
 
     // Sync with URL param changes only on initial mount or when db changes
@@ -170,10 +182,35 @@ export default function DatabaseBrowserLayout({
                 return;
             }
 
+            // Check if this is a PostgreSQL database
+            const capabilities = adapter.getCapabilities();
+            const isPostgresDb = capabilities.databaseType === 'postgres';
+            setIsPostgres(isPostgresDb);
+
             const database = await adapter.getDatabaseByName(dbName);
 
             // Get table names
             const tableNames = await adapter.getTableNames(database);
+
+            // Get view names if supported
+            let viewNames: string[] = [];
+            if (adapter.getViewNames) {
+                try {
+                    viewNames = await adapter.getViewNames(database);
+                } catch (err) {
+                    console.error(`[DatabaseBrowserLayout] Error loading view names:`, err);
+                }
+            }
+
+            // Get materialized view names if supported (PostgreSQL only)
+            let matViewNames: string[] = [];
+            if (isPostgresDb && adapter.getMaterializedViewNames) {
+                try {
+                    matViewNames = await adapter.getMaterializedViewNames(database);
+                } catch (err) {
+                    console.error(`[DatabaseBrowserLayout] Error loading materialized view names:`, err);
+                }
+            }
 
             // Get row counts for all tables
             const counts: Record<string, number> = {};
@@ -194,6 +231,8 @@ export default function DatabaseBrowserLayout({
             );
 
             setTables(tableNames);
+            setViews(viewNames);
+            setMaterializedViews(matViewNames);
             setTableRowCounts(prevCounts => ({ ...prevCounts, ...counts }));
         } catch (err) {
             console.error(`[DatabaseBrowserLayout] Error loading table list:`, err);
@@ -412,23 +451,100 @@ export default function DatabaseBrowserLayout({
                         </Modal>
 
                         <ScrollView style={styles.tableList}>
+                            {/* Tables Section */}
+                            {sortedTables.length > 0 && (
+                                <>
+                                    <TouchableOpacity
+                                        style={styles.sectionHeader}
+                                        onPress={() => setSectionsCollapsed(prev => ({
+                                            ...prev,
+                                            tables: !prev.tables
+                                        }))}
+                                    >
+                                        <Text style={styles.sectionHeaderText}>Tables</Text>
+                                        <Text style={styles.sectionHeaderIcon}>
+                                            {sectionsCollapsed.tables ? '▶' : '▼'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    {!sectionsCollapsed.tables && sortedTables.map((table) => {
+                                        const rowCount = tableRowCounts[table] ?? null;
+                                        const isEmpty = rowCount === 0;
+                                        const isSelected = table === currentTableName;
+                                        return (
+                                            <TableItem
+                                                key={table}
+                                                table={table}
+                                                rowCount={rowCount}
+                                                isEmpty={isEmpty}
+                                                isSelected={isSelected}
+                                                onPress={handleTableSelect}
+                                            />
+                                        );
+                                    })}
+                                </>
+                            )}
 
-                            {/* Tables */}
-                            {sortedTables.map((table) => {
-                                const rowCount = tableRowCounts[table] ?? null;
-                                const isEmpty = rowCount === 0;
-                                const isSelected = table === currentTableName;
-                                return (
-                                    <TableItem
-                                        key={table}
-                                        table={table}
-                                        rowCount={rowCount}
-                                        isEmpty={isEmpty}
-                                        isSelected={isSelected}
-                                        onPress={handleTableSelect}
-                                    />
-                                );
-                            })}
+                            {/* Views Section */}
+                            {views.length > 0 && (
+                                <>
+                                    <TouchableOpacity
+                                        style={styles.sectionHeader}
+                                        onPress={() => setSectionsCollapsed(prev => ({
+                                            ...prev,
+                                            views: !prev.views
+                                        }))}
+                                    >
+                                        <Text style={styles.sectionHeaderText}>Views</Text>
+                                        <Text style={styles.sectionHeaderIcon}>
+                                            {sectionsCollapsed.views ? '▶' : '▼'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    {!sectionsCollapsed.views && views.map((view) => {
+                                        const isSelected = view === currentTableName;
+                                        return (
+                                            <TableItem
+                                                key={view}
+                                                table={view}
+                                                rowCount={null}
+                                                isEmpty={false}
+                                                isSelected={isSelected}
+                                                onPress={handleTableSelect}
+                                            />
+                                        );
+                                    })}
+                                </>
+                            )}
+
+                            {/* Materialized Views Section (PostgreSQL only) */}
+                            {isPostgres && materializedViews.length > 0 && (
+                                <>
+                                    <TouchableOpacity
+                                        style={styles.sectionHeader}
+                                        onPress={() => setSectionsCollapsed(prev => ({
+                                            ...prev,
+                                            materializedViews: !prev.materializedViews
+                                        }))}
+                                    >
+                                        <Text style={styles.sectionHeaderText}>Materialized Views</Text>
+                                        <Text style={styles.sectionHeaderIcon}>
+                                            {sectionsCollapsed.materializedViews ? '▶' : '▼'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                    {!sectionsCollapsed.materializedViews && materializedViews.map((matView) => {
+                                        const isSelected = matView === currentTableName;
+                                        return (
+                                            <TableItem
+                                                key={matView}
+                                                table={matView}
+                                                rowCount={null}
+                                                isEmpty={false}
+                                                isSelected={isSelected}
+                                                onPress={handleTableSelect}
+                                            />
+                                        );
+                                    })}
+                                </>
+                            )}
                         </ScrollView>
                     </View>
                 )}
@@ -557,6 +673,31 @@ const styles = StyleSheet.create({
     },
     tableList: {
         flex: 1,
+    },
+    sectionHeader: {
+        padding: 8,
+        paddingLeft: 12,
+        paddingTop: 12,
+        paddingRight: 12,
+        backgroundColor: '#f0f0f0',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    sectionHeaderText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#666',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        flex: 1,
+    },
+    sectionHeaderIcon: {
+        fontSize: 10,
+        color: '#666',
+        marginLeft: 8,
     },
     tableItem: {
         padding: 12,

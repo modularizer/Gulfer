@@ -59,5 +59,53 @@ export class SqliteMobileAdapter implements Adapter {
     }
   }
 
+  async getViewNames(db: DatabaseAdapter): Promise<string[]> {
+    // SQLite supports views but not materialized views
+    try {
+      const { sql } = await import('drizzle-orm');
+      const result = await db.execute(
+        sql`SELECT name FROM sqlite_master WHERE type='view' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '__%'`
+      ) as any[];
+      return result.map((row: any) => row.name);
+    } catch (error) {
+      console.error('Error getting view names:', error);
+      return [];
+    }
+  }
+
+  async getTableColumns(db: DatabaseAdapter, tableName: string): Promise<Array<{
+    name: string;
+    dataType: string;
+    isNullable: boolean;
+  }>> {
+    // SQLite uses PRAGMA table_info to get column information
+    try {
+      const { sql } = await import('drizzle-orm');
+      // PRAGMA table_info returns: cid, name, type, notnull, dflt_value, pk
+      // We need to use a raw query since PRAGMA is SQLite-specific
+      const result = await db.execute(
+        sql.raw(`PRAGMA table_info("${tableName}")`)
+      ) as any[];
+      
+      return result.map((row: any) => {
+        const name = row.name || row['name'] || '';
+        // SQLite type is stored as a string, normalize it
+        const type = row.type || row['type'] || '';
+        // notnull: 0 means nullable, 1 means not null
+        const notnull = row.notnull || row['notnull'] || 0;
+        const isNullable = notnull === 0;
+        
+        return {
+          name,
+          dataType: type,
+          isNullable,
+        };
+      }).filter((col: any) => col.name);
+    } catch (error) {
+      console.error('Error getting table columns:', error);
+      return [];
+    }
+  }
+
 }
 

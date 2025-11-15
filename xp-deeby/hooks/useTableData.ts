@@ -96,19 +96,23 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       
       const database = await adapter.getDatabaseByName(dbName);
       
-      // Get column information
-      const columnInfo = await database.execute(sql.raw(`
-        SELECT column_name, data_type, is_nullable
-        FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = '${currentTable}'
-        ORDER BY ordinal_position
-      `)) as any[];
+      // Get column information using adapter method (dialect-agnostic)
+      let tableColumns: TableColumn[] = [];
+      if (adapter.getTableColumns) {
+        try {
+          const columnInfo = await adapter.getTableColumns(database, currentTable);
+          tableColumns = columnInfo.map((col) => ({
+            name: col.name,
+            dataType: col.dataType,
+          }));
+        } catch (err) {
+          console.error(`[useTableData] Error getting column info via adapter:`, err);
+          // Fallback: try to infer columns from first row if available
+        }
+      }
       
-      const tableColumns: TableColumn[] = columnInfo.map((col: any) => {
-        const colName = col.column_name || col['column_name'] || col[0];
-        const dataType = col.data_type || col['data_type'] || col[1];
-        return { name: colName, dataType };
-      }).filter(Boolean);
+      // If we couldn't get columns via adapter, we'll infer them from the data
+      // This will be handled after we fetch the rows
       
       // Get total row count - no filtering here, that's done client-side
       let countQuery = `SELECT COUNT(*) as count FROM "${currentTable}"`;
@@ -138,7 +142,17 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       console.log(`[useTableData] Data query result for ${currentTable}:`, queryRows.length, 'rows');
       console.log(`[useTableData] First row sample:`, queryRows[0]);
       
+      // If we don't have column info yet, infer from first row
+      if (tableColumns.length === 0 && queryRows.length > 0) {
+        const firstRow = queryRows[0];
+        tableColumns = Object.keys(firstRow).map((key) => ({
+          name: key,
+          dataType: typeof firstRow[key],
+        }));
+      }
+      
       // Convert to TableRow format
+      const offset = isPaginated ? (page - 1) * pageSize : 0;
       const tableRows: TableRow[] = queryRows.map((row, index) => ({
         id: row.id || `row-${currentTable}-${offset + index}`,
         ...row,
