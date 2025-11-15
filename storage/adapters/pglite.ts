@@ -381,56 +381,38 @@ export class PgliteAdapter implements Adapter {
    */
   async getTableNames(db: DatabaseAdapter): Promise<string[]> {
     try {
-      console.log('[pglite.getTableNames] Starting...');
       const dbWithPglite = db as any;
       if (!dbWithPglite._pglite) {
-        console.warn('[pglite.getTableNames] Database does not have _pglite reference');
         return [];
       }
 
-      // First, let's check all schemas
-      console.log('[pglite.getTableNames] Checking all schemas...');
-      const allSchemasResult = await dbWithPglite._pglite.query(`
-        SELECT schema_name 
-        FROM information_schema.schemata
-        ORDER BY schema_name
-      `);
-      console.log('[pglite.getTableNames] Available schemas:', allSchemasResult.rows);
-
       // Check all tables in all schemas
-      console.log('[pglite.getTableNames] Checking all tables in all schemas...');
       const allTablesResult = await dbWithPglite._pglite.query(`
         SELECT table_schema, table_name, table_type
         FROM information_schema.tables 
         WHERE table_type = 'BASE TABLE'
         ORDER BY table_schema, table_name
       `);
-      console.log('[pglite.getTableNames] All tables:', allTablesResult.rows);
       
       // Filter in JavaScript instead of SQL (PGLite WHERE clause might have issues)
       if (allTablesResult.rows && Array.isArray(allTablesResult.rows)) {
-        console.log('[pglite.getTableNames] Filtering tables in JavaScript...');
         const publicTables = allTablesResult.rows
           .filter((row: any) => {
             const schema = row.table_schema || row['table_schema'];
             const tableName = row.table_name || row['table_name'];
             const isPublic = schema === 'public';
             const isNotSystemTable = tableName && !tableName.startsWith('__');
-            console.log(`[pglite.getTableNames] Row: schema="${schema}", table="${tableName}", isPublic=${isPublic}, isNotSystemTable=${isNotSystemTable}`);
             return isPublic && isNotSystemTable;
           })
           .map((row: any) => {
             const tableName = row.table_name || row['table_name'] || '';
-            console.log(`[pglite.getTableNames] Extracted table name: "${tableName}"`);
             return tableName;
           })
           .filter(Boolean);
         
-        console.log('[pglite.getTableNames] Filtered public tables:', publicTables);
         return publicTables;
       }
 
-      console.warn('[pglite.getTableNames] No rows in allTablesResult or result.rows is not an array');
       return [];
     } catch (error) {
       console.error('[pglite.getTableNames] Error getting table names:', error);

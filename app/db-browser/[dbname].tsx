@@ -4,7 +4,7 @@
  * Displays tables and data for a specific database.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -49,13 +49,6 @@ const getTableSchema = (tableName: string): any => {
   return sportsTableMap[tableName] || accountsTableMap[tableName] || null;
 };
 
-interface TableData {
-  name: string;
-  columns: string[];
-  rows: any[];
-  rowCount: number;
-}
-
 export default function DbBrowserDetail() {
   const router = useRouter();
   const { dbname } = useLocalSearchParams<{ dbname: string }>();
@@ -65,23 +58,48 @@ export default function DbBrowserDetail() {
   const [error, setError] = useState<string | null>(null);
   const [tables, setTables] = useState<string[]>([]);
   const [tableRowCounts, setTableRowCounts] = useState<Record<string, number>>({});
-  const [selectedTable, setSelectedTable] = useState<string | null>(null);
-  const [tableData, setTableData] = useState<TableData | null>(null);
   const [db, setDb] = useState<any>(null);
 
-  useEffect(() => {
-    if (dbName) {
-      loadDatabase(dbName);
+  const loadTableRowCounts = useCallback(async (database: any, tableNames: string[]) => {
+    if (!database || tableNames.length === 0) return;
+    
+    try {
+      console.log(`[db-browser] Loading row counts for ${tableNames.length} tables...`);
+      const { sql } = await import('drizzle-orm');
+      const counts: Record<string, number> = {};
+      
+      // Get row counts for all tables in parallel
+      await Promise.all(
+        tableNames.map(async (tableName) => {
+          try {
+            const countResult = await database.execute(sql.raw(`
+              SELECT COUNT(*) as count FROM "${tableName}"
+            `)) as any[];
+            
+            const count = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
+            counts[tableName] = typeof count === 'number' ? count : parseInt(String(count), 10);
+            console.log(`[db-browser] Table ${tableName}: ${counts[tableName]} rows`);
+          } catch (err) {
+            console.warn(`[db-browser] Could not get row count for ${tableName}:`, err);
+            counts[tableName] = 0;
+          }
+        })
+      );
+      
+      console.log(`[db-browser] Row counts loaded:`, counts);
+      setTableRowCounts(counts);
+    } catch (err) {
+      console.error(`[db-browser] Error loading row counts:`, err);
+      // Don't fail the whole load, just set empty counts
+      setTableRowCounts({});
     }
-  }, [dbName]);
+  }, []);
 
-  const loadDatabase = async (name: string) => {
+  const loadDatabase = useCallback(async (name: string) => {
     try {
       console.log(`[db-browser] Loading database: ${name}`);
       setLoading(true);
       setError(null);
-      setTableData(null);
-      setSelectedTable(null);
       
       // Get adapter type from registry
       console.log(`[db-browser] Getting registry entries...`);
@@ -140,118 +158,17 @@ export default function DbBrowserDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loadTableRowCounts]);
 
-  const loadTableRowCounts = async (database: any, tableNames: string[]) => {
-    if (!database || tableNames.length === 0) return;
-    
-    try {
-      console.log(`[db-browser] Loading row counts for ${tableNames.length} tables...`);
-      const { sql } = await import('drizzle-orm');
-      const counts: Record<string, number> = {};
-      
-      // Get row counts for all tables in parallel
-      await Promise.all(
-        tableNames.map(async (tableName) => {
-          try {
-            const countResult = await database.execute(sql.raw(`
-              SELECT COUNT(*) as count FROM "${tableName}"
-            `)) as any[];
-            
-            const count = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
-            counts[tableName] = typeof count === 'number' ? count : parseInt(String(count), 10);
-            console.log(`[db-browser] Table ${tableName}: ${counts[tableName]} rows`);
-          } catch (err) {
-            console.warn(`[db-browser] Could not get row count for ${tableName}:`, err);
-            counts[tableName] = 0;
-          }
-        })
-      );
-      
-      console.log(`[db-browser] Row counts loaded:`, counts);
-      setTableRowCounts(counts);
-    } catch (err) {
-      console.error(`[db-browser] Error loading row counts:`, err);
-      // Don't fail the whole load, just set empty counts
-      setTableRowCounts({});
+  useEffect(() => {
+    if (dbName) {
+      loadDatabase(dbName);
     }
-  };
+  }, [dbName, loadDatabase]);
 
-  const loadTableData = async (tableName: string) => {
-    if (!db) return;
-    
-    try {
-      console.log(`[db-browser] Loading table data for: ${tableName}`);
-      setLoading(true);
-      setError(null);
-      
-      // Use raw SQL to query any table - no schema knowledge needed
-      const { sql } = await import('drizzle-orm');
-      
-      // Get column information from information_schema
-      console.log(`[db-browser] Getting column information for table: ${tableName}`);
-      const columnInfo = await db.execute(sql.raw(`
-        SELECT column_name, data_type, is_nullable
-        FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = '${tableName}'
-        ORDER BY ordinal_position
-      `)) as any[];
-      
-      console.log(`[db-browser] Column info:`, columnInfo);
-      const columns = columnInfo.map((col: any) => {
-        const colName = col.column_name || col['column_name'] || col[0];
-        return colName;
-      }).filter(Boolean);
-      
-      console.log(`[db-browser] Columns:`, columns);
-      
-      // Get row count
-      console.log(`[db-browser] Getting row count for table: ${tableName}`);
-      const countResult = await db.execute(sql.raw(`
-        SELECT COUNT(*) as count FROM "${tableName}"
-      `)) as any[];
-      
-      const rowCount = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
-      console.log(`[db-browser] Row count:`, rowCount);
-      
-      // Get rows (limit to 100 for display)
-      console.log(`[db-browser] Fetching rows from table: ${tableName}`);
-      const rows = await db.execute(sql.raw(`
-        SELECT * FROM "${tableName}" LIMIT 100
-      `)) as any[];
-      
-      console.log(`[db-browser] Fetched ${rows.length} rows`);
-      console.log(`[db-browser] First row sample:`, rows[0]);
-      
-      // If columns weren't found from information_schema, get them from first row
-      if (columns.length === 0 && rows.length > 0) {
-        const firstRow = rows[0];
-        const rowColumns = Object.keys(firstRow);
-        console.log(`[db-browser] Using columns from first row:`, rowColumns);
-        columns.push(...rowColumns);
-      }
-      
-      setTableData({
-        name: tableName,
-        columns,
-        rows,
-        rowCount: typeof rowCount === 'number' ? rowCount : parseInt(String(rowCount), 10),
-      });
-      setSelectedTable(tableName);
-    } catch (err) {
-      console.error(`[db-browser] Error loading table data:`, err);
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Removed loadTableData - navigation now goes to [table] route
 
-  const formatValue = (value: any): string => {
-    if (value === null || value === undefined) return 'NULL';
-    if (typeof value === 'object') return JSON.stringify(value);
-    if (typeof value === 'boolean') return value ? 'true' : 'false';
-    return String(value);
-  };
+
 
   if (!dbName) {
     return (
@@ -283,11 +200,6 @@ export default function DbBrowserDetail() {
             <Text style={styles.headerDbName} numberOfLines={1}>{dbName}</Text>
             <Text style={styles.headerTableCount}>Tables ({tables.length})</Text>
           </View>
-          {tableData && (
-            <Text style={styles.headerTableName} numberOfLines={1}>
-              {tableData.name} ({tableData.rowCount.toLocaleString()} rows)
-            </Text>
-          )}
         </View>
         <TouchableOpacity
           style={styles.headerButton}
@@ -304,7 +216,7 @@ export default function DbBrowserDetail() {
         </View>
       )}
 
-      {loading && !tableData && (
+      {loading && (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#667eea" />
           <Text style={styles.loadingText}>Loading...</Text>
@@ -336,27 +248,24 @@ export default function DbBrowserDetail() {
                     style={[
                       styles.tableItem,
                       isEmpty && styles.tableItemEmpty,
-                      selectedTable === table && styles.tableItemSelected,
                     ]}
-                    onPress={() => loadTableData(table)}
+                    onPress={() => router.push(`/db-browser/${encodeURIComponent(dbName)}/${encodeURIComponent(table)}`)}
                   >
                     <View style={styles.tableItemContent}>
                       <Text
-                        style={[
-                          styles.tableItemText,
-                          isEmpty && styles.tableItemTextEmpty,
-                          selectedTable === table && styles.tableItemTextSelected,
-                        ]}
+                      style={[
+                        styles.tableItemText,
+                        isEmpty && styles.tableItemTextEmpty,
+                      ]}
                       >
                         {table}
                       </Text>
                       {rowCount !== null && (
                         <Text
-                          style={[
-                            styles.tableItemCount,
-                            isEmpty && styles.tableItemCountEmpty,
-                            selectedTable === table && styles.tableItemCountSelected,
-                          ]}
+                      style={[
+                        styles.tableItemCount,
+                        isEmpty && styles.tableItemCountEmpty,
+                      ]}
                         >
                           {rowCount.toLocaleString()}
                         </Text>
@@ -370,65 +279,11 @@ export default function DbBrowserDetail() {
         </View>
 
         <View style={styles.mainContent}>
-          {tableData ? (
-            <View style={styles.tableContainer}>
-              <ScrollView horizontal style={styles.tableHeaderScroll}>
-                <View style={styles.tableRowHeader}>
-                  {tableData.columns.map((col) => (
-                    <View key={col} style={styles.tableCellHeader}>
-                      <Text 
-                        style={styles.tableCellHeaderText}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {col}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-              <ScrollView 
-                horizontal 
-                nestedScrollEnabled
-                style={styles.tableScroll}
-                contentContainerStyle={styles.tableScrollContent}
-              >
-                <ScrollView 
-                  style={styles.tableRowsScroll}
-                  nestedScrollEnabled
-                >
-                  <View style={styles.table}>
-                    {tableData.rows.map((row, rowIndex) => (
-                      <View key={rowIndex} style={styles.tableRow}>
-                        {tableData.columns.map((col) => (
-                          <View key={col} style={styles.tableCell}>
-                            <Text 
-                              style={styles.tableCellText} 
-                              numberOfLines={1}
-                              ellipsizeMode="tail"
-                            >
-                              {formatValue(row[col])}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    ))}
-                    {tableData.rows.length === 0 && (
-                      <View style={styles.emptyRow}>
-                        <Text style={styles.emptyText}>No rows found</Text>
-                      </View>
-                    )}
-                  </View>
-                </ScrollView>
-              </ScrollView>
-            </View>
-          ) : (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                Select a table from the sidebar to view its data
-              </Text>
-            </View>
-          )}
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              Select a table from the sidebar to view its data
+            </Text>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -572,44 +427,29 @@ const styles = StyleSheet.create({
   },
   tableContainer: {
     flex: 1,
-    flexDirection: 'column',
-  },
-  tableHeaderScroll: {
-    maxHeight: 50,
-    borderBottomWidth: 2,
-    borderBottomColor: '#5568d3',
   },
   tableScroll: {
     flex: 1,
   },
-  tableScrollContent: {
-    flexGrow: 1,
-  },
-  tableRowsScroll: {
-    flex: 1,
-  },
-  table: {
-    minWidth: '100%',
-  },
-  tableRowHeader: {
+  tableHeader: {
     flexDirection: 'row',
     backgroundColor: '#667eea',
     borderBottomWidth: 2,
     borderBottomColor: '#5568d3',
   },
-  tableCellHeader: {
+  tableHeaderCell: {
     padding: 12,
-    minWidth: 120,
-    flex: 1,
     borderRightWidth: 1,
     borderRightColor: '#5568d3',
-    overflow: 'hidden',
+    justifyContent: 'center',
   },
-  tableCellHeaderText: {
+  tableHeaderText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
-    flexShrink: 1,
+  },
+  tableBodyScroll: {
+    flex: 1,
   },
   tableRow: {
     flexDirection: 'row',
@@ -618,17 +458,14 @@ const styles = StyleSheet.create({
   },
   tableCell: {
     padding: 12,
-    minWidth: 120,
-    flex: 1,
     borderRightWidth: 1,
     borderRightColor: '#f0f0f0',
-    overflow: 'hidden',
+    justifyContent: 'center',
   },
   tableCellText: {
     fontSize: 12,
     color: '#333',
     fontFamily: 'monospace',
-    flexShrink: 1,
   },
   emptyRow: {
     padding: 20,
