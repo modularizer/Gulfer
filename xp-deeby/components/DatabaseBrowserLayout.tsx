@@ -15,14 +15,15 @@ import {
     SafeAreaView,
     Modal,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { getAdapterByType, getRegistryEntries, listDatabasesWeb, getDatabaseMetadata } from '../adapters';
 import { sql } from 'drizzle-orm';
 
+export type NavigateCallback = (dbName: string | null, tableName: string | null, searchParams: Record<string, string>) => void;
+
 export interface DatabaseBrowserLayoutProps {
     dbName: string;
-    headerTitle?: string;
-    headerSubtitle?: string;
+    onNavigate: NavigateCallback;
     children: React.ReactNode;
     onBack?: () => void;
     showSidebar?: boolean;
@@ -93,15 +94,13 @@ export const SidebarContext = React.createContext<{
 
 export default function DatabaseBrowserLayout({
     dbName,
-    headerTitle,
-    headerSubtitle,
+    onNavigate,
     children,
     onBack,
     showSidebar = true,
     currentTableName = null,
     onTableSelect,
 }: DatabaseBrowserLayoutProps) {
-    const router = useRouter();
     const searchParams = useLocalSearchParams<{ sidebarCollapsed?: string }>();
     
     // Read collapsed state from URL, default to false
@@ -143,22 +142,18 @@ export default function DatabaseBrowserLayout({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dbName]); // Only react to db changes, not URL param changes
 
-    // Toggle sidebar and update URL silently
+    // Toggle sidebar and update URL via callback
     const toggleSidebar = useCallback(() => {
         const newCollapsed = !sidebarCollapsed;
         setSidebarCollapsed(newCollapsed);
         
-        // Silently update URL to cache collapsed state
-        if (typeof window !== 'undefined') {
-            const currentUrl = new URL(window.location.href);
-            if (newCollapsed) {
-                currentUrl.searchParams.set('sidebarCollapsed', 'true');
-            } else {
-                currentUrl.searchParams.delete('sidebarCollapsed');
-            }
-            window.history.replaceState({}, '', currentUrl.toString());
+        // Update URL via callback to cache collapsed state
+        const searchParams: Record<string, string> = {};
+        if (newCollapsed) {
+            searchParams.sidebarCollapsed = 'true';
         }
-    }, [sidebarCollapsed]);
+        onNavigate(dbName || null, currentTableName, searchParams);
+    }, [sidebarCollapsed, dbName, currentTableName, onNavigate]);
 
     const loadTableList = useCallback(async () => {
         if (!dbName || loadingTableListRef.current) return;
@@ -242,7 +237,10 @@ export default function DatabaseBrowserLayout({
     }, [dbName]);
 
     // Load databases list with table counts
+    const loadingDatabasesRef = useRef(false);
     const loadDatabases = useCallback(async () => {
+        if (loadingDatabasesRef.current) return;
+        loadingDatabasesRef.current = true;
         try {
             const dbNames = await listDatabasesWeb();
             setDatabases(dbNames);
@@ -263,12 +261,18 @@ export default function DatabaseBrowserLayout({
             setDatabaseTableCounts(counts);
         } catch (err) {
             console.error(`[DatabaseBrowserLayout] Error loading databases:`, err);
+        } finally {
+            loadingDatabasesRef.current = false;
         }
     }, []);
 
-    // Load databases on mount
+    // Load databases on mount only once
+    const hasLoadedDatabasesRef = useRef(false);
     useEffect(() => {
-        loadDatabases();
+        if (!hasLoadedDatabasesRef.current) {
+            hasLoadedDatabasesRef.current = true;
+            loadDatabases();
+        }
     }, [loadDatabases]);
 
     // Load table list when dbName changes
@@ -282,20 +286,20 @@ export default function DatabaseBrowserLayout({
         if (selectedDbName !== dbName) {
             setShowDatabaseDropdown(false);
             // Navigate to the database (no table selected initially)
-            router.push(`/db-browser/${encodeURIComponent(selectedDbName)}`);
+            onNavigate(selectedDbName, null, {});
         } else {
             setShowDatabaseDropdown(false);
         }
-    }, [dbName, router]);
+    }, [dbName, onNavigate]);
 
     const handleTableSelect = useCallback((tableName: string) => {
         if (onTableSelect) {
             onTableSelect(tableName);
         } else {
             // Clear query parameters when switching tables
-            router.push(`/db-browser/${encodeURIComponent(dbName)}/${encodeURIComponent(tableName)}`);
+            onNavigate(dbName, tableName, {});
         }
-    }, [dbName, router, onTableSelect]);
+    }, [dbName, onNavigate, onTableSelect]);
 
     const handleBack = useCallback(() => {
         if (onBack) {
@@ -304,10 +308,10 @@ export default function DatabaseBrowserLayout({
             // If no database selected, stay on current page (no-op)
             // Otherwise navigate to database list (which now shows the centered dropdown)
             if (dbName) {
-                router.push('/db-browser');
+                onNavigate(null, null, {});
             }
         }
-    }, [router, onBack, dbName]);
+    }, [onBack, dbName, onNavigate]);
 
     // Sort tables: non-empty first, then empty tables
     const sortedTables = useMemo(() => {

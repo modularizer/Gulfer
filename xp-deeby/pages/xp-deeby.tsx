@@ -10,12 +10,12 @@ import {
     Text,
     StyleSheet,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { getAdapterByType, getRegistryEntries } from '../adapters';
 import { sql } from 'drizzle-orm';
 import TableViewer, { TableViewerColumn, TableViewerRow } from '../components/TableViewer';
 import QueryEditor from '../components/QueryEditor';
-import DatabaseBrowserLayout, { SidebarContext } from '../components/DatabaseBrowserLayout';
+import DatabaseBrowserLayout, { SidebarContext, NavigateCallback } from '../components/DatabaseBrowserLayout';
 
 /**
  * Parse SQL query to extract table name and detect if it's a complex query
@@ -120,8 +120,7 @@ function parseColumnList(param: string): string[] {
 }
 
 
-export default function XpDeebyTableView() {
-    const router = useRouter();
+export default function XpDeebyTableView({onNavigate}: { onNavigate: NavigateCallback }) {
     const { db: dbName_, table } = useLocalSearchParams<{ db: string; table: string }>();
     const searchParams = useLocalSearchParams<{
         page?: string;
@@ -346,10 +345,7 @@ export default function XpDeebyTableView() {
                 setQueryResults(null);
                 setQueryError(null);
                 queryForCurrentResultsRef.current = '';
-                if (typeof window !== 'undefined') {
-                    const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/?q=${encodeURIComponent(queryText || '')}`;
-                    window.history.replaceState({}, '', queryToolUrl);
-                }
+                onNavigate(dbName, '', { q: queryText || '' });
                 setTimeout(() => {
                     isUpdatingTableProgrammatically.current = false;
                 }, 0);
@@ -369,11 +365,8 @@ export default function XpDeebyTableView() {
                 setQueryResults(null);
                 setQueryError(null);
                 queryForCurrentResultsRef.current = '';
-                // Silently update URL to query tool page without triggering navigation/re-render
-                if (typeof window !== 'undefined') {
-                    const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/?q=${encodeURIComponent(queryText)}`;
-                    window.history.replaceState({}, '', queryToolUrl);
-                }
+                // Update URL to query tool page via callback
+                onNavigate(dbName, '', { q: queryText });
                 setTimeout(() => {
                     isUpdatingTableProgrammatically.current = false;
                 }, 0);
@@ -390,10 +383,7 @@ export default function XpDeebyTableView() {
                     setQueryResults(null);
                     setQueryError(null);
                     queryForCurrentResultsRef.current = '';
-                    if (typeof window !== 'undefined') {
-                        const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/?q=${encodeURIComponent(queryText)}`;
-                        window.history.replaceState({}, '', queryToolUrl);
-                    }
+                    onNavigate(dbName, '', { q: queryText });
                     setTimeout(() => {
                         isUpdatingTableProgrammatically.current = false;
                     }, 0);
@@ -404,11 +394,8 @@ export default function XpDeebyTableView() {
                     currentTableNameRef.current = parsed.tableName;
                     // Update state
                     setCurrentTableName(parsed.tableName);
-                    // Update URL silently
-                    if (typeof window !== 'undefined') {
-                        const newTableUrl = `/db-browser/${encodeURIComponent(dbName)}/${encodeURIComponent(parsed.tableName)}`;
-                        window.history.replaceState({}, '', newTableUrl);
-                    }
+                    // Update URL via callback
+                    onNavigate(dbName, parsed.tableName, {});
                     // Reset pagination and other state for the new table
                     setPage(1);
                     setIsQueryManuallyEdited(false);
@@ -687,7 +674,7 @@ export default function XpDeebyTableView() {
     // Check if we're in paginated mode
     const isPaginated = (queryResults?.totalRowCount || 0) > pageSize || page > 1;
 
-    // Function to silently update URL without triggering reloads
+    // Function to update URL via callback
     const updateURLSilently = useCallback((updates: {
         page?: number;
         pageSize?: number;
@@ -698,10 +685,6 @@ export default function XpDeebyTableView() {
         columnOrder?: string[] | undefined;
         columnWidths?: Map<string, number>;
     }) => {
-        if (typeof window === 'undefined') return;
-        
-        const params = new URLSearchParams();
-        
         const finalPage = updates.page !== undefined ? updates.page : page;
         const finalPageSize = updates.pageSize !== undefined ? updates.pageSize : pageSize;
         const finalSortBy = updates.sortBy !== undefined ? updates.sortBy : sortBy;
@@ -711,22 +694,24 @@ export default function XpDeebyTableView() {
         const finalColumnOrder = updates.columnOrder !== undefined ? updates.columnOrder : columnOrder;
         const finalColumnWidths = updates.columnWidths !== undefined ? updates.columnWidths : columnWidths;
         
+        const searchParams: Record<string, string> = {};
+        
         // Only add page if it's not the default (1)
-        if (finalPage !== 1) params.set('page', String(finalPage));
+        if (finalPage !== 1) searchParams.page = String(finalPage);
         
         // Only add pageSize if it's not the default (100)
-        if (finalPageSize !== 100) params.set('pageSize', String(finalPageSize));
+        if (finalPageSize !== 100) searchParams.pageSize = String(finalPageSize);
         
         if (finalSortBy) {
-            params.set('sortBy', finalSortBy);
-            params.set('sortOrder', finalSortOrder);
+            searchParams.sortBy = finalSortBy;
+            searchParams.sortOrder = finalSortOrder;
         }
-        if (finalFilter) params.set('filter', finalFilter);
+        if (finalFilter) searchParams.filter = finalFilter;
         
         if (finalVisibleColumns && queryResults) {
             const allColumns = queryResults.columns.map(c => c.name);
             if (finalVisibleColumns.size !== allColumns.length) {
-                params.set('visibleColumns', Array.from(finalVisibleColumns).join(columnSeparator));
+                searchParams.visibleColumns = Array.from(finalVisibleColumns).join(columnSeparator);
             }
         }
         
@@ -737,7 +722,7 @@ export default function XpDeebyTableView() {
             const isDifferentOrder = finalColumnOrder.length !== allColumns.length ||
                 finalColumnOrder.some((col, idx) => col !== allColumns[idx]);
             if (isDifferentOrder) {
-                params.set('columnOrder', finalColumnOrder.join(columnSeparator));
+                searchParams.columnOrder = finalColumnOrder.join(columnSeparator);
             }
         }
         
@@ -747,29 +732,26 @@ export default function XpDeebyTableView() {
             finalColumnWidths.forEach((width, col) => {
                 widthPairs.push(`${encodeURIComponent(col)}:${width}`);
             });
-            params.set('columnWidths', widthPairs.join(','));
+            searchParams.columnWidths = widthPairs.join(',');
         }
         
         // Add query text to params if it's anything other than the default auto-generated query
         if (queryText) {
             if (tableName === '') {
                 // Query mode - always include query
-                params.set('q', queryText);
+                searchParams.q = queryText;
             } else {
                 // Table mode - only include if query doesn't match the default pattern
                 const defaultQuery = generateDefaultQuery(tableName, page, pageSize);
                 if (queryText.trim() !== defaultQuery.trim()) {
-                    params.set('q', queryText);
+                    searchParams.q = queryText;
                 }
             }
         }
         
-        // If tableName is empty (query mode), use "/" instead of "/tableName"
-        const tablePath = tableName === '' ? '' : `/${encodeURIComponent(tableName!)}`;
-        const paramsString = params.toString();
-        const newUrl = `/db-browser/${encodeURIComponent(dbName!)}${tablePath}${paramsString ? `?${paramsString}` : ''}`;
-        window.history.replaceState({}, '', newUrl);
-    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, columnWidths, dbName, tableName, queryResults, columnSeparator, queryText, generateDefaultQuery]);
+        // Call onNavigate with the search params
+        onNavigate(dbName, tableName || null, searchParams);
+    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, columnWidths, dbName, tableName, queryResults, columnSeparator, queryText, generateDefaultQuery, onNavigate]);
 
 
 
@@ -866,16 +848,9 @@ export default function XpDeebyTableView() {
         setColumnOrder(undefined);
         setColumnWidths(new Map());
         
-        // Navigate to clean URL without any search params
-        // If in query mode, use "/" instead of "/tableName"
-        const tablePath = tableName === '' ? '' : `/${encodeURIComponent(tableName!)}`;
-        const cleanUrl = `/db-browser/${encodeURIComponent(dbName!)}${tablePath}`;
-        if (typeof window !== 'undefined') {
-            window.history.replaceState({}, '', cleanUrl);
-        } else {
-            router.replace(cleanUrl);
-        }
-    }, [dbName, tableName, router]);
+        // Navigate to clean URL without any search params via callback
+        onNavigate(dbName, tableName || null, {});
+    }, [dbName, tableName, onNavigate]);
 
     const handleTableSelect = useCallback((selectedTableName: string) => {
         // Skip if already on this table
@@ -883,15 +858,8 @@ export default function XpDeebyTableView() {
             return;
         }
 
-        // Update URL FIRST, silently, before any state changes
-        // This prevents router from detecting the change and causing re-renders
-        // Clear all query parameters when switching tables
-        if (typeof window !== 'undefined') {
-            const newPath = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(selectedTableName)}`;
-            // Use replaceState to silently update URL without triggering any events
-            // This ensures no query params are carried over
-            window.history.replaceState({}, '', newPath);
-        }
+        // Update URL via callback - clear all query parameters when switching tables
+        onNavigate(dbName, selectedTableName, {});
 
         // Update ref immediately (synchronous, no re-render)
         currentTableNameRef.current = selectedTableName;
@@ -912,13 +880,14 @@ export default function XpDeebyTableView() {
         queryForCurrentResultsRef.current = '';
         setIsQueryManuallyEdited(false); // Reset manual edit flag when selecting a new table
         // Query text will be auto-generated by useEffect when tableName changes
-    }, [dbName]);
+    }, [dbName, onNavigate]);
 
     // Handle no database selected - show centered database dropdown
     if (!dbName) {
         return (
             <DatabaseBrowserLayout 
-                dbName={''} 
+                dbName={''}
+                onNavigate={onNavigate}
                 headerTitle="Select Database"
                 showSidebar={true}
             >
@@ -935,11 +904,12 @@ export default function XpDeebyTableView() {
     return (
         <DatabaseBrowserLayout
             dbName={dbName}
+            onNavigate={onNavigate}
             headerTitle={headerTitle}
             headerSubtitle={headerSubtitle}
             currentTableName={isQueryMode ? null : tableName}
             onTableSelect={handleTableSelect}
-            onBack={() => router.push('/db-browser')}
+            onBack={() => onNavigate(null, null, {})}
         >
             {/* Query Editor */}
             <SidebarContext.Consumer>

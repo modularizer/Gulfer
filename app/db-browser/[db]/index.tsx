@@ -1,3 +1,3 @@
-import XpDeebyTableView from '../../../xp-deeby/pages/xp-deeby';
+import XpDeebyTableViewParent from './[table]';
 
-export default XpDeebyTableView;
+export { XpDeebyTableViewParent };
