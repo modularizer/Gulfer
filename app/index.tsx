@@ -151,7 +151,7 @@ export default function DbTestPage() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.button, styles.buttonSecondary]}
-            onPress={() => router.push('/db-browser/list')}
+            onPress={() => router.push('/db-browser')}
             disabled={isRunning}
           >
             <Text style={[styles.buttonText, styles.buttonTextSecondary]}>
