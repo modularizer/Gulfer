@@ -47,7 +47,7 @@ function convertToPostgres(sqliteSQL: string): string {
  * Read all migration files and generate index
  */
 function generateMigrationsIndex(): void {
-  console.log('📦 Generating migrations index...');
+  console.log('📦 Generating accounts migrations index...');
   
   // Ensure directories exist
   if (!fs.existsSync(SQLITE_DIR)) {
@@ -139,7 +139,7 @@ ${migrationObjects.map(m => '  ' + m).join(',\n')}
   
   fs.writeFileSync(INDEX_FILE, content);
   
-  console.log(`✅ Generated migrations index with ${migrations.length} migration(s)`);
+  console.log(`✅ Generated accounts migrations index with ${migrations.length} migration(s)`);
   console.log(`   Index file: ${INDEX_FILE}`);
 }
 

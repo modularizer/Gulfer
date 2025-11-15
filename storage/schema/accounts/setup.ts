@@ -50,7 +50,8 @@ export async function setupDatabase(db: Database): Promise<void> {
     throw error;
   }
   
-  // Step 2: Run migrations
+  // Step 2: Run migrations (for schema upgrades on existing databases)
+  // CREATE scripts handle initial setup, migrations handle schema changes
   await runMigrations(db);
 }
 

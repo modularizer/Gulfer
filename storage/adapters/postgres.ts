@@ -1,36 +1,27 @@
 /**
- * PostgreSQL Adapter (Placeholder)
+ * PostgreSQL Schema Helpers
  * 
- * Future implementation for PostgreSQL database support.
- * This is a placeholder that can be implemented when needed.
+ * PostgreSQL-specific schema building helpers.
+ * These are used for defining table schemas in Drizzle ORM when using PostgreSQL.
  */
 
-import type { SQL } from 'drizzle-orm';
-import type { Adapter, DatabaseAdapter, AdapterCapabilities } from './types';
+import { pgTable, varchar, integer, unique, real, index, text } from 'drizzle-orm/pg-core';
 
-/**
- * PostgreSQL Adapter Implementation (Placeholder)
- */
-export class PostgresAdapter implements Adapter {
-  getCapabilities(): AdapterCapabilities {
-    return {
-      supportsNamedDatabases: true,
-      supportsGetTableNames: true,
-      databaseType: 'postgres',
-      platform: 'node', // PostgreSQL typically runs on server/Node.js
-    };
-  }
+// ============================================================================
+// PostgreSQL Schema Adapters
+// ============================================================================
+// These are helper functions for building PostgreSQL schemas
+// They wrap Drizzle's PostgreSQL core functions with convenient defaults
 
-  async getDatabaseByName(name: string): Promise<DatabaseAdapter> {
-    // TODO: Implement PostgreSQL connection
-    throw new Error('PostgreSQL adapter not yet implemented');
-  }
+const jsonb = (name: string) => text(name, {mode: 'json'});
+const bool = (name: string) => integer(name, {mode: 'boolean'});
+const timestamp = (name: string) => integer(name, {mode: 'timestamp'});
+const table = pgTable;
 
-  async getTableNames(db: DatabaseAdapter): Promise<string[]> {
-    // TODO: Implement PostgreSQL table listing
-    // Would query information_schema.tables
-    throw new Error('PostgreSQL adapter not yet implemented');
-  }
+const uuid = (name: string) => varchar(name);
+const uuidDefault = (name: string) => uuid(name);
+const uuidPK = (name: string) => uuidDefault(name).primaryKey();
 
+export {
+    table, text, varchar, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
 }
-

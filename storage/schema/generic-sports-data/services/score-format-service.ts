@@ -6,7 +6,7 @@
  */
 
 import { BaseTableService } from './base-table-service';
-import { eq, like } from 'drizzle-orm';
+import { eq, like, and } from 'drizzle-orm';
 import * as schema from '../tables';
 import type { ScoreFormat } from '../tables';
 import { upsertEntity } from '../query-builders';
@@ -87,11 +87,42 @@ export class ScoreFormatService extends BaseTableService<ScoreFormat> {
       scoringMethodName: scoreFormat.scoringMethodName!,
     };
     
-    await this.saveScoreFormat(scoreFormatData);
+    try {
+      await this.saveScoreFormat(scoreFormatData);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to save score format: ${errorMessage}`);
+    }
     
-    const saved = await this.getScoreFormat(scoreFormatData.id!);
+    // After upsert, retrieve by condition (not by ID) because upsert might have matched an existing record
+    // Build the same condition used in saveScoreFormat
+    const condition: Record<string, any> = {};
+    if (scoreFormatData.name) condition.name = scoreFormatData.name;
+    if (scoreFormatData.sportId) condition.sportId = scoreFormatData.sportId;
+    if (scoreFormatData.scoringMethodName) condition.scoringMethodName = scoreFormatData.scoringMethodName;
+    
+    // Try to get by ID first (in case it was a new insert)
+    let saved = await this.getScoreFormat(scoreFormatData.id!);
+    
+    // If not found by ID, try to find by condition (in case it matched an existing record)
+    if (!saved && Object.keys(condition).length > 0) {
+      const conditions = [
+        condition.name ? eq(schema.scoreFormats.name, condition.name) : undefined,
+        condition.sportId ? eq(schema.scoreFormats.sportId, condition.sportId) : undefined,
+        condition.scoringMethodName ? eq(schema.scoreFormats.scoringMethodName, condition.scoringMethodName) : undefined,
+      ].filter((c): c is ReturnType<typeof eq> => c !== undefined);
+      
+      const results = await this.db
+        .select()
+        .from(schema.scoreFormats)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .limit(1);
+      
+      saved = results.length > 0 ? (results[0] as ScoreFormat) : null;
+    }
+    
     if (!saved) {
-      throw new Error('Failed to create score format');
+      throw new Error(`Failed to create score format: Score format was saved but could not be retrieved. ID: ${scoreFormatData.id}, condition: ${JSON.stringify(condition)}`);
     }
     
     return saved;

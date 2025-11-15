@@ -57,7 +57,7 @@ export const participantEventStageScores = table('participant_event_stage_scores
     participantId: uuid('participant_id').notNull().references(() => participants.id, { onDelete: 'cascade' }),
     ...scoreColumns,
     completedAt: timestamp('completed_at').$defaultFn(() => new Date()), // When this stage was recorded
-    complete: integer('complete', { mode: 'boolean' }).default(false).notNull(), // Is this stage complete?
+    complete: integer('complete', { mode: 'boolean' }).default(0).notNull(), // Is this stage complete? Use 0 instead of false for PostgreSQL compatibility
 }, (table) => [
     latLngIdx(table),
 ]);

@@ -3,8 +3,9 @@
 // ============================================================================
 // These are SQLite-specific schema building helpers
 // They can be used regardless of which adapter driver is selected
+// Use varchar when length is specified (works with both SQLite and PostgreSQL)
 export {
-    table, text, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
+    table, text, varchar, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
 } from './sqlite';
 
 // ============================================================================
@@ -27,7 +28,7 @@ export { getAdapter, setAdapter, createAdapter, createAdapterByType, getAdapterB
 // - createAdapterByType(type) - create adapter without setting as current
 //
 // If you need direct access to adapter classes, import them explicitly:
-// import { SqliteOpfsAdapter } from './adapters/sqlite-opfs';
+// import { PgliteAdapter } from './adapters/pglite';
 
 // ============================================================================
 // Database Listing Functions

@@ -16,7 +16,7 @@
  * 
  * // Explicitly specify adapter
  * const storage = await setupStorage('my-database', { 
- *   adapterType: 'sqlite-opfs',
+ *   adapterType: 'pglite',
  *   sports: { golf } 
  * });
  * 
@@ -58,7 +58,7 @@ import { golf } from './sports';
  * 
  * // Explicitly specify adapter
  * const storage = await setupStorage('my-app', { 
- *   adapterType: 'sqlite-opfs',
+ *   adapterType: 'pglite',
  *   sports: { golf } 
  * });
  * ```

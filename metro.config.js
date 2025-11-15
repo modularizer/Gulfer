@@ -10,9 +10,8 @@ config.resolver.blockList = [
   /storage\/schema\/.*\/generate-all.*\.ts$/,
 ];
 
-// Exclude ts-morph and @sqlite.org/sqlite-wasm from being resolved
-// @sqlite.org/sqlite-wasm uses import.meta which Metro doesn't support
-// We'll load it via script tag instead
+// Exclude ts-morph and packages that use import.meta from being resolved
+// These packages use import.meta which Metro doesn't support
 const defaultResolver = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === 'ts-morph') {
@@ -21,12 +20,13 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     };
   }
   // Exclude @sqlite.org/sqlite-wasm from bundling - it uses import.meta
-  // We'll load it via script tag in the HTML
   if (moduleName === '@sqlite.org/sqlite-wasm' || moduleName.startsWith('@sqlite.org/sqlite-wasm/')) {
     return {
       type: 'empty',
     };
   }
+  // Allow @electric-sql/pglite and drizzle-orm/pglite to be bundled
+  // We'll transform import.meta using Babel
   // Use default resolution for everything else
   if (defaultResolver) {
     return defaultResolver(context, moduleName, platform);

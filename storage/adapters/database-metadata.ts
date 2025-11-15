@@ -22,7 +22,7 @@ export interface DatabaseMetadata {
 export async function getDatabaseMetadata(name: string): Promise<DatabaseMetadata> {
   try {
     // Set adapter type
-    await getAdapterByType('sqlite-opfs');
+    await getAdapterByType('pglite');
     
     // Connect to database
     const db = await getDatabaseByName(name);

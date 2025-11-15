@@ -119,6 +119,7 @@ export class PlayerService extends BaseService {
                 lat: participant.lat ?? null,
                 lng: participant.lng ?? null,
                 metadata: participant.metadata || null,
+                sex: participant.sex || 'UNKNOWN',
                 isTeam: false,
             } as Participant,
             teams: [],
@@ -126,11 +127,16 @@ export class PlayerService extends BaseService {
             events: [],
         };
 
-        await this.savePlayer(playerData);
+        try {
+            await this.savePlayer(playerData);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to save player: ${errorMessage}`);
+        }
 
         const saved = await this.getPlayer(playerData.participant.id);
         if (!saved) {
-            throw new Error('Failed to create player');
+            throw new Error(`Failed to create player: Player was saved but could not be retrieved. ID: ${playerData.participant.id}`);
         }
 
         return saved;
@@ -185,7 +191,7 @@ export class PlayerService extends BaseService {
             } else {
                 const saved = await this.getPlayer(existingPlayer.id);
                 if (!saved) {
-                    throw new Error('Failed to retrieve player');
+                    throw new Error(`Failed to retrieve player: Player with ID ${existingPlayer.id} exists but could not be retrieved`);
                 }
                 return { result: 'unchanged', player: saved };
             }

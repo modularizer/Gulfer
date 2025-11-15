@@ -158,6 +158,21 @@ export type Dialect = keyof typeof createScripts;
   
   fs.writeFileSync(path.join(module.scriptsDir, 'index.ts'), indexContent);
   
+  // Step 7: Generate migrations index
+  const generateMigrationsIndexPath = path.join(path.dirname(module.migrationsDir), 'generate-migrations-index.ts');
+  if (fs.existsSync(generateMigrationsIndexPath)) {
+    try {
+      execSync(`npx tsx "${generateMigrationsIndexPath}"`, {
+        stdio: 'pipe',
+        cwd: PROJECT_ROOT,
+        encoding: 'utf-8'
+      });
+      console.log(`   ✅ Migrations index generated`);
+    } catch (error: any) {
+      console.warn(`   ⚠️  Failed to generate migrations index: ${error.message}`);
+    }
+  }
+  
   console.log(`✅ ${module.name} scripts generated (SQLite: ${sqliteScript.hash}, Postgres: ${postgresScript.hash})`);
 }
 

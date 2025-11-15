@@ -8,6 +8,8 @@
 import type { Adapter } from './types';
 
 let currentAdapter: Adapter | null = null;
+// Cache adapters by type to reuse instances (and their connection caches)
+const adapterCache = new Map<AdapterType, Adapter>();
 
 /**
  * Detect the current platform
@@ -45,15 +47,14 @@ export async function getAdapter(): Promise<Adapter> {
   const platform = detectPlatform();
   if (platform === 'web') {
     // Use PGlite adapter for web (PostgreSQL in WASM, no COOP/COEP headers needed!)
-    const { SqlitePgliteAdapter } = await import('./sqlite-pglite');
-    currentAdapter = new SqlitePgliteAdapter();
+    const { PgliteAdapter } = await import('./pglite');
+    currentAdapter = new PgliteAdapter();
   } else if (platform === 'mobile') {
     const { SqliteMobileAdapter } = await import('./sqlite-mobile');
     currentAdapter = new SqliteMobileAdapter();
   } else {
-    // Node.js - use OPFS if available, otherwise throw error
-    // (OPFS requires browser environment)
-    throw new Error('Node.js platform requires explicit adapter selection. OPFS adapter requires browser environment.');
+    // Node.js - requires explicit adapter selection
+    throw new Error('Node.js platform requires explicit adapter selection. Use getAdapterByType() to specify an adapter.');
   }
 
   return currentAdapter;
@@ -73,8 +74,8 @@ export function setAdapter(adapter: Adapter): void {
 export async function createAdapter(platform: 'web' | 'mobile'): Promise<Adapter> {
   if (platform === 'web') {
     // Use PGlite adapter for web (PostgreSQL in WASM, no headers needed!)
-    const { SqlitePgliteAdapter } = await import('./sqlite-pglite');
-    return new SqlitePgliteAdapter();
+    const { PgliteAdapter } = await import('./pglite');
+    return new PgliteAdapter();
   } else {
     const { SqliteMobileAdapter } = await import('./sqlite-mobile');
     return new SqliteMobileAdapter();
@@ -84,7 +85,7 @@ export async function createAdapter(platform: 'web' | 'mobile'): Promise<Adapter
 /**
  * Adapter type identifiers
  */
-export type AdapterType = 'sqlite-web' | 'sqlite-opfs' | 'sqlite-pglite' | 'sqlite-mobile' | 'postgres';
+export type AdapterType = 'sqlite-web' | 'pglite' | 'sqlite-mobile' | 'postgres';
 
 /**
  * Create an adapter by type string
@@ -95,15 +96,11 @@ export type AdapterType = 'sqlite-web' | 'sqlite-opfs' | 'sqlite-pglite' | 'sqli
 export async function createAdapterByType(type: AdapterType): Promise<Adapter> {
   switch (type) {
     case 'sqlite-web': {
-      throw new Error('sqlite-web adapter (sql.js) has been removed. Use sqlite-opfs for efficient persistent SQLite in the browser.');
+      throw new Error('sqlite-web adapter (sql.js) has been removed. Use pglite for efficient persistent SQL in the browser.');
     }
-    case 'sqlite-opfs': {
-      const { SqliteOpfsAdapter } = await import('./sqlite-opfs');
-      return new SqliteOpfsAdapter();
-    }
-    case 'sqlite-pglite': {
-      const { SqlitePgliteAdapter } = await import('./sqlite-pglite');
-      return new SqlitePgliteAdapter();
+    case 'pglite': {
+      const { PgliteAdapter } = await import('./pglite');
+      return new PgliteAdapter();
     }
     case 'sqlite-mobile': {
       const { SqliteMobileAdapter } = await import('./sqlite-mobile');
@@ -122,12 +119,20 @@ export async function createAdapterByType(type: AdapterType): Promise<Adapter> {
  * Get or create adapter, optionally by type
  * 
  * @param type - Optional adapter type. If not provided, auto-selects based on platform
- * @returns The adapter instance
+ * @returns The adapter instance (cached and reused)
  */
 export async function getAdapterByType(type?: AdapterType): Promise<Adapter> {
   if (type) {
-    // Create and set adapter by type
+    // Reuse cached adapter if available
+    if (adapterCache.has(type)) {
+      const adapter = adapterCache.get(type)!;
+      currentAdapter = adapter;
+      return adapter;
+    }
+    
+    // Create and cache adapter by type
     const adapter = await createAdapterByType(type);
+    adapterCache.set(type, adapter);
     currentAdapter = adapter;
     return adapter;
   }

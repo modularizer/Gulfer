@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS "event_format_stages" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS "event_format_stages" (
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "event_format_stages" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "event_format_stages" ("lat","lng");CREATE UNIQUE INDEX IF NOT EXISTS "event_format_stage_child" ON "event_format_stages" ("event_format_id","event_format_stage_id","number");CREATE TABLE IF NOT EXISTS "event_formats" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -34,7 +34,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "event_format_stages" 
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "event_formats" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "event_formats" ("lat","lng");CREATE TABLE IF NOT EXISTS "score_formats" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -45,7 +45,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "event_formats" ("name
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "score_formats" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "score_formats" ("lat","lng");CREATE TABLE IF NOT EXISTS "named_scores" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -64,7 +64,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "score_formats" ("name
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "named_scores" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "named_scores" ("lat","lng");CREATE TABLE IF NOT EXISTS "sports" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text
@@ -72,7 +72,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "named_scores" ("name"
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "sports" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "sports" ("lat","lng");CREATE TABLE IF NOT EXISTS "venue_event_format_stages" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -86,7 +86,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "sports" ("name");CREA
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "venue_event_format_stages" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "venue_event_format_stages" ("lat","lng");CREATE UNIQUE INDEX IF NOT EXISTS "event_format_stage_child" ON "venue_event_format_stages" ("venue_event_format_id","venue_event_format_stage_id","number");CREATE TABLE IF NOT EXISTS "venue_event_formats" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -105,7 +105,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "venue_event_format_st
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "venue_event_formats" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "venue_event_formats" ("lat","lng");CREATE TABLE IF NOT EXISTS "venues" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text
@@ -113,13 +113,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "venue_event_formats" 
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "venues" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "venues" ("lat","lng");CREATE TABLE IF NOT EXISTS "participants" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
 	"sex" text DEFAULT 'UNKNOWN' NOT NULL,
 	"birthday" integer,
-	"is_team" integer DEFAULT false,
+	"is_team" integer DEFAULT 0,
 	"createdAt" integer,
 	"deletedAt" integer
 );
@@ -133,7 +133,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "participants" ("name"
 CREATE UNIQUE INDEX IF NOT EXISTS "team_members_team_id_participant_id_unique" ON "team_members" ("team_id","participant_id");CREATE TABLE IF NOT EXISTS "event_participants" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -145,7 +145,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "team_members_team_id_participant_id_unique" O
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "event_participants" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "event_participants" ("lat","lng");CREATE TABLE IF NOT EXISTS "event_stages" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -160,7 +160,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "event_participants" (
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "event_stages" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "event_stages" ("lat","lng");CREATE TABLE IF NOT EXISTS "events" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -173,7 +173,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "event_stages" ("name"
 CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "events" ("name");CREATE INDEX IF NOT EXISTS "undefined_lat_lng_idx" ON "events" ("lat","lng");CREATE TABLE IF NOT EXISTS "participant_event_stage_scores" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text,
-	"notes" text(200),
+	"notes" varchar(200),
 	"lat" real,
 	"lng" real,
 	"metadata" text,
@@ -190,7 +190,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "sports_name_unique" ON "events" ("name");CREA
 	"points_behind_previous" real,
 	"points_ahead_of_next" real,
 	"completed_at" integer,
-	"complete" integer DEFAULT false NOT NULL,
+	"complete" integer DEFAULT 0 NOT NULL,
 	FOREIGN KEY ("event_stage_id") REFERENCES "event_stages"("id") ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY ("participant_id") REFERENCES "participants"("id") ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY ("score_format_id") REFERENCES "score_formats"("id") ON UPDATE no action ON DELETE cascade

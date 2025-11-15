@@ -24,6 +24,8 @@ module.exports = function(api) {
       ],
       // Add support for static class blocks (needed for ts-morph if it gets bundled)
       '@babel/plugin-transform-class-static-block',
+      // Transform import.meta to work with Metro bundler
+      './babel-plugin-transform-import-meta',
     ],
   };
 };

@@ -54,10 +54,17 @@ function convertToPostgres(sql: string): string {
   // PostgreSQL uses SERIAL PRIMARY KEY
   result = result.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY');
   
+  // SQLite uses text(length) for VARCHAR
+  // PostgreSQL doesn't allow type modifiers on text, must use VARCHAR(length)
+  // Match: "notes" text(200), with any whitespace (tabs, spaces, newlines)
+  // The \s+ matches one or more whitespace characters (including tabs)
+  result = result.replace(/"(\w+)"\s+text\((\d+)\)/gi, '"$1" VARCHAR($2)');
+  // Also match standalone text(200) without quotes (fallback)
+  result = result.replace(/\btext\((\d+)\)/gi, 'VARCHAR($1)');
+  
   // SQLite uses INTEGER for booleans with mode: 'boolean'
-  // PostgreSQL uses BOOLEAN
-  // Note: This is tricky because we need to detect boolean mode from the schema
-  // For now, we'll keep INTEGER and handle it in the adapter
+  // PostgreSQL also uses INTEGER (we keep it for compatibility)
+  // Schema definitions should use 0/1 for defaults, not false/true
   
   // SQLite timestamp is INTEGER with mode: 'timestamp'
   // PostgreSQL uses TIMESTAMP or BIGINT
@@ -132,12 +139,11 @@ function generateSQLiteScript(): CreateScript {
  * Generate CREATE script for PostgreSQL
  */
 function generatePostgresScript(): CreateScript {
-  // For PostgreSQL, we'll convert from SQLite SQL
-  // In the future, we could generate directly using drizzle-kit with postgres dialect
+  // Generate SQLite script first (uses drizzle-kit with SQLite dialect)
   const sqliteScript = generateSQLiteScript();
   
-  // Convert to PostgreSQL
-  // Note: SQL is already idempotent from SQLite generation, so we don't call makeIdempotent again
+  // Convert SQLite SQL to PostgreSQL SQL
+  // This handles dialect differences like text(200) -> VARCHAR(200)
   let postgresSQL = convertToPostgres(sqliteScript.sql);
   
   const hash = crypto.createHash('md5').update(postgresSQL).digest('hex').substring(0, 16);

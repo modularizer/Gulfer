@@ -16,7 +16,7 @@ export const participantColumns = {
     ...baseColumns,
     sex: text("sex", { enum: [Sex.MALE, Sex.FEMALE, Sex.MIXED, Sex.UNKNOWN],}).notNull().default(Sex.UNKNOWN),
     birthday: timestamp("birthday"),
-    isTeam: integer('is_team', { mode: 'boolean' }).default(false),
+    isTeam: integer('is_team', { mode: 'boolean' }).default(0), // Use 0 instead of false for PostgreSQL compatibility
     createdAt: timestamp("createdAt"),
     deletedAt: timestamp("deletedAt"),
 };

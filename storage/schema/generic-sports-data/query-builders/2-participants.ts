@@ -128,6 +128,7 @@ export function queryParticipants(db: Database) {
      */
     withEvents() {
       if (!hasEvents) {
+        // Use left joins to ensure participants are returned even when they have no events
         selectQuery = selectQuery
           .leftJoin(schema.eventParticipants, eq(schema.participants.id, schema.eventParticipants.participantId))
           .leftJoin(schema.events, eq(schema.eventParticipants.eventId, schema.events.id))
@@ -157,6 +158,8 @@ export function queryParticipants(db: Database) {
     },
 
     async execute(): Promise<ParticipantWithDetails[]> {
+      // Apply query modifiers (where, limit, offset)
+      // The where clause should filter on the main table (participants), not joined tables
       selectQuery = applyQueryModifiers(
         selectQuery,
         state,
@@ -171,8 +174,12 @@ export function queryParticipants(db: Database) {
       
       for (const row of results as any) {
         // Drizzle namespaces joined results by table name
+        // When using left joins, the main table data should always be present
         const participantData = row.participants;
-        if (!participantData) continue;
+        if (!participantData || !participantData.id) {
+          // Skip rows without participant data (shouldn't happen with left joins, but be defensive)
+          continue;
+        }
         
         const participantId = participantData.id;
         

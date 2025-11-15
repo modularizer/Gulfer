@@ -49,7 +49,7 @@ import { setupDatabase as setupAccountsDatabase } from './accounts/setup';
  * const db = await setupSchemaByName('my-app');
  * 
  * // Explicitly specify adapter
- * const db = await setupSchemaByName('my-app', 'sqlite-opfs');
+ * const db = await setupSchemaByName('my-app', 'pglite');
  * ```
  */
 export async function setupSchemaByName(
