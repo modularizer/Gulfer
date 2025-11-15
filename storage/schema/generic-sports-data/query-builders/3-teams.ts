@@ -20,7 +20,7 @@
  */
 
 import { eq, and, type SQL } from 'drizzle-orm';
-import type { Database } from '../../../adapters';
+import type { Database } from '../../../../xp-deeby/adapters';
 import * as schema from '../tables';
 import { type QueryBuilderState } from './base';
 import type {

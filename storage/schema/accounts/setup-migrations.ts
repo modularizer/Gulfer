@@ -6,9 +6,9 @@
  * not converted at runtime.
  */
 
-import type { Database } from '../../adapters';
+import type { Database } from '../../../xp-deeby/adapters';
 import { sql } from 'drizzle-orm';
-import { getAdapter } from '../../adapters';
+import { getAdapter } from '../../../xp-deeby/adapters';
 import migrations from './migrations';
 
 const MIGRATIONS_TABLE = '__drizzle_migrations_accounts';

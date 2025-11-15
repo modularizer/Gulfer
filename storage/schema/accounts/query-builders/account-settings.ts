@@ -6,7 +6,7 @@
  */
 
 import { eq, and, type SQL } from 'drizzle-orm';
-import type { Database } from '../../../adapters';
+import type { Database } from '../../../../xp-deeby/adapters';
 import * as schema from '../schema/tables';
 import { applyQueryModifiers, type QueryBuilderState } from '../../generic-sports-data/query-builders/base';
 import type {

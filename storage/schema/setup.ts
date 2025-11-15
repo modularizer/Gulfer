@@ -17,8 +17,8 @@
  * ```
  */
 
-import type { Database, AdapterType } from '../adapters';
-import { getDatabaseByName, getAdapterByType } from '../adapters';
+import type { Database, AdapterType } from '../../xp-deeby/adapters';
+import { getDatabaseByName, getAdapterByType } from '../../xp-deeby/adapters';
 import { setupDatabase } from './generic-sports-data/setup';
 import { setupDatabase as setupAccountsDatabase } from './accounts/setup';
 

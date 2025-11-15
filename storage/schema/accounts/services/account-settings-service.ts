@@ -6,7 +6,7 @@
  */
 
 import { BaseService } from '../../generic-sports-data/services/base';
-import type { Database } from '../../../adapters';
+import type { Database } from '../../../../xp-deeby/adapters';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../schema/tables';
 import type { SettingOption, SettingOptionInsert, AccountSettingOption, AccountSettingOptionInsert } from '../schema/tables';

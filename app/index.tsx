@@ -16,7 +16,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { runGolfTest, runBasicPgliteTest } from '../storage/tests/golf';
-import { deleteDatabaseByName } from '../storage/adapters';
+import { deleteDatabaseByName } from '../xp-deeby/adapters';
 import { useRouter } from 'expo-router';
 
 interface LogEntry {

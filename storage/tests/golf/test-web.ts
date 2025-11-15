@@ -7,7 +7,7 @@
 
 import { setupStorage } from '../../setup';
 import { golf } from '../../sports';
-import { getAdapter, getDatabaseByName } from '../../adapters';
+import { getAdapter, getDatabaseByName } from '../../../xp-deeby/adapters';
 import { sql } from 'drizzle-orm';
 
 export async function runGolfTest(addLog: (message: string, type?: 'log' | 'error' | 'success') => void) {

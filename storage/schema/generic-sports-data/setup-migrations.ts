@@ -16,9 +16,9 @@
  * ```
  */
 
-import type { Database } from '../../adapters';
+import type { Database } from '../../../xp-deeby/adapters';
 import { sql } from 'drizzle-orm';
-import { getAdapter } from '../../adapters';
+import { getAdapter } from '../../../xp-deeby/adapters';
 import migrations from './migrations';
 
 /**

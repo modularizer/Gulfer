@@ -1,3 +1,3 @@
-import DbBrowserList from './list';
+import XpDeebyDatabaseList from "../../xp-deeby/pages";
 
-export default DbBrowserList;
+export default XpDeebyDatabaseList;

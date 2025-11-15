@@ -18,7 +18,7 @@
  */
 
 import { eq, and, type SQL } from 'drizzle-orm';
-import type { Database } from '../../../adapters';
+import type { Database } from '../../../../xp-deeby/adapters';
 import * as schema from '../tables';
 import { applyQueryModifiers, type QueryBuilderState } from './base';
 import type {

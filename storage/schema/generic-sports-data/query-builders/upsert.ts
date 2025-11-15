@@ -5,7 +5,7 @@
  * These handle the complexity of upserting main entities and all their nested children.
  */
 
-import type { Database } from '../../../adapters';
+import type { Database } from '../../../../xp-deeby/adapters';
 import { eq, and, isNull, notInArray, SQL } from 'drizzle-orm';
 
 /**

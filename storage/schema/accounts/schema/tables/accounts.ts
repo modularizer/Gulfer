@@ -1,6 +1,6 @@
 import {
     table, text, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
-} from '../../../../adapters/schema';
+} from '../../../../../xp-deeby/adapters/schema';
 import {participants} from "../../../generic-sports-data/tables/2-generic-sports-schema/3-generic-players-and-teams";
 
 

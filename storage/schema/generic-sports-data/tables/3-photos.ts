@@ -1,6 +1,6 @@
 import {
     table, text, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
-} from '../../../adapters/schema';
+} from '../../../../xp-deeby/adapters/schema';
 
 // ============================================================================
 // Photos Table (unchanged)

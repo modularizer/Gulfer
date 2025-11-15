@@ -17,7 +17,7 @@
  * ```
  */
 
-import type { Database } from '../../../adapters';
+import type { Database } from '../../../../xp-deeby/adapters';
 import { PlayerService, PLAYER_SERVICE_VERSION } from './player-service';
 import { TeamService } from './team-service';
 import { EventService } from './event-service';
