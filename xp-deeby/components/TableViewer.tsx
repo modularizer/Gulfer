@@ -61,6 +61,10 @@ export interface TableViewerProps {
   columnOrder?: string[];
   onColumnOrderChange?: (order: string[]) => void;
   
+  // Column widths
+  columnWidths?: Map<string, number>;
+  onColumnWidthsChange?: (widths: Map<string, number>) => void;
+  
   // Formatting
   formatValue?: (value: any, column: string) => string;
 }
@@ -87,6 +91,8 @@ export default function TableViewer({
   onToggleColumnVisibility,
   columnOrder,
   onColumnOrderChange,
+  columnWidths: externalColumnWidths,
+  onColumnWidthsChange,
   formatValue,
 }: TableViewerProps) {
   const [showHiddenColumnsModal, setShowHiddenColumnsModal] = useState(false);
@@ -113,6 +119,19 @@ export default function TableViewer({
   const [filterModalAllowNonNull, setFilterModalAllowNonNull] = useState<boolean>(true);
   const headerRefs = useRef<Map<string, any>>(new Map());
   const columnRefs = useRef<Map<string, { header: any; cells: any[] }>>(new Map());
+  
+  // Column resizing state
+  // Use external columnWidths if provided, otherwise use internal state
+  const [internalColumnWidths, setInternalColumnWidths] = useState<Map<string, number>>(new Map());
+  const columnWidths = externalColumnWidths ?? internalColumnWidths;
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null);
+  const [resizeStartX, setResizeStartX] = useState(0);
+  const [resizeStartWidth, setResizeStartWidth] = useState(0);
+  
+  // Cell value modal state
+  const [showCellModal, setShowCellModal] = useState(false);
+  const [cellModalValue, setCellModalValue] = useState<any>(null);
+  const [cellModalColumn, setCellModalColumn] = useState<string>('');
 
   const defaultFormatValue = useCallback((value: any): string => {
     if (value === null || value === undefined) return '';
@@ -131,6 +150,125 @@ export default function TableViewer({
   const isValueNull = useCallback((value: any): boolean => {
     return value === null || value === undefined;
   }, []);
+
+  // Get column width (default 150)
+  const getColumnWidth = useCallback((columnName: string): number => {
+    return columnWidths.get(columnName) ?? 150;
+  }, [columnWidths]);
+
+  // Handle resize start
+  const handleResizeStart = useCallback((columnName: string, startX: number) => {
+    setResizingColumn(columnName);
+    setResizeStartX(startX);
+    setResizeStartWidth(getColumnWidth(columnName));
+  }, [getColumnWidth]);
+
+  // Handle resize move
+  const handleResizeMove = useCallback((currentX: number) => {
+    if (!resizingColumn) return;
+    const diff = currentX - resizeStartX;
+    const newWidth = Math.max(50, resizeStartWidth + diff); // Minimum width 50
+    const newWidths = new Map(columnWidths);
+    newWidths.set(resizingColumn, newWidth);
+    
+    if (onColumnWidthsChange) {
+      onColumnWidthsChange(newWidths);
+    } else {
+      setInternalColumnWidths(newWidths);
+    }
+  }, [resizingColumn, resizeStartX, resizeStartWidth, columnWidths, onColumnWidthsChange]);
+
+  // Handle resize end
+  const handleResizeEnd = useCallback(() => {
+    setResizingColumn(null);
+    setResizeStartX(0);
+    setResizeStartWidth(0);
+  }, []);
+
+  // Format value for display in modal (with JSON detection)
+  const formatModalValue = useCallback((value: any, columnName?: string): string => {
+    if (value === null || value === undefined) {
+      return '(null)';
+    }
+    
+    // Check if column is JSON type
+    const column = columnName ? columns.find(c => c.name === columnName) : null;
+    const isJsonColumn = column?.dataType?.toLowerCase().includes('json') || 
+                         column?.dataType?.toLowerCase() === 'jsonb';
+    
+    // If it's already an object, format it as JSON
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch (e) {
+        return String(value);
+      }
+    }
+    
+    // If it's a string, try to parse it as JSON
+    if (typeof value === 'string') {
+      // If column is JSON type, always try to parse
+      if (isJsonColumn) {
+        try {
+          const parsed = JSON.parse(value);
+          return JSON.stringify(parsed, null, 2);
+        } catch (e) {
+          // If parsing fails, return as-is
+          return value;
+        }
+      }
+      
+      // Check if it looks like JSON (starts with { or [)
+      const trimmed = value.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(value);
+          return JSON.stringify(parsed, null, 2);
+        } catch (e) {
+          // Not valid JSON, return as-is
+          return value;
+        }
+      }
+      return value;
+    }
+    
+    return String(value);
+  }, [columns]);
+
+  // Handle cell click to show modal
+  const handleCellClick = useCallback((value: any, columnName: string) => {
+    setCellModalValue(value);
+    setCellModalColumn(columnName);
+    setShowCellModal(true);
+  }, []);
+
+  // Set up resize handlers for web
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (resizingColumn) {
+        handleResizeMove(e.clientX);
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (resizingColumn) {
+        handleResizeEnd();
+      }
+    };
+
+    if (resizingColumn) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizingColumn, handleResizeMove, handleResizeEnd]);
 
   // Get ordered and visible columns
   const getOrderedVisibleColumns = useMemo(() => {
@@ -688,65 +826,84 @@ export default function TableViewer({
                 const isDragOver = dragOverColumn === col.name;
                 const columnIndex = index;
                 const hasFilter = columnFilters.has(col.name);
+                const columnWidth = getColumnWidth(col.name);
                 
                 return (
                   <View
-                    ref={(ref) => {
-                      if (ref) {
-                        headerRefs.current.set(col.name, ref);
-                      } else {
-                        headerRefs.current.delete(col.name);
-                      }
-                    }}
                     key={col.name}
-                    data-column={col.name}
-                    style={[
-                      styles.tableHeaderCell,
-                      { width: 150 },
-                      isDragging && styles.draggingHeader,
-                      isDragOver && styles.dragOverHeader,
-                      Platform.OS === 'web' && styles.draggableHeader,
-                    ]}
-                    onContextMenu={(e: any) => {
-                      if (Platform.OS === 'web') {
-                        handleColumnContextMenu(col.name, e);
-                      }
-                    }}
+                    style={styles.tableHeaderCellContainer}
                   >
-                    <TouchableOpacity
-                      style={[styles.headerCellTouchable, sortDisabled && !onSortExternal && styles.disabledHeader]}
-                      onPress={() => {
-                        if (sortDisabled) {
-                          // If disabled but external handler provided, use it
-                          if (onSortExternal) {
-                            const newOrder = sortBy === col.name && sortOrder === 'asc' ? 'desc' : 'asc';
-                            onSortExternal(col.name, newOrder);
-                          }
+                    <View
+                      ref={(ref) => {
+                        if (ref) {
+                          headerRefs.current.set(col.name, ref);
                         } else {
-                          onSort(col.name);
+                          headerRefs.current.delete(col.name);
                         }
                       }}
-                      onLongPress={() => handleColumnContextMenu(col.name)}
-                      activeOpacity={sortDisabled && !onSortExternal ? 1 : 0.7}
-                      disabled={(Platform.OS === 'web' && draggedColumn === col.name) || (sortDisabled && !onSortExternal)}
+                      data-column={col.name}
+                      style={[
+                        styles.tableHeaderCell,
+                        { width: columnWidth },
+                        isDragging && styles.draggingHeader,
+                        isDragOver && styles.dragOverHeader,
+                        Platform.OS === 'web' && styles.draggableHeader,
+                      ]}
+                      onContextMenu={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          handleColumnContextMenu(col.name, e);
+                        }
+                      }}
                     >
-                      <View style={styles.headerCellContent}>
-                        {Platform.OS === 'web' && (
-                          <Text style={styles.dragHandleIcon}>⋮⋮</Text>
-                        )}
-                        <Text style={styles.tableHeaderText} numberOfLines={1}>
-                          {col.label || col.name}
-                        </Text>
-                        {hasFilter && (
-                          <Text style={styles.filterIndicator}>🔍</Text>
-                        )}
-                        {sortBy === col.name && (
-                          <Text style={styles.sortIndicator}>
-                            {sortOrder === 'asc' ? '↑' : '↓'}
+                      <TouchableOpacity
+                        style={[styles.headerCellTouchable, sortDisabled && !onSortExternal && styles.disabledHeader]}
+                        onPress={() => {
+                          if (sortDisabled) {
+                            // If disabled but external handler provided, use it
+                            if (onSortExternal) {
+                              const newOrder = sortBy === col.name && sortOrder === 'asc' ? 'desc' : 'asc';
+                              onSortExternal(col.name, newOrder);
+                            }
+                          } else {
+                            onSort(col.name);
+                          }
+                        }}
+                        onLongPress={() => handleColumnContextMenu(col.name)}
+                        activeOpacity={sortDisabled && !onSortExternal ? 1 : 0.7}
+                        disabled={(Platform.OS === 'web' && draggedColumn === col.name) || (sortDisabled && !onSortExternal)}
+                      >
+                        <View style={styles.headerCellContent}>
+                          {Platform.OS === 'web' && (
+                            <Text style={styles.dragHandleIcon}>⋮⋮</Text>
+                          )}
+                          <Text style={styles.tableHeaderText} numberOfLines={1}>
+                            {col.label || col.name}
                           </Text>
-                        )}
-                      </View>
-                    </TouchableOpacity>
+                          {hasFilter && (
+                            <Text style={styles.filterIndicator}>🔍</Text>
+                          )}
+                          {sortBy === col.name && (
+                            <Text style={styles.sortIndicator}>
+                              {sortOrder === 'asc' ? '↑' : '↓'}
+                            </Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                      {/* Resize handle */}
+                      {Platform.OS === 'web' && (
+                        <View
+                          style={[
+                            styles.resizeHandle,
+                            resizingColumn === col.name && styles.resizeHandleActive,
+                          ]}
+                          onMouseDown={(e: any) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleResizeStart(col.name, e.clientX || e.nativeEvent?.clientX || 0);
+                          }}
+                        />
+                      )}
+                    </View>
                   </View>
                 );
               })}
@@ -793,9 +950,10 @@ export default function TableViewer({
                     const isNull = isValueNull(value);
                     const isDragging = draggedColumn === col.name;
                     const isDragOver = dragOverColumn === col.name;
+                    const columnWidth = getColumnWidth(col.name);
                     
                     return (
-                      <View
+                      <TouchableOpacity
                         key={col.name}
                         ref={(ref) => {
                           if (!ref) return;
@@ -834,10 +992,12 @@ export default function TableViewer({
                         }}
                         style={[
                           styles.tableCell,
-                          { width: 150 },
+                          { width: columnWidth },
                           isDragging && styles.draggingCell,
                           isDragOver && styles.dragOverCell,
                         ]}
+                        onPress={() => handleCellClick(value, col.name)}
+                        activeOpacity={0.7}
                       >
                         <Text
                           style={[
@@ -848,7 +1008,7 @@ export default function TableViewer({
                         >
                           {isNull ? '?' : formatCellValue(value, col.name)}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                   {/* Hidden columns indicator cell */}
@@ -1240,6 +1400,45 @@ export default function TableViewer({
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Cell value modal */}
+      <Modal
+        visible={showCellModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCellModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCellModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {}}
+            style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <View style={styles.cellModalContent}>
+              <View style={styles.cellModalHeader}>
+                <Text style={styles.cellModalTitle}>
+                  {cellModalColumn ? (columns.find(c => c.name === cellModalColumn)?.label || cellModalColumn) : 'Cell Value'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setShowCellModal(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.cellModalBody}>
+                <Text style={styles.cellModalValue}>
+                  {formatModalValue(cellModalValue, cellModalColumn)}
+                </Text>
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1284,6 +1483,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: '#5568d3',
     justifyContent: 'center',
+    position: 'relative',
   },
   headerCellContent: {
     flexDirection: 'row',
@@ -1711,6 +1911,61 @@ const styles = StyleSheet.create({
   contextMenuText: {
     fontSize: 14,
     color: '#333',
+  },
+  tableHeaderCellContainer: {
+    flexDirection: 'row',
+    position: 'relative',
+  },
+  resizeHandle: {
+    width: 6,
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    cursor: 'col-resize',
+    position: 'absolute',
+    right: -3,
+    top: 0,
+    bottom: 0,
+    zIndex: 10,
+  },
+  resizeHandleActive: {
+    backgroundColor: '#667eea',
+    opacity: 0.6,
+  },
+  cellModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '90%',
+    maxWidth: 600,
+    maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  cellModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  cellModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  cellModalBody: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  cellModalValue: {
+    fontSize: 14,
+    color: '#333',
+    fontFamily: 'monospace',
+    lineHeight: 20,
   },
 });
 

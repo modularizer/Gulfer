@@ -133,6 +133,7 @@ export default function XpDeebyTableView() {
         filter?: string;
         visibleColumns?: string;
         columnOrder?: string;
+        columnWidths?: string;
     }>();
 
     const dbName = db ? decodeURIComponent(db) : null;
@@ -183,6 +184,26 @@ export default function XpDeebyTableView() {
         }
         return undefined;
     });
+    
+    // Parse column widths from URL (format: "col1:150,col2:200")
+    const [columnWidths, setColumnWidths] = useState<Map<string, number>>(() => {
+        const param = searchParams.columnWidths || '';
+        if (param) {
+            const widths = new Map<string, number>();
+            const pairs = param.split(',');
+            for (const pair of pairs) {
+                const [col, width] = pair.split(':');
+                if (col && width) {
+                    const parsedWidth = parseInt(width, 10);
+                    if (!isNaN(parsedWidth) && parsedWidth > 0) {
+                        widths.set(decodeURIComponent(col), parsedWidth);
+                    }
+                }
+            }
+            return widths;
+        }
+        return new Map();
+    });
 
     // Use the table data hook - handles all database operations (reads from local state)
     const tableData = useTableData({
@@ -220,6 +241,7 @@ export default function XpDeebyTableView() {
         filter?: string;
         visibleColumns?: Set<string> | null;
         columnOrder?: string[] | undefined;
+        columnWidths?: Map<string, number>;
     }) => {
         if (typeof window === 'undefined') return;
         
@@ -232,6 +254,7 @@ export default function XpDeebyTableView() {
         const finalFilter = updates.filter !== undefined ? updates.filter : filterText;
         const finalVisibleColumns = updates.visibleColumns !== undefined ? updates.visibleColumns : visibleColumns;
         const finalColumnOrder = updates.columnOrder !== undefined ? updates.columnOrder : columnOrder;
+        const finalColumnWidths = updates.columnWidths !== undefined ? updates.columnWidths : columnWidths;
         
         params.set('page', String(finalPage));
         if (finalPageSize !== 100) params.set('pageSize', String(finalPageSize));
@@ -249,9 +272,18 @@ export default function XpDeebyTableView() {
         }
         if (finalColumnOrder) params.set('columnOrder', finalColumnOrder.join(columnSeparator));
         
+        // Encode column widths (format: "col1:150,col2:200")
+        if (finalColumnWidths.size > 0) {
+            const widthPairs: string[] = [];
+            finalColumnWidths.forEach((width, col) => {
+                widthPairs.push(`${encodeURIComponent(col)}:${width}`);
+            });
+            params.set('columnWidths', widthPairs.join(','));
+        }
+        
         const newUrl = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`;
         window.history.replaceState({}, '', newUrl);
-    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, dbName, tableName, tableData.columns, columnSeparator]);
+    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, columnWidths, dbName, tableName, tableData.columns, columnSeparator]);
 
     const loadTableList = useCallback(async () => {
         if (!dbName || loadingTableListRef.current) return;
@@ -367,6 +399,20 @@ export default function XpDeebyTableView() {
         setColumnOrder(newOrder);
         updateURLSilently({ columnOrder: newOrder });
     }, [updateURLSilently]);
+
+    const handleColumnWidthsChange = useCallback((newWidths: Map<string, number>) => {
+        setColumnWidths(newWidths);
+        // URL update will be debounced in useEffect below
+    }, []);
+
+    // Debounced URL update for column widths (update after user stops resizing)
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            updateURLSilently({ columnWidths });
+        }, 300); // 300ms debounce
+
+        return () => clearTimeout(timeoutId);
+    }, [columnWidths, updateURLSilently]);
 
     const handleFilterChange = useCallback((text: string) => {
         setFilterText(text);
@@ -539,6 +585,8 @@ export default function XpDeebyTableView() {
                         onToggleColumnVisibility={toggleColumnVisibility}
                         columnOrder={columnOrder}
                         onColumnOrderChange={handleColumnOrderChange}
+                        columnWidths={columnWidths}
+                        onColumnWidthsChange={handleColumnWidthsChange}
                     />
                 </View>
             </View>
