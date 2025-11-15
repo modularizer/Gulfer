@@ -2,7 +2,7 @@
  * Database Browser Layout Component
  * 
  * Shared layout component for database browser pages with sidebar and main content.
- * Used by [db]/index, [db]/[table], and [db]/query pages.
+ * Used by [db]/[table] page (which handles both table view and query mode).
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -252,6 +252,7 @@ export default function DatabaseBrowserLayout({
         if (onTableSelect) {
             onTableSelect(tableName);
         } else {
+            // Clear query parameters when switching tables
             router.push(`/db-browser/${encodeURIComponent(dbName)}/${encodeURIComponent(tableName)}`);
         }
     }, [dbName, router, onTableSelect]);

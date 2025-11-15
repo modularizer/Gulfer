@@ -133,24 +133,29 @@ export default function XpDeebyTableView() {
         visibleColumns?: string;
         columnOrder?: string;
         columnWidths?: string;
+        q?: string; // Query parameter for query mode
     }>();
 
     const dbName = dbName_ ? decodeURIComponent(dbName_) : null;
-    const initialTableName = table ? decodeURIComponent(table) : null;
+    // Treat empty string as query mode
+    const initialTableName = table ? (table === '' ? '' : decodeURIComponent(table)) : '';
+    const initialQuery = searchParams.q ? decodeURIComponent(searchParams.q) : '';
 
     // Use local state for current table - NEVER sync from URL after initial mount
     // This prevents re-renders when we update the URL silently
+    // Empty string means query mode
     const [currentTableName, setCurrentTableName] = useState<string | null>(initialTableName);
     const hasInitializedRef = useRef(false);
     const currentTableNameRef = useRef<string | null>(initialTableName);
 
     // Only sync from URL on very first mount or when db changes
     useEffect(() => {
-        if (!hasInitializedRef.current && initialTableName) {
+        // Allow empty string (query mode) as a valid initial table name
+        if (!hasInitializedRef.current && initialTableName !== null && initialTableName !== undefined) {
             hasInitializedRef.current = true;
             currentTableNameRef.current = initialTableName;
             setCurrentTableName(initialTableName);
-        } else if (dbName && !initialTableName) {
+        } else if (dbName && (initialTableName === null || initialTableName === undefined)) {
             // If db changed and no table in URL, reset
             hasInitializedRef.current = false;
         }
@@ -209,7 +214,8 @@ export default function XpDeebyTableView() {
     // Database connection and query state
     const [db, setDb] = useState<any>(null);
     const [tables, setTables] = useState<string[]>([]); // List of valid table names
-    const [queryText, setQueryText] = useState<string>('');
+    // Initialize queryText from URL param if provided (query mode or non-default query), otherwise empty
+    const [queryText, setQueryText] = useState<string>(initialQuery || '');
     
     // Wrapper to ensure queryText is always a string
     const setQueryTextSafe = useCallback((value: any) => {
@@ -246,12 +252,30 @@ export default function XpDeebyTableView() {
     const isUpdatingTableProgrammatically = useRef(false); // Track when we're updating table programmatically to prevent loops
     const queryForCurrentResultsRef = useRef<string>(''); // Cache the exact query that produced the current results
 
+    // Auto-execute query when query is provided via URL (query mode or non-default query)
+    useEffect(() => {
+        if (db && initialQuery && initialQuery.trim() && !queryResults) {
+            // Small delay to ensure state is ready
+            const timeoutId = setTimeout(() => {
+                if (queryText.trim() === initialQuery.trim()) {
+                    // If in table mode with a custom query, mark it as manually edited
+                    if (tableName !== '' && tableName !== null) {
+                        setIsQueryManuallyEdited(true);
+                    }
+                    executeQuery();
+                }
+            }, 100);
+            return () => clearTimeout(timeoutId);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [db, tableName, initialQuery]);
+
     // Update query text when table, page, or pageSize changes
     const lastGeneratedQueryRef = useRef<string>('');
     const lastTableRef = useRef<string | null>(null);
     useEffect(() => {
-        // Don't auto-generate queries when tableName is "query" (query mode)
-        if (tableName && tableName !== 'query') {
+        // Don't auto-generate queries when tableName is empty string (query mode)
+        if (tableName && tableName !== '') {
             const newQuery = generateDefaultQuery(tableName, page, pageSize);
             const tableChanged = tableName !== lastTableRef.current;
             // Only update if query actually changed to avoid unnecessary re-renders
@@ -317,14 +341,14 @@ export default function XpDeebyTableView() {
             if (!queryText || !queryText.trim()) {
                 setIsQueryManuallyEdited(true);
                 isUpdatingTableProgrammatically.current = true;
-                currentTableNameRef.current = 'query';
-                setCurrentTableName('query');
+                currentTableNameRef.current = '';
+                setCurrentTableName('');
                 // Clear results and errors - don't show anything until query is executed
                 setQueryResults(null);
                 setQueryError(null);
                 queryForCurrentResultsRef.current = '';
                 if (typeof window !== 'undefined') {
-                    const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/query?q=${encodeURIComponent(queryText || '')}`;
+                    const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/?q=${encodeURIComponent(queryText || '')}`;
                     window.history.replaceState({}, '', queryToolUrl);
                 }
                 setTimeout(() => {
@@ -339,16 +363,16 @@ export default function XpDeebyTableView() {
             if (parsed.isComplex || !parsed.tableName) {
                 setIsQueryManuallyEdited(true);
                 isUpdatingTableProgrammatically.current = true;
-                // Set table name to "query" to indicate we're in query mode
-                currentTableNameRef.current = 'query';
-                setCurrentTableName('query');
+                // Set table name to empty string to indicate we're in query mode
+                currentTableNameRef.current = '';
+                setCurrentTableName('');
                 // Clear results and errors - don't show anything until query is executed
                 setQueryResults(null);
                 setQueryError(null);
                 queryForCurrentResultsRef.current = '';
                 // Silently update URL to query tool page without triggering navigation/re-render
                 if (typeof window !== 'undefined') {
-                    const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/query?q=${encodeURIComponent(queryText)}`;
+                    const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/?q=${encodeURIComponent(queryText)}`;
                     window.history.replaceState({}, '', queryToolUrl);
                 }
                 setTimeout(() => {
@@ -361,14 +385,14 @@ export default function XpDeebyTableView() {
                     // Table doesn't exist - switch to query mode
                     setIsQueryManuallyEdited(true);
                     isUpdatingTableProgrammatically.current = true;
-                    currentTableNameRef.current = 'query';
-                    setCurrentTableName('query');
+                    currentTableNameRef.current = '';
+                    setCurrentTableName('');
                     // Clear results and errors - don't show anything until query is executed
                     setQueryResults(null);
                     setQueryError(null);
                     queryForCurrentResultsRef.current = '';
                     if (typeof window !== 'undefined') {
-                        const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/query?q=${encodeURIComponent(queryText)}`;
+                        const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/?q=${encodeURIComponent(queryText)}`;
                         window.history.replaceState({}, '', queryToolUrl);
                     }
                     setTimeout(() => {
@@ -636,14 +660,14 @@ export default function XpDeebyTableView() {
     // Auto-execute query when table changes (query is auto-generated)
     // Only auto-execute when table/page changes, NOT when query text changes manually
     useEffect(() => {
-        // Don't auto-execute when tableName is "query" (query mode)
+        // Don't auto-execute when tableName is empty string (query mode)
         // Only auto-execute if:
         // 1. Database is loaded
-        // 2. Table name exists and is not "query"
+        // 2. Table name exists and is not empty string
         // 3. Query text exists and matches the expected query for this table/page
         // 4. Query hasn't been manually edited
         // 5. Query hasn't been executed yet
-        if (!db || !tableName || tableName === 'query' || !queryText || isQueryManuallyEdited) return;
+        if (!db || !tableName || tableName === '' || !queryText || isQueryManuallyEdited) return;
         
         const expectedQuery = generateDefaultQuery(tableName, page, pageSize);
         
@@ -688,8 +712,12 @@ export default function XpDeebyTableView() {
         const finalColumnOrder = updates.columnOrder !== undefined ? updates.columnOrder : columnOrder;
         const finalColumnWidths = updates.columnWidths !== undefined ? updates.columnWidths : columnWidths;
         
-        params.set('page', String(finalPage));
+        // Only add page if it's not the default (1)
+        if (finalPage !== 1) params.set('page', String(finalPage));
+        
+        // Only add pageSize if it's not the default (100)
         if (finalPageSize !== 100) params.set('pageSize', String(finalPageSize));
+        
         if (finalSortBy) {
             params.set('sortBy', finalSortBy);
             params.set('sortOrder', finalSortOrder);
@@ -702,7 +730,17 @@ export default function XpDeebyTableView() {
                 params.set('visibleColumns', Array.from(finalVisibleColumns).join(columnSeparator));
             }
         }
-        if (finalColumnOrder) params.set('columnOrder', finalColumnOrder.join(columnSeparator));
+        
+        // Only add columnOrder if it's different from the default (natural order of all columns)
+        if (finalColumnOrder && queryResults) {
+            const allColumns = queryResults.columns.map(c => c.name);
+            // Check if column order is different from natural order
+            const isDifferentOrder = finalColumnOrder.length !== allColumns.length ||
+                finalColumnOrder.some((col, idx) => col !== allColumns[idx]);
+            if (isDifferentOrder) {
+                params.set('columnOrder', finalColumnOrder.join(columnSeparator));
+            }
+        }
         
         // Encode column widths (format: "col1:150,col2:200")
         if (finalColumnWidths.size > 0) {
@@ -713,9 +751,26 @@ export default function XpDeebyTableView() {
             params.set('columnWidths', widthPairs.join(','));
         }
         
-        const newUrl = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`;
+        // Add query text to params if it's anything other than the default auto-generated query
+        if (queryText) {
+            if (tableName === '') {
+                // Query mode - always include query
+                params.set('q', queryText);
+            } else {
+                // Table mode - only include if query doesn't match the default pattern
+                const defaultQuery = generateDefaultQuery(tableName, page, pageSize);
+                if (queryText.trim() !== defaultQuery.trim()) {
+                    params.set('q', queryText);
+                }
+            }
+        }
+        
+        // If tableName is empty (query mode), use "/" instead of "/tableName"
+        const tablePath = tableName === '' ? '' : `/${encodeURIComponent(tableName!)}`;
+        const paramsString = params.toString();
+        const newUrl = `/db-browser/${encodeURIComponent(dbName!)}${tablePath}${paramsString ? `?${paramsString}` : ''}`;
         window.history.replaceState({}, '', newUrl);
-    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, columnWidths, dbName, tableName, queryResults, columnSeparator]);
+    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, columnWidths, dbName, tableName, queryResults, columnSeparator, queryText, generateDefaultQuery]);
 
 
 
@@ -813,7 +868,9 @@ export default function XpDeebyTableView() {
         setColumnWidths(new Map());
         
         // Navigate to clean URL without any search params
-        const cleanUrl = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}`;
+        // If in query mode, use "/" instead of "/tableName"
+        const tablePath = tableName === '' ? '' : `/${encodeURIComponent(tableName!)}`;
+        const cleanUrl = `/db-browser/${encodeURIComponent(dbName!)}${tablePath}`;
         if (typeof window !== 'undefined') {
             window.history.replaceState({}, '', cleanUrl);
         } else {
@@ -829,11 +886,13 @@ export default function XpDeebyTableView() {
 
         // Update URL FIRST, silently, before any state changes
         // This prevents router from detecting the change and causing re-renders
+        // Clear all query parameters when switching tables
         if (typeof window !== 'undefined') {
             const newPath = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(selectedTableName)}`;
             // Use replaceState to silently update URL without triggering any events
+            // This ensures no query params are carried over
             window.history.replaceState({}, '', newPath);
-                                }
+        }
 
         // Update ref immediately (synchronous, no re-render)
         currentTableNameRef.current = selectedTableName;
@@ -841,38 +900,44 @@ export default function XpDeebyTableView() {
         // Batch all state updates in a single React update cycle
         // React 18+ automatically batches these, so this causes only ONE re-render
         setCurrentTableName(selectedTableName);
-                                                    setPage(1);
-                                                    setPageSize(100);
-                                                    setSortBy(null);
-                                                    setSortOrder('asc');
-                                                    setFilterText('');
+        setPage(1);
+        setPageSize(100);
+        setSortBy(null);
+        setSortOrder('asc');
+        setFilterText('');
         setVisibleColumns(null);
-                                                    setColumnOrder(undefined);
-                                                    setColumnWidths(new Map());
+        setColumnOrder(undefined);
+        setColumnWidths(new Map());
         setQueryError(null);
         setQueryResults(null);
         queryForCurrentResultsRef.current = '';
         setIsQueryManuallyEdited(false); // Reset manual edit flag when selecting a new table
+        // Query text will be auto-generated by useEffect when tableName changes
     }, [dbName]);
 
-    if (!dbName || !tableName) {
+    if (!dbName) {
         return (
-            <DatabaseBrowserLayout dbName={dbName || ''} headerTitle="Error">
+            <DatabaseBrowserLayout dbName={''} headerTitle="Error">
                 <View style={styles.errorContainer}>
-                    <Text style={styles.errorText}>Database or table name missing</Text>
+                    <Text style={styles.errorText}>Database name missing</Text>
                 </View>
             </DatabaseBrowserLayout>
         );
     }
 
+    // Determine if we're in query mode (empty table name)
+    const isQueryMode = tableName === '';
+    const headerTitle = isQueryMode ? 'Query Tool' : dbName;
+    const headerSubtitle = isQueryMode ? dbName : tableName;
+
     return (
         <DatabaseBrowserLayout
             dbName={dbName}
-            headerTitle={dbName}
-            headerSubtitle={tableName}
-            currentTableName={tableName}
+            headerTitle={headerTitle}
+            headerSubtitle={headerSubtitle}
+            currentTableName={isQueryMode ? null : tableName}
             onTableSelect={handleTableSelect}
-            onBack={() => router.push(`/db-browser/${encodeURIComponent(dbName)}`)}
+            onBack={() => router.push('/db-browser/list')}
         >
             {/* Query Editor */}
             <SidebarContext.Consumer>

@@ -18,18 +18,6 @@ export default function RootLayout() {
         }} 
       />
       <Stack.Screen 
-        name="db-browser/[db]/index"
-        options={{ 
-          headerShown: false 
-        }} 
-      />
-        <Stack.Screen
-            name="db-browser/[db]/query"
-            options={{
-                headerShown: false
-            }}
-        />
-      <Stack.Screen 
         name="db-browser/[db]/[table]" 
         options={{ 
           headerShown: false,
