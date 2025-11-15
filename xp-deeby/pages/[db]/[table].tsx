@@ -8,16 +8,66 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
     View,
     Text,
-    ScrollView,
     StyleSheet,
     TouchableOpacity,
-    SafeAreaView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getAdapterByType, getRegistryEntries } from '../../adapters';
 import { sql } from 'drizzle-orm';
-import TableViewer from '../../components/TableViewer';
-import { useTableData } from '../../hooks/useTableData';
+import TableViewer, { TableViewerColumn, TableViewerRow } from '../../components/TableViewer';
+import QueryEditor from '../../components/QueryEditor';
+import DatabaseBrowserLayout, { SidebarContext } from '../../components/DatabaseBrowserLayout';
+
+/**
+ * Parse SQL query to extract table name and detect if it's a complex query
+ * Returns { tableName: string | null, isComplex: boolean }
+ */
+function parseQuery(query: string): { tableName: string | null; isComplex: boolean } {
+    if (!query || !query.trim()) {
+        return { tableName: null, isComplex: false };
+    }
+
+    // First, try to extract table name from the query
+    // Pattern: SELECT ... FROM "table" or FROM table
+    // Match quoted table names first (more specific), then unquoted
+    let tableName: string | null = null;
+    const quotedMatch = query.match(/\bFROM\s+["']([^"']+)["']/i);
+    if (quotedMatch && quotedMatch[1]) {
+        tableName = quotedMatch[1];
+    } else {
+        // Try unquoted table name (alphanumeric and underscore only)
+        const unquotedMatch = query.match(/\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/i);
+        if (unquotedMatch && unquotedMatch[1]) {
+            tableName = unquotedMatch[1];
+        }
+    }
+
+    // Check for complex query patterns that indicate it's not a simple table query
+    // ORDER BY, LIMIT, and OFFSET are allowed in simple table queries
+    const complexPatterns = [
+        /\bJOIN\b/i,
+        /\bWITH\b/i,
+        /\bUNION\b/i,
+        /\bINTERSECT\b/i,
+        /\bEXCEPT\b/i,
+        /\bGROUP\s+BY\b/i,
+        /\bHAVING\b/i,
+        /\bDISTINCT\b/i,
+        /\bCASE\b/i,
+        /\bSUBQUERY\b/i,
+        /\(.*SELECT.*\)/i, // Subqueries
+    ];
+
+    const isComplex = complexPatterns.some(pattern => pattern.test(query));
+
+    // If we found a table name and it's not complex, it's a simple table query
+    if (tableName && !isComplex) {
+        return { tableName, isComplex: false };
+    }
+
+    // If complex or no table name found, return accordingly
+    return { tableName, isComplex: isComplex || !tableName };
+}
 
 /**
  * Finds the shortest safe separator that doesn't appear in any column name.
@@ -25,24 +75,24 @@ import { useTableData } from '../../hooks/useTableData';
  */
 function findSafeSeparator(columnNames: string[]): string {
     if (columnNames.length === 0) return '_';
-    
+
     let separator = '_';
     let attempts = 0;
     const maxAttempts = 100; // Safety limit
-    
+
     while (attempts < maxAttempts) {
         // Check if any column name contains this separator
         const isSafe = !columnNames.some(name => name.includes(separator));
-        
+
         if (isSafe) {
             return separator;
         }
-        
+
         // Try with one more underscore
         separator += '_';
         attempts++;
     }
-    
+
     // Fallback (should never reach here)
     return separator;
 }
@@ -70,61 +120,10 @@ function parseColumnList(param: string): string[] {
     return [param];
 }
 
-// Memoized table item component to prevent unnecessary re-renders
-const TableItem = React.memo(({
-                                  table,
-                                  rowCount,
-                                  isEmpty,
-                                  isSelected,
-                                  onPress
-                              }: {
-    table: string;
-    rowCount: number | undefined;
-    isEmpty: boolean;
-    isSelected: boolean;
-    onPress: (table: string) => void;
-}) => (
-    <TouchableOpacity
-        style={[
-            styles.tableItem,
-            isEmpty && styles.tableItemEmpty,
-            isSelected && styles.tableItemSelected,
-        ]}
-        onPress={() => onPress(table)}
-    >
-        <View style={styles.tableItemContent}>
-            <Text
-                style={[
-                    styles.tableItemText,
-                    isEmpty && styles.tableItemTextEmpty,
-                    isSelected && styles.tableItemTextSelected,
-                ]}
-            >
-                {table}
-            </Text>
-            {rowCount !== undefined && (
-                <Text
-                    style={[
-                        styles.tableItemCount,
-                        isEmpty && styles.tableItemCountEmpty,
-                        isSelected && styles.tableItemCountSelected,
-                    ]}
-                >
-                    {rowCount.toLocaleString()}
-                </Text>
-            )}
-        </View>
-    </TouchableOpacity>
-), (prevProps, nextProps) => {
-    // Only re-render if selection state changes or row count changes
-    return prevProps.isSelected === nextProps.isSelected &&
-        prevProps.rowCount === nextProps.rowCount &&
-        prevProps.isEmpty === nextProps.isEmpty;
-});
 
 export default function XpDeebyTableView() {
     const router = useRouter();
-    const { db, table } = useLocalSearchParams<{ db: string; table: string }>();
+    const { db: dbName_, table } = useLocalSearchParams<{ db: string; table: string }>();
     const searchParams = useLocalSearchParams<{
         page?: string;
         pageSize?: string;
@@ -136,30 +135,32 @@ export default function XpDeebyTableView() {
         columnWidths?: string;
     }>();
 
-    const dbName = db ? decodeURIComponent(db) : null;
+    const dbName = dbName_ ? decodeURIComponent(dbName_) : null;
     const initialTableName = table ? decodeURIComponent(table) : null;
 
-    // Use local state for current table to avoid re-renders on URL changes
+    // Use local state for current table - NEVER sync from URL after initial mount
+    // This prevents re-renders when we update the URL silently
     const [currentTableName, setCurrentTableName] = useState<string | null>(initialTableName);
-    const isInternalNavigationRef = useRef(false);
+    const hasInitializedRef = useRef(false);
     const currentTableNameRef = useRef<string | null>(initialTableName);
+
+    // Only sync from URL on very first mount or when db changes
+    useEffect(() => {
+        if (!hasInitializedRef.current && initialTableName) {
+            hasInitializedRef.current = true;
+            currentTableNameRef.current = initialTableName;
+            setCurrentTableName(initialTableName);
+        } else if (dbName && !initialTableName) {
+            // If db changed and no table in URL, reset
+            hasInitializedRef.current = false;
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dbName]); // Only react to db changes, NOT URL table changes
 
     // Keep ref in sync with state
     useEffect(() => {
         currentTableNameRef.current = currentTableName;
     }, [currentTableName]);
-
-    // Sync with URL params only on initial load or when db changes (not on internal table switches)
-    useEffect(() => {
-        if (isInternalNavigationRef.current) {
-            isInternalNavigationRef.current = false;
-            return; // Skip sync during internal navigation
-        }
-        if (initialTableName && initialTableName !== currentTableName) {
-            setCurrentTableName(initialTableName);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialTableName, dbName]); // Sync when URL changes externally or db changes
 
     const tableName = currentTableName;
 
@@ -169,7 +170,7 @@ export default function XpDeebyTableView() {
     const [sortBy, setSortBy] = useState<string | null>(() => searchParams.sortBy || null);
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (searchParams.sortOrder as 'asc' | 'desc') || 'asc');
     const [filterText, setFilterText] = useState(() => searchParams.filter || '');
-    
+
     const [visibleColumns, setVisibleColumns] = useState<Set<string> | null>(() => {
         const param = searchParams.visibleColumns || '';
         if (param) {
@@ -184,7 +185,7 @@ export default function XpDeebyTableView() {
         }
         return undefined;
     });
-    
+
     // Parse column widths from URL (format: "col1:150,col2:200")
     const [columnWidths, setColumnWidths] = useState<Map<string, number>>(() => {
         const param = searchParams.columnWidths || '';
@@ -205,32 +206,463 @@ export default function XpDeebyTableView() {
         return new Map();
     });
 
-    // Use the table data hook - handles all database operations (reads from local state)
-    const tableData = useTableData({
-        dbName: dbName || '',
-        tableName: tableName || '',
-        page,
-        pageSize,
-        sortBy,
-        sortOrder,
-        filter: filterText,
-    });
+    // Database connection and query state
+    const [db, setDb] = useState<any>(null);
+    const [tables, setTables] = useState<string[]>([]); // List of valid table names
+    const [queryText, setQueryText] = useState<string>('');
+    
+    // Wrapper to ensure queryText is always a string
+    const setQueryTextSafe = useCallback((value: any) => {
+        if (typeof value === 'string') {
+            setQueryText(value);
+        } else if (value && typeof value === 'object' && 'sql' in value) {
+            // If it's a drizzle SQL object, extract the SQL string
+            setQueryText((value as any).sql || '');
+        } else {
+            setQueryText(String(value || ''));
+        }
+    }, []);
+    const [queryLoading, setQueryLoading] = useState(false);
+    const [queryError, setQueryError] = useState<string | null>(null);
+    const [queryResults, setQueryResults] = useState<{
+        columns: TableViewerColumn[];
+        rows: TableViewerRow[];
+        totalRowCount: number;
+    } | null>(null);
+
+    // Generate default query based on table name and pagination
+    const generateDefaultQuery = useCallback((table: string | null, currentPage: number, currentPageSize: number): string => {
+        if (!table) return '';
+        const offset = (currentPage - 1) * currentPageSize;
+        // Ensure table name is properly escaped and doesn't contain brackets
+        const safeTableName = String(table).replace(/[\[\]]/g, '');
+        return `SELECT * FROM "${safeTableName}" LIMIT ${currentPageSize} OFFSET ${offset}`;
+    }, []);
+
+    // Track if query was manually edited (not auto-generated)
+    const [isQueryManuallyEdited, setIsQueryManuallyEdited] = useState(false);
+    const lastAutoGeneratedQuery = useRef<string>('');
+    const lastExecutedQueryRef = useRef<string>(''); // Track last executed query to avoid duplicate executions
+    const isUpdatingTableProgrammatically = useRef(false); // Track when we're updating table programmatically to prevent loops
+    const queryForCurrentResultsRef = useRef<string>(''); // Cache the exact query that produced the current results
+
+    // Update query text when table, page, or pageSize changes
+    const lastGeneratedQueryRef = useRef<string>('');
+    const lastTableRef = useRef<string | null>(null);
+    useEffect(() => {
+        // Don't auto-generate queries when tableName is "query" (query mode)
+        if (tableName && tableName !== 'query') {
+            const newQuery = generateDefaultQuery(tableName, page, pageSize);
+            const tableChanged = tableName !== lastTableRef.current;
+            // Only update if query actually changed to avoid unnecessary re-renders
+            if (newQuery !== lastGeneratedQueryRef.current) {
+                lastGeneratedQueryRef.current = newQuery;
+                lastTableRef.current = tableName;
+                // Mark that we're updating programmatically
+                isUpdatingTableProgrammatically.current = true;
+                // Ensure we're setting a string, not an object
+                setQueryTextSafe(newQuery);
+                lastAutoGeneratedQuery.current = newQuery;
+                setIsQueryManuallyEdited(false);
+                // Reset execution tracking when query changes
+                lastExecutedQueryRef.current = '';
+                
+                // If table changed and db is loaded, execute query immediately with the new query
+                if (tableChanged && db && !isQueryManuallyEdited) {
+                    // Execute with the new query directly to avoid state timing issues
+                    if (newQuery !== lastExecutedQueryRef.current) {
+                        lastExecutedQueryRef.current = newQuery;
+                        // Execute with the new query directly, don't wait for state update
+                        executeQuery(newQuery);
+                    }
+                }
+                
+                // Reset the flag after a short delay to allow state updates to complete
+                setTimeout(() => {
+                    isUpdatingTableProgrammatically.current = false;
+                }, 0);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tableName, page, pageSize, generateDefaultQuery, db]);
+
+    // Detect manual query edits and parse query to determine mode
+    // Use a ref to track if this is the initial mount to avoid false positives
+    const isInitialMount = useRef(true);
+    useEffect(() => {
+        // Skip on initial mount
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            return;
+        }
+
+        if (!dbName) return;
+        
+        // Skip if we're in the middle of a programmatic table update
+        if (isUpdatingTableProgrammatically.current) {
+            return;
+        }
+        
+        // Skip if query matches the last auto-generated query (it's not a manual edit)
+        if (queryText === lastAutoGeneratedQuery.current) {
+            return;
+        }
+        
+        const expectedQuery = generateDefaultQuery(tableName || '', page, pageSize);
+        
+        // If query doesn't match the auto-generated one, parse it
+        // This includes empty queries (which don't match any expected query)
+        if (queryText !== expectedQuery) {
+            // If query is empty or whitespace, switch to query mode
+            if (!queryText || !queryText.trim()) {
+                setIsQueryManuallyEdited(true);
+                isUpdatingTableProgrammatically.current = true;
+                currentTableNameRef.current = 'query';
+                setCurrentTableName('query');
+                // Clear results and errors - don't show anything until query is executed
+                setQueryResults(null);
+                setQueryError(null);
+                queryForCurrentResultsRef.current = '';
+                if (typeof window !== 'undefined') {
+                    const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/query?q=${encodeURIComponent(queryText || '')}`;
+                    window.history.replaceState({}, '', queryToolUrl);
+                }
+                setTimeout(() => {
+                    isUpdatingTableProgrammatically.current = false;
+                }, 0);
+                return;
+            }
+            
+            const parsed = parseQuery(queryText);
+            
+            // If query is complex or doesn't match a simple table pattern, switch to query mode
+            if (parsed.isComplex || !parsed.tableName) {
+                setIsQueryManuallyEdited(true);
+                isUpdatingTableProgrammatically.current = true;
+                // Set table name to "query" to indicate we're in query mode
+                currentTableNameRef.current = 'query';
+                setCurrentTableName('query');
+                // Clear results and errors - don't show anything until query is executed
+                setQueryResults(null);
+                setQueryError(null);
+                queryForCurrentResultsRef.current = '';
+                // Silently update URL to query tool page without triggering navigation/re-render
+                if (typeof window !== 'undefined') {
+                    const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/query?q=${encodeURIComponent(queryText)}`;
+                    window.history.replaceState({}, '', queryToolUrl);
+                }
+                setTimeout(() => {
+                    isUpdatingTableProgrammatically.current = false;
+                }, 0);
+            } else if (parsed.tableName) {
+                // Query is simple and targets a table - only update if table exists in database
+                // If table doesn't exist, treat as query mode
+                if (tables.length > 0 && !tables.includes(parsed.tableName)) {
+                    // Table doesn't exist - switch to query mode
+                    setIsQueryManuallyEdited(true);
+                    isUpdatingTableProgrammatically.current = true;
+                    currentTableNameRef.current = 'query';
+                    setCurrentTableName('query');
+                    // Clear results and errors - don't show anything until query is executed
+                    setQueryResults(null);
+                    setQueryError(null);
+                    queryForCurrentResultsRef.current = '';
+                    if (typeof window !== 'undefined') {
+                        const queryToolUrl = `/db-browser/${encodeURIComponent(dbName)}/query?q=${encodeURIComponent(queryText)}`;
+                        window.history.replaceState({}, '', queryToolUrl);
+                    }
+                    setTimeout(() => {
+                        isUpdatingTableProgrammatically.current = false;
+                    }, 0);
+                } else if (parsed.tableName !== tableName) {
+                    // Different table and it exists - update table state and URL
+                    isUpdatingTableProgrammatically.current = true;
+                    // Update ref immediately
+                    currentTableNameRef.current = parsed.tableName;
+                    // Update state
+                    setCurrentTableName(parsed.tableName);
+                    // Update URL silently
+                    if (typeof window !== 'undefined') {
+                        const newTableUrl = `/db-browser/${encodeURIComponent(dbName)}/${encodeURIComponent(parsed.tableName)}`;
+                        window.history.replaceState({}, '', newTableUrl);
+                    }
+                    // Reset pagination and other state for the new table
+                    setPage(1);
+                    setIsQueryManuallyEdited(false);
+                    setTimeout(() => {
+                        isUpdatingTableProgrammatically.current = false;
+                    }, 0);
+                }
+                // Same table - stay in table mode (don't set isQueryManuallyEdited)
+            }
+        }
+    }, [queryText, tableName, page, pageSize, generateDefaultQuery, dbName, setCurrentTableName, tables]);
+
+    // Load database connection and table list
+    useEffect(() => {
+        if (!dbName) return;
+
+        let cancelled = false;
+        const loadDb = async () => {
+            try {
+                const entries = await getRegistryEntries();
+                const entry = entries.find(e => e.name === dbName);
+                if (!entry || cancelled) return;
+
+                const adapter = await getAdapterByType(entry.adapterType);
+                if (!adapter.getDatabaseByName || cancelled) return;
+
+                const database = await adapter.getDatabaseByName(dbName);
+                if (!cancelled) {
+                    setDb(database);
+                }
+
+                // Load table names if adapter supports it
+                if (adapter.getTableNames && !cancelled) {
+                    try {
+                        const tableNames = await adapter.getTableNames(database);
+                        if (!cancelled) {
+                            setTables(tableNames);
+                        }
+                    } catch (err) {
+                        if (!cancelled) {
+                            console.error('[table-view] Error loading table names:', err);
+                        }
+                    }
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    console.error('[table-view] Error loading database:', err);
+                }
+            }
+        };
+
+        loadDb();
+        return () => { cancelled = true; };
+    }, [dbName]);
+
+    // Helper function to extract column names from query result
+    const extractColumnNames = useCallback((result: any): string[] => {
+        // Check if result has fields metadata (PostgreSQL/PGlite provides this)
+        if (result?.fields && Array.isArray(result.fields)) {
+            return result.fields.map((field: any) => field.name || field.fieldName || String(field));
+        }
+
+        // If result is an array of rows, check the first row
+        const firstRow = Array.isArray(result) ? result[0] : (result?.rows?.[0] || result?.[0]);
+
+        if (!firstRow) {
+            return [];
+        }
+
+        // Extract column names from row object keys
+        if (typeof firstRow === 'object' && firstRow !== null) {
+            if (Array.isArray(firstRow)) {
+                // Array-based result - use generic column names
+                return Array.from({ length: firstRow.length }, (_, i) => `column_${i + 1}`);
+            } else {
+                // Object-based result - use object keys as column names
+                // For PostgreSQL, this should work since rows are objects with column names as keys
+                return Object.keys(firstRow);
+            }
+        } else {
+            // Single value result
+            return ['value'];
+        }
+    }, []);
+
+    // Execute query
+    const executeQuery = useCallback(async (queryOverride?: string) => {
+        let queryToExecute: string;
+        
+        // If queryOverride is provided, validate it's actually a string
+        // (not an event object or other non-string value)
+        if (queryOverride !== undefined && queryOverride !== null) {
+            if (typeof queryOverride === 'string') {
+                queryToExecute = queryOverride;
+            } else if (queryOverride && typeof queryOverride === 'object') {
+                // Check if it's a drizzle SQL object
+                if ('sql' in queryOverride) {
+                    queryToExecute = (queryOverride as any).sql || '';
+                } else {
+                    // It's some other object (like an event) - ignore it and use queryText instead
+                    console.warn('[executeQuery] queryOverride is not a string, ignoring:', queryOverride);
+                    queryToExecute = typeof queryText === 'string' ? queryText : String(queryText || '');
+                }
+            } else {
+                queryToExecute = String(queryOverride);
+            }
+        } else if (queryText) {
+            // Ensure queryText is a string
+            if (typeof queryText === 'string') {
+                queryToExecute = queryText;
+            } else if (queryText && typeof queryText === 'object' && 'sql' in queryText) {
+                // If it's a drizzle SQL object, extract the SQL string
+                queryToExecute = (queryText as any).sql || String(queryText);
+            } else {
+                queryToExecute = String(queryText);
+            }
+        } else {
+            queryToExecute = '';
+        }
+        
+        if (!db || !queryToExecute.trim()) return;
+
+        // Ensure query is a clean string
+        const cleanQuery = String(queryToExecute).trim();
+        
+        // Final safety check - if it's still "[object Object]", something is wrong
+        if (cleanQuery === '[object Object]') {
+            console.error('[executeQuery] Query is still an object!', { queryOverride, queryText, queryToExecute });
+            setQueryError('Invalid query: query is not a string');
+            setQueryLoading(false);
+            return;
+        }
+
+        try {
+            setQueryLoading(true);
+            setQueryError(null);
+
+            // Debug: log the query to help diagnose issues
+            console.log('[executeQuery] Executing query:', cleanQuery);
+            console.log('[executeQuery] Query type:', typeof cleanQuery);
+            console.log('[executeQuery] Query JSON:', JSON.stringify(cleanQuery));
+            console.log('[executeQuery] Query char codes:', Array.from(cleanQuery).map(c => c.charCodeAt(0)));
+            
+            // Create the raw SQL object and inspect it
+            const rawSql = sql.raw(cleanQuery);
+            console.log('[executeQuery] sql.raw result:', rawSql);
+            console.log('[executeQuery] sql.raw type:', typeof rawSql);
+            if (rawSql && typeof rawSql === 'object') {
+                console.log('[executeQuery] sql.raw keys:', Object.keys(rawSql));
+                if ('sql' in rawSql) {
+                    console.log('[executeQuery] sql.raw.sql:', rawSql.sql);
+                }
+            }
+            
+            // Execute query - result may be array of rows or object with rows/fields
+            const queryResult = await db.execute(rawSql) as any;
+
+            // Handle different result formats
+            let rows: any[] = [];
+            let resultMetadata: any = null;
+
+            if (Array.isArray(queryResult)) {
+                // Direct array of rows
+                rows = queryResult;
+            } else if (queryResult?.rows) {
+                // Object with rows property (PostgreSQL format)
+                rows = queryResult.rows;
+                resultMetadata = queryResult;
+            } else if (queryResult) {
+                // Single row or other format
+                rows = [queryResult];
+            }
+
+            if (!rows || rows.length === 0) {
+            setQueryResults({
+                columns: [],
+                rows: [],
+                totalRowCount: 0,
+            });
+            // Cache the exact query that produced these (empty) results
+            queryForCurrentResultsRef.current = cleanQuery;
+            setQueryLoading(false);
+            return;
+            }
+
+            // Extract column names using metadata if available, otherwise from first row
+            const columnNames = resultMetadata
+                ? extractColumnNames(resultMetadata)
+                : extractColumnNames(rows);
+
+            // Convert results to TableViewer format
+            const columns: TableViewerColumn[] = columnNames.map(name => ({
+                name,
+                label: name,
+            }));
+
+            const tableRows: TableViewerRow[] = rows.map((row, index) => {
+                const rowData: TableViewerRow = { id: `row_${index}` };
+
+                if (typeof row === 'object' && row !== null) {
+                    if (Array.isArray(row)) {
+                        // Array-based row - map by index
+                        columnNames.forEach((colName, colIndex) => {
+                            rowData[colName] = row[colIndex];
+                        });
+                    } else {
+                        // Object-based row - copy all properties
+                        // For PostgreSQL, column names should match the keys
+                        Object.keys(row).forEach(key => {
+                            rowData[key] = row[key];
+                        });
+                    }
+                } else {
+                    // Single value result
+                    rowData[columnNames[0] || 'value'] = row;
+                }
+
+                return rowData;
+            });
+
+            setQueryResults({
+                columns,
+                rows: tableRows,
+                totalRowCount: tableRows.length, // For now, use result count; could fetch total separately
+            });
+
+            // Cache the exact query that produced these results
+            queryForCurrentResultsRef.current = cleanQuery;
+
+            // Set visible columns if not already set
+            if (!visibleColumns) {
+                setVisibleColumns(new Set(columnNames));
+            }
+            if (!columnOrder || columnOrder.length === 0) {
+                setColumnOrder(columnNames);
+            }
+        } catch (err) {
+            console.error('[table-view] Error executing query:', err);
+            setQueryError(err instanceof Error ? err.message : String(err));
+            setQueryResults(null);
+            // Clear cached query on error
+            queryForCurrentResultsRef.current = '';
+        } finally {
+            setQueryLoading(false);
+        }
+    }, [db, queryText, visibleColumns, columnOrder, extractColumnNames]);
+
+    // Auto-execute query when table changes (query is auto-generated)
+    // Only auto-execute when table/page changes, NOT when query text changes manually
+    useEffect(() => {
+        // Don't auto-execute when tableName is "query" (query mode)
+        // Only auto-execute if:
+        // 1. Database is loaded
+        // 2. Table name exists and is not "query"
+        // 3. Query text exists and matches the expected query for this table/page
+        // 4. Query hasn't been manually edited
+        // 5. Query hasn't been executed yet
+        if (!db || !tableName || tableName === 'query' || !queryText || isQueryManuallyEdited) return;
+        
+        const expectedQuery = generateDefaultQuery(tableName, page, pageSize);
+        
+        // Only auto-execute if query exactly matches the expected query for this table/page
+        if (queryText === expectedQuery && queryText !== lastExecutedQueryRef.current) {
+            lastExecutedQueryRef.current = queryText;
+            executeQuery();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [db, tableName, page, pageSize, isQueryManuallyEdited]); // Only re-execute when table, page, or pageSize changes, NOT when queryText changes
 
     // Find the shortest safe separator for column names (memoized)
     const columnSeparator = useMemo(() => {
-        const columnNames = tableData.columns.map(c => c.name);
+        const columnNames = queryResults?.columns.map(c => c.name) || [];
         return findSafeSeparator(columnNames);
-    }, [tableData.columns]);
+    }, [queryResults?.columns]);
 
-    // Check if we're in paginated mode (more rows than pageSize or on page > 1)
-    // When paginated, sorting and filtering require full database queries which aren't ready yet
-    const isPaginated = tableData.totalRowCount > pageSize || page > 1;
-
-    // Sidebar state
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [tables, setTables] = useState<string[]>([]);
-    const [tableRowCounts, setTableRowCounts] = useState<Record<string, number>>({});
-    const loadingTableListRef = useRef(false);
+    // Check if we're in paginated mode
+    const isPaginated = (queryResults?.totalRowCount || 0) > pageSize || page > 1;
 
     // Function to silently update URL without triggering reloads
     const updateURLSilently = useCallback((updates: {
@@ -244,9 +676,9 @@ export default function XpDeebyTableView() {
         columnWidths?: Map<string, number>;
     }) => {
         if (typeof window === 'undefined') return;
-        
+
         const params = new URLSearchParams();
-        
+
         const finalPage = updates.page !== undefined ? updates.page : page;
         const finalPageSize = updates.pageSize !== undefined ? updates.pageSize : pageSize;
         const finalSortBy = updates.sortBy !== undefined ? updates.sortBy : sortBy;
@@ -255,7 +687,7 @@ export default function XpDeebyTableView() {
         const finalVisibleColumns = updates.visibleColumns !== undefined ? updates.visibleColumns : visibleColumns;
         const finalColumnOrder = updates.columnOrder !== undefined ? updates.columnOrder : columnOrder;
         const finalColumnWidths = updates.columnWidths !== undefined ? updates.columnWidths : columnWidths;
-        
+
         params.set('page', String(finalPage));
         if (finalPageSize !== 100) params.set('pageSize', String(finalPageSize));
         if (finalSortBy) {
@@ -263,15 +695,15 @@ export default function XpDeebyTableView() {
             params.set('sortOrder', finalSortOrder);
         }
         if (finalFilter) params.set('filter', finalFilter);
-        
-        if (finalVisibleColumns) {
-            const allColumns = tableData.columns.map(c => c.name);
+
+        if (finalVisibleColumns && queryResults) {
+            const allColumns = queryResults.columns.map(c => c.name);
             if (finalVisibleColumns.size !== allColumns.length) {
                 params.set('visibleColumns', Array.from(finalVisibleColumns).join(columnSeparator));
             }
         }
         if (finalColumnOrder) params.set('columnOrder', finalColumnOrder.join(columnSeparator));
-        
+
         // Encode column widths (format: "col1:150,col2:200")
         if (finalColumnWidths.size > 0) {
             const widthPairs: string[] = [];
@@ -280,88 +712,11 @@ export default function XpDeebyTableView() {
             });
             params.set('columnWidths', widthPairs.join(','));
         }
-        
+
         const newUrl = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}?${params.toString()}`;
         window.history.replaceState({}, '', newUrl);
-    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, columnWidths, dbName, tableName, tableData.columns, columnSeparator]);
+    }, [page, pageSize, sortBy, sortOrder, filterText, visibleColumns, columnOrder, columnWidths, dbName, tableName, queryResults, columnSeparator]);
 
-    const loadTableList = useCallback(async () => {
-        if (!dbName || loadingTableListRef.current) return;
-
-        try {
-            loadingTableListRef.current = true;
-
-            // Get adapter type from registry
-            const entries = await getRegistryEntries();
-            const entry = entries.find(e => e.name === dbName);
-
-            if (!entry) {
-                loadingTableListRef.current = false;
-                return;
-            }
-
-            // Connect to database
-            const adapter = await getAdapterByType(entry.adapterType);
-            if (!adapter.getDatabaseByName || !adapter.getTableNames) {
-                loadingTableListRef.current = false;
-                return;
-            }
-
-            const database = await adapter.getDatabaseByName(dbName);
-
-            // Get table names
-            const tableNames = await adapter.getTableNames(database);
-
-            // Get row counts for all tables
-            const counts: Record<string, number> = {};
-
-            await Promise.all(
-                tableNames.map(async (tableName) => {
-                    try {
-                        const countQuery = `SELECT COUNT(*) as count FROM "${tableName}"`;
-                        console.log(`[db-browser] Sidebar count query for ${tableName}:`, countQuery);
-                        const countResult = await database.execute(sql.raw(countQuery)) as any[];
-                        console.log(`[db-browser] Sidebar count result for ${tableName}:`, countResult);
-
-                        const count = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
-                        const parsedCount = typeof count === 'number' ? count : parseInt(String(count), 10);
-                        console.log(`[db-browser] Parsed count for ${tableName}:`, parsedCount, 'from raw:', count);
-                        counts[tableName] = parsedCount;
-                    } catch (err) {
-                        console.error(`[db-browser] Error counting rows for ${tableName}:`, err);
-                        counts[tableName] = 0;
-                    }
-                })
-            );
-
-            // Set both tables and row counts together to avoid flickering
-            // Preserve existing tables until we have new data ready
-            setTables(prevTables => {
-                // Only update if we have new data, otherwise preserve existing
-                if (tableNames.length > 0) {
-                    return tableNames;
-                }
-                return prevTables; // Keep existing tables
-            });
-            setTableRowCounts(prevCounts => {
-                // Merge with existing counts to preserve state during updates
-                return { ...prevCounts, ...counts };
-            });
-        } catch (err) {
-            console.error(`[db-browser] Error loading table list:`, err);
-            // Don't clear existing tables on error - preserve what we have
-        } finally {
-            loadingTableListRef.current = false;
-        }
-    }, [dbName]);
-
-    // Load table list for sidebar (only once when dbName changes)
-    useEffect(() => {
-        if (dbName) {
-            loadTableList();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dbName]);
 
 
 
@@ -383,7 +738,8 @@ export default function XpDeebyTableView() {
     }, [updateURLSilently]);
 
     const toggleColumnVisibility = useCallback((column: string) => {
-        const newVisible = visibleColumns ? new Set(visibleColumns) : new Set(tableData.columns.map(c => c.name));
+        const columnNames = queryResults?.columns.map(c => c.name) || [];
+        const newVisible = visibleColumns ? new Set(visibleColumns) : new Set(columnNames);
 
         if (newVisible.has(column)) {
             newVisible.delete(column);
@@ -393,7 +749,7 @@ export default function XpDeebyTableView() {
 
         setVisibleColumns(newVisible);
         updateURLSilently({ visibleColumns: newVisible });
-    }, [visibleColumns, tableData.columns, updateURLSilently]);
+    }, [visibleColumns, queryResults?.columns, updateURLSilently]);
 
     const handleColumnOrderChange = useCallback((newOrder: string[]) => {
         setColumnOrder(newOrder);
@@ -431,7 +787,7 @@ export default function XpDeebyTableView() {
     // Debounced filter effect - update URL silently after user stops typing (only for non-paginated mode)
     useEffect(() => {
         if (isPaginated) return; // Skip debounced update when paginated (use external handler instead)
-        
+
         const timeoutId = setTimeout(() => {
             updateURLSilently({ filter: filterText, page: 1 });
         }, 500);
@@ -442,145 +798,138 @@ export default function XpDeebyTableView() {
     const handlePageChange = useCallback((newPage: number) => {
         setPage(newPage);
         updateURLSilently({ page: newPage });
+        // Query will be regenerated in useEffect when page changes
     }, [updateURLSilently]);
+
+    const handleReset = useCallback(() => {
+        // Reset all state to defaults
+        setPage(1);
+        setPageSize(100);
+        setSortBy(null);
+        setSortOrder('asc');
+        setFilterText('');
+        setVisibleColumns(null); // null means all columns visible
+        setColumnOrder(undefined);
+        setColumnWidths(new Map());
+
+        // Navigate to clean URL without any search params
+        const cleanUrl = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName!)}`;
+        if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', cleanUrl);
+        } else {
+            router.replace(cleanUrl);
+        }
+    }, [dbName, tableName, router]);
+
+    const handleTableSelect = useCallback((selectedTableName: string) => {
+        // Skip if already on this table
+        if (selectedTableName === currentTableNameRef.current) {
+            return;
+        }
+
+        // Update URL FIRST, silently, before any state changes
+        // This prevents router from detecting the change and causing re-renders
+        if (typeof window !== 'undefined') {
+            const newPath = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(selectedTableName)}`;
+            // Use replaceState to silently update URL without triggering any events
+            window.history.replaceState({}, '', newPath);
+        }
+
+        // Update ref immediately (synchronous, no re-render)
+        currentTableNameRef.current = selectedTableName;
+
+        // Batch all state updates in a single React update cycle
+        // React 18+ automatically batches these, so this causes only ONE re-render
+        setCurrentTableName(selectedTableName);
+        setPage(1);
+        setPageSize(100);
+        setSortBy(null);
+        setSortOrder('asc');
+        setFilterText('');
+        setVisibleColumns(null);
+        setColumnOrder(undefined);
+        setColumnWidths(new Map());
+        setQueryError(null);
+        setQueryResults(null);
+        queryForCurrentResultsRef.current = '';
+        setIsQueryManuallyEdited(false); // Reset manual edit flag when selecting a new table
+    }, [dbName]);
 
     if (!dbName || !tableName) {
         return (
-            <SafeAreaView style={styles.container}>
+            <DatabaseBrowserLayout dbName={dbName || ''} headerTitle="Error">
                 <View style={styles.errorContainer}>
                     <Text style={styles.errorText}>Database or table name missing</Text>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => router.push('/db-browser/list')}
-                    >
-                        <Text style={styles.backButtonText}>Back to List</Text>
-                    </TouchableOpacity>
                 </View>
-            </SafeAreaView>
+            </DatabaseBrowserLayout>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                {/* Left section */}
-                <View style={styles.headerLeft}>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => router.push(`/db-browser/${encodeURIComponent(dbName)}`)}
-                    >
-                        <Text style={styles.headerButtonText}>←</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    >
-                        <Text style={styles.headerButtonText}>{sidebarCollapsed ? '☰' : '◀'}</Text>
-                    </TouchableOpacity>
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.headerDbName} numberOfLines={1}>{dbName}</Text>
-                        <Text style={styles.headerTableName} numberOfLines={1}>{tableName}</Text>
-                    </View>
-                </View>
+        <DatabaseBrowserLayout
+            dbName={dbName}
+            headerTitle={dbName}
+            headerSubtitle={tableName}
+            currentTableName={tableName}
+            onTableSelect={handleTableSelect}
+            onBack={() => router.push(`/db-browser/${encodeURIComponent(dbName)}`)}
+        >
+            {/* Query Editor */}
+            <SidebarContext.Consumer>
+                {({ sidebarCollapsed, toggleSidebar }) => (
+                    <QueryEditor
+                        value={typeof queryText === 'string' ? queryText : String(queryText || '')}
+                        onChangeText={setQueryTextSafe}
+                        onExecute={() => executeQuery()}
+                        placeholder="Enter SQL query..."
+                        disabled={!db}
+                        loading={queryLoading}
+                        showExpandButton={sidebarCollapsed}
+                        onExpand={toggleSidebar}
+                    />
+                )}
+            </SidebarContext.Consumer>
 
-                {/* Center section - Database/Table name takes full space */}
-                <View style={styles.headerInfo}>
-                    <Text style={styles.headerDbName} numberOfLines={1}>{dbName}</Text>
-                    <Text style={styles.headerTableName} numberOfLines={1}>{tableName}</Text>
-                </View>
-            </View>
-
-            {tableData.error && (
+            {/* Error - shown where results would be */}
+            {queryError && (
                 <View style={styles.errorContainer}>
-                    <Text style={styles.errorText}>Error: {tableData.error}</Text>
+                    <Text style={styles.errorText}>Error: {queryError}</Text>
                 </View>
             )}
 
-            <View style={styles.content}>
-                {/* Sidebar */}
-                {!sidebarCollapsed && (
-                    <View style={styles.sidebar}>
-                        <ScrollView style={styles.tableList}>
-                            {useMemo(() => {
-                                // Always show tables we know about, even during loading
-                                if (tables.length === 0) {
-                                    return null;
-                                }
-
-                                // Use existing row counts - only sort if we have counts for all tables
-                                // Otherwise preserve the current order
-                                const hasAllCounts = tables.every(table => tableRowCounts[table] !== undefined);
-
-                                let sortedTables = [...tables];
-                                if (hasAllCounts) {
-                                    // Sort tables: non-empty first, then empty tables
-                                    sortedTables.sort((a, b) => {
-                                        const countA = tableRowCounts[a] ?? 0;
-                                        const countB = tableRowCounts[b] ?? 0;
-                                        if ((countA === 0 && countB === 0) || (countA > 0 && countB > 0)) {
-                                            return 0;
-                                        }
-                                        return countA === 0 ? 1 : -1;
-                                    });
-                                }
-
-                                return sortedTables.map((table) => {
-                                    // Use existing row count if available, otherwise undefined
-                                    const rowCount = tableRowCounts[table];
-                                    // Only mark as empty if we have a confirmed count of 0
-                                    const isEmpty = rowCount !== undefined && rowCount === 0;
-                                    // Don't check selection here - will be handled by style prop
-                                    return (
-                                        <TableItem
-                                            key={table}
-                                            table={table}
-                                            rowCount={rowCount}
-                                            isEmpty={isEmpty}
-                                            isSelected={table === currentTableName}
-                                            onPress={(tableName) => {
-                                                // Mark as internal navigation to prevent URL sync
-                                                isInternalNavigationRef.current = true;
-                                                // Update local state immediately (no re-render of sidebar)
-                                                setCurrentTableName(tableName);
-                                                // Update URL directly without triggering navigation
-                                                if (typeof window !== 'undefined') {
-                                                    const newPath = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName)}`;
-                                                    window.history.replaceState({}, '', newPath);
-                                                } else {
-                                                    // Fallback for native - use router but mark as internal
-                                                    const newPath = `/db-browser/${encodeURIComponent(dbName!)}/${encodeURIComponent(tableName)}`;
-                                                    router.replace(newPath);
-                                                }
-                                                // Table data will be loaded automatically by the hook when tableName changes
-                                            }}
-                                        />
-                                    );
-                                });
-                            }, [tables, tableRowCounts, currentTableName, dbName])}
-                        </ScrollView>
-                    </View>
-                )}
-
-                {/* Main content */}
-                <View style={styles.mainContent}>
-                    <TableViewer
-                        columns={tableData.columns}
-                        rows={tableData.rows}
-                        totalRowCount={tableData.totalRowCount}
-                        loading={tableData.loading}
-                        error={tableData.error}
+            {/* Results */}
+            {queryResults && (() => {
+                // Check if current query differs from the query that produced these results
+                const currentQuery = typeof queryText === 'string' ? queryText.trim() : String(queryText || '').trim();
+                const resultsQuery = queryForCurrentResultsRef.current.trim();
+                const isStale = currentQuery !== resultsQuery;
+                const opacity = isStale ? 0.5 : 1.0;
+                
+                return (
+                    <View style={[styles.resultsContainer, { opacity }]}>
+                        <TableViewer
+                        columns={queryResults.columns}
+                        rows={queryResults.rows}
+                        totalRowCount={queryResults.totalRowCount}
+                        loading={queryLoading}
+                        error={null}
                         page={page}
                         pageSize={pageSize}
-                        onPageChange={handlePageChange}
+                        onPageChange={(newPage) => {
+                            setPage(newPage);
+                            // Regenerate query with new page
+                            if (tableName) {
+                                const newQuery = generateDefaultQuery(tableName, newPage, pageSize);
+                                setQueryTextSafe(newQuery);
+                            }
+                        }}
                         sortBy={sortBy}
                         sortOrder={sortOrder}
                         onSort={handleSort}
                         sortDisabled={isPaginated}
-                        onSortExternal={isPaginated ? handleSortExternal : undefined}
                         filterText={filterText}
                         onFilterChange={handleFilterChange}
                         filterDisabled={isPaginated}
-                        onFilterExternal={isPaginated ? handleFilterExternal : undefined}
                         visibleColumns={visibleColumns}
                         onToggleColumnVisibility={toggleColumnVisibility}
                         columnOrder={columnOrder}
@@ -588,10 +937,10 @@ export default function XpDeebyTableView() {
                         columnWidths={columnWidths}
                         onColumnWidthsChange={handleColumnWidthsChange}
                     />
-                </View>
-            </View>
-
-        </SafeAreaView>
+                    </View>
+                );
+            })()}
+        </DatabaseBrowserLayout>
     );
 }
 
@@ -603,6 +952,7 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderBottomWidth: 1,
@@ -849,95 +1199,8 @@ const styles = StyleSheet.create({
         color: '#999',
         textAlign: 'center',
     },
-    content: {
+    resultsContainer: {
         flex: 1,
-        flexDirection: 'row',
-    },
-    sidebar: {
-        width: 200,
-        borderRightWidth: 1,
-        borderRightColor: '#e0e0e0',
-        backgroundColor: '#fafafa',
-    },
-    sidebarHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        backgroundColor: '#fff',
-    },
-    sidebarTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-        flex: 1,
-    },
-    sidebarToggleButton: {
-        width: 28,
-        height: 28,
-        borderRadius: 4,
-        backgroundColor: '#667eea',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    sidebarToggleText: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    tableList: {
-        flex: 1,
-    },
-    tableItem: {
-        padding: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    tableItemEmpty: {
-        opacity: 0.5,
-        backgroundColor: '#f9f9f9',
-    },
-    tableItemSelected: {
-        backgroundColor: '#667eea',
-        opacity: 1,
-    },
-    tableItemContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        width: '100%',
-    },
-    tableItemText: {
-        fontSize: 14,
-        color: '#333',
-        flex: 1,
-    },
-    tableItemTextEmpty: {
-        color: '#999',
-        fontStyle: 'italic',
-    },
-    tableItemTextSelected: {
-        color: '#fff',
-        fontWeight: '500',
-        fontStyle: 'normal',
-    },
-    tableItemCount: {
-        fontSize: 12,
-        color: '#666',
-        marginLeft: 8,
-    },
-    tableItemCountEmpty: {
-        color: '#bbb',
-    },
-    tableItemCountSelected: {
-        color: '#fff',
-        opacity: 0.8,
-    },
-    mainContent: {
-        flex: 1,
-        backgroundColor: '#fff',
     },
     modalOverlay: {
         flex: 1,

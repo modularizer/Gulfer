@@ -1477,6 +1477,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#667eea',
     borderBottomWidth: 2,
     borderBottomColor: '#5568d3',
+    maxHeight: 36,
   },
   tableHeaderCell: {
     padding: 12,
@@ -1484,6 +1485,7 @@ const styles = StyleSheet.create({
     borderRightColor: '#5568d3',
     justifyContent: 'center',
     position: 'relative',
+    maxHeight: 36,
   },
   headerCellContent: {
     flexDirection: 'row',
@@ -1513,12 +1515,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    maxHeight: 36,
   },
   tableCell: {
     padding: 12,
     borderRightWidth: 1,
     borderRightColor: '#f0f0f0',
     justifyContent: 'center',
+    maxHeight: 36,
   },
   tableCellText: {
     fontSize: 12,

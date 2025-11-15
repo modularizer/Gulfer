@@ -23,6 +23,12 @@ export default function RootLayout() {
           headerShown: false 
         }} 
       />
+        <Stack.Screen
+            name="db-browser/[db]/query"
+            options={{
+                headerShown: false
+            }}
+        />
       <Stack.Screen 
         name="db-browser/[db]/[table]" 
         options={{ 
