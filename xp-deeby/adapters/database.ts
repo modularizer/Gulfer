@@ -8,7 +8,6 @@
 import {AdapterType, RegistryEntry, AdapterCapabilities, adapterCapabilities} from './types';
 import { sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
-import {getAdapter} from "./factory";
 
 /**
  * Table type - represents any Drizzle table
@@ -244,9 +243,6 @@ export abstract class Database implements DrizzleDatabase {
         this.adapterType = adapterType;
     }
 
-    static async getAdapter(type?: AdapterType): Promise<Database> {
-        return await getAdapter(type);
-    }
 
 
     /**

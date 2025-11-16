@@ -6,7 +6,7 @@
  */
 
 import {defaultAdapterByHostPlatform, AdapterType, PlatformName, adapterCapabilities, type AdapterCapabilities} from "./types";
-import {Database, type DrizzleDatabase as Database} from "./database";
+import {Database} from "./database";
 import {getRegistryEntries, registerDatabaseEntry} from "./registry-storage";
 import {bindSchema} from "./schema";
 
