@@ -26,7 +26,7 @@ async function getCreateScript(db: Database): Promise<string> {
   // Get the current adapter to determine dialect
   const adapter = await getAdapter();
   const capabilities = adapter.getCapabilities();
-  const dialect = capabilities.databaseType;
+  const dialect = capabilities.dialect === 'postgres' ? 'postgres' : 'sqlite';
   
   // Map database type to script dialect
   if (dialect === 'postgres' && createScripts.postgres) {
@@ -53,7 +53,7 @@ export async function setupDatabase(db: Database): Promise<void> {
   // Get dialect for PostgreSQL-specific handling
   const adapter = await getAdapter();
   const capabilities = adapter.getCapabilities();
-  const dialect = capabilities.databaseType;
+  const dialect = capabilities.dialect === 'postgres' ? 'postgres' : 'sqlite';
   
   if (createSQL.includes('-- Run npm run db:generate')) {
     throw new Error(
@@ -145,7 +145,7 @@ export async function setupDatabase(db: Database): Promise<void> {
     console.log('[setupDatabase] Verifying tables were created...');
     const adapter = await getAdapter();
     if (adapter.getTableNames) {
-      const tableNames = await adapter.getTableNames(db);
+      const tableNames = await adapter.getTableNames();
       console.log(`[setupDatabase] Found ${tableNames.length} tables after CREATE:`, tableNames);
     }
     

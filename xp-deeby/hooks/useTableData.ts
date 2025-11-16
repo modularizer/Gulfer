@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { sql } from 'drizzle-orm';
-import {getAdapterByType, getRegistryEntries} from "../adapters";
+import {getAdapter, getRegistryEntries} from "../adapters";
 
 export interface TableColumn {
   name: string;
@@ -87,20 +87,14 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       }
       
       // Connect to database
-      const adapter = await getAdapterByType(entry.adapterType);
-      if (!adapter.getDatabaseByName) {
-        setError(`Adapter ${entry.adapterType} does not support getDatabaseByName`);
-        setLoading(false);
-        return;
-      }
-      
-      const database = await adapter.getDatabaseByName(dbName);
+      const adapter = await getAdapter(entry.adapterType);
+      await adapter.openFromRegistry(entry);
       
       // Get column information using adapter method (dialect-agnostic)
       let tableColumns: TableColumn[] = [];
       if (adapter.getTableColumns) {
         try {
-          const columnInfo = await adapter.getTableColumns(database, currentTable);
+          const columnInfo = await adapter.getTableColumns(currentTable);
           tableColumns = columnInfo.map((col) => ({
             name: col.name,
             dataType: col.dataType,
@@ -115,14 +109,8 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       // This will be handled after we fetch the rows
       
       // Get total row count - no filtering here, that's done client-side
-      let countQuery = `SELECT COUNT(*) as count FROM "${currentTable}"`;
-      
-      console.log(`[useTableData] Count query for ${currentTable}:`, countQuery);
-      const countResult = await database.execute(sql.raw(countQuery)) as any[];
-      console.log(`[useTableData] Count result for ${currentTable}:`, countResult);
-      const totalCount = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
-      const parsedTotalCount = typeof totalCount === 'number' ? totalCount : parseInt(String(totalCount), 10);
-      console.log(`[useTableData] Parsed totalCount for ${currentTable}:`, parsedTotalCount, 'from raw:', countResult[0]);
+      const totalCount = await adapter.getRowCount(currentTable);
+      console.log(`[useTableData] Total count for ${currentTable}:`, totalCount);
       
       // Build query - no client-side filtering or sorting here
       // Those are handled in the TableViewer component
@@ -131,14 +119,14 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       // Only apply pagination if we're actually paginating
       // When not paginated (totalRowCount <= pageSize and page === 1), load all rows
       // for client-side filtering/sorting. Otherwise, paginate.
-      const isPaginated = parsedTotalCount > pageSize || page > 1;
+      const isPaginated = totalCount > pageSize || page > 1;
       if (isPaginated) {
         const offset = (page - 1) * pageSize;
         query += ` LIMIT ${pageSize} OFFSET ${offset}`;
       }
       
       console.log(`[useTableData] Data query for ${currentTable}:`, query);
-      const queryRows = await database.execute(sql.raw(query)) as any[];
+      const queryRows = await adapter.db.execute(sql.raw(query)) as any[];
       console.log(`[useTableData] Data query result for ${currentTable}:`, queryRows.length, 'rows');
       console.log(`[useTableData] First row sample:`, queryRows[0]);
       

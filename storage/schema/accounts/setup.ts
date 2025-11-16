@@ -14,7 +14,7 @@ import { runMigrations } from './setup-migrations';
 async function getCreateScript(db: Database): Promise<string> {
   const adapter = await getAdapter();
   const capabilities = adapter.getCapabilities();
-  const dialect = capabilities.databaseType;
+  const dialect = capabilities.dialect === 'postgres' ? 'postgres' : 'sqlite';
   
   if (dialect === 'postgres' && createScripts.postgres) {
     return createScripts.postgres.sql;

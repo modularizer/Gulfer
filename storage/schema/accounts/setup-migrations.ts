@@ -17,7 +17,7 @@ export async function runMigrations(db: Database): Promise<void> {
   // Get adapter to determine dialect
   const adapter = await getAdapter();
   const capabilities = adapter.getCapabilities();
-  const dialect = capabilities.databaseType;
+  const dialect = capabilities.dialect === 'postgres' ? 'postgres' : 'sqlite';
   
   // Create migrations tracking table (module-specific)
   // Use dialect-appropriate syntax

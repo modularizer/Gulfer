@@ -10,7 +10,7 @@ import { eq, like, and } from 'drizzle-orm';
 import * as schema from '../tables';
 import type { ScoreFormat } from '../tables';
 import { upsertEntity } from '../query-builders';
-import { generateUUID } from '@utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/utils/uuid';
 
 export class ScoreFormatService extends BaseTableService<ScoreFormat> {
   protected getTableName(): string {

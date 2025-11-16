@@ -13,7 +13,7 @@ import type { SettingOption, SettingOptionInsert, AccountSettingOption, AccountS
 import { upsertEntity } from '../../generic-sports-data/query-builders';
 import { queryAccountSettings, upsertAccountSettings } from '../query-builders/account-settings';
 import type { AccountWithSettings, SettingOptionWithAccountValues } from '../query-builders/account-settings';
-import { generateUUID } from '@utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/utils/uuid';
 
 import { z } from 'zod';
 

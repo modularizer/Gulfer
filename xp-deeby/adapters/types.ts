@@ -1,124 +1,109 @@
-/**
- * Adapter Types and Interface
- * 
- * Defines the contract that all database adapters must implement.
- * This allows the codebase to work with adapters before knowing which one will be used.
- */
+export enum PlatformName {
+    WEB = 'web',
+    MOBILE = 'mobile',
+    NODE = 'node'
+}
 
-import type { SQL } from 'drizzle-orm';
+export enum Dialect {
+    POSTGRES = 'postgres',
+    SQLITE = 'sqlite',
+}
 
-/**
- * Base interface for database operations
- * All adapters must implement this interface
- */
-export interface DatabaseAdapter {
-  /**
-   * Execute a raw SQL query
-   */
-  execute(query: SQL): Promise<any>;
-  
-  /**
-   * Start a select query builder
-   */
-  select(): any;
-  
-  /**
-   * Start an insert query builder
-   */
-  insert(table: any): any;
-  
-  /**
-   * Start an update query builder
-   */
-  update(table: any): any;
-  
-  /**
-   * Start a delete query builder
-   */
-  delete(table: any): any;
+export enum AdapterType {
+    PGLITE = 'pglite',
+    SQLITE_MOBILE = 'sqlite-mobile',
+    POSTGRES = 'postgres'
 }
 
 /**
- * Adapter capabilities
- * Different adapters may support different features
+ * Registry entry - JSON-serializable description of a database connection
  */
-export interface AdapterCapabilities {
-  /**
-   * Whether this adapter supports named databases
-   */
-  supportsNamedDatabases: boolean;
-  
-  /**
-   * Whether this adapter supports getting table names
-   */
-  supportsGetTableNames: boolean;
-  
-  /**
-   * Database type identifier (e.g., 'sqlite', 'postgres')
-   */
-  databaseType: string;
-  
-  /**
-   * Platform identifier
-   */
-  platform: string; // Note: This is kept as string for backward compatibility, but should match PlatformName enum values
-}
-
-/**
- * Adapter interface with capabilities
- * 
- * Note: The Adapter itself does NOT have execute/select/insert/update/delete methods.
- * These methods are only available on DatabaseAdapter instances returned by getDatabaseByName().
- */
-export interface Adapter {
-  /**
-   * Get adapter capabilities
-   */
-  getCapabilities(): AdapterCapabilities;
-  
-  /**
-   * Get or create a database by name
-   * Only available if supportsNamedDatabases is true
-   * Returns a DatabaseAdapter instance that has execute/select/insert/update/delete methods
-   */
-  getDatabaseByName?(name: string): Promise<DatabaseAdapter>;
-  
-  /**
-   * Get all table names in the database
-   * Only available if supportsGetTableNames is true
-   */
-  getTableNames?(db: DatabaseAdapter): Promise<string[]>;
-  
-  /**
-   * Get all view names in the database
-   * Optional - only available if the database supports views
-   */
-  getViewNames?(db: DatabaseAdapter): Promise<string[]>;
-  
-  /**
-   * Get all materialized view names in the database
-   * Optional - only available if the database supports materialized views (e.g., PostgreSQL)
-   */
-  getMaterializedViewNames?(db: DatabaseAdapter): Promise<string[]>;
-  
-  /**
-   * Get column information for a table
-   * Returns column names and data types in a dialect-agnostic format
-   * 
-   * @param db - The database instance
-   * @param tableName - The name of the table
-   * @returns Array of column information objects
-   */
-  getTableColumns?(db: DatabaseAdapter, tableName: string): Promise<Array<{
+export interface RegistryEntry {
     name: string;
-    dataType: string;
-    isNullable: boolean;
-  }>>;
+    adapterType: AdapterType;
+    connectionInfo?: Record<string, any>; // Adapter-specific connection info
+    metadata?: Record<string, any>; // Additional metadata
 }
 
-/**
- * Generic Database type
- * This is the type that will be used throughout the codebase
- */
-export type Database = DatabaseAdapter;
+
+export const defaultAdapterByHostPlatform: Record<PlatformName, AdapterType> = {
+    [PlatformName.WEB]: AdapterType.PGLITE,
+    [PlatformName.MOBILE]: AdapterType.SQLITE_MOBILE,
+    [PlatformName.NODE]: AdapterType.POSTGRES
+}
+
+
+export interface AdapterCapabilities{
+    adapterType: AdapterType;
+    dialect: Dialect;
+    clientPlatforms: {
+        [PlatformName.WEB]: boolean;
+        [PlatformName.MOBILE]: boolean;
+        [PlatformName.NODE]: boolean;
+    },
+    hostPlatforms: {
+        [PlatformName.WEB]: boolean;
+        [PlatformName.MOBILE]: boolean;
+        [PlatformName.NODE]: boolean;
+    }
+}
+
+
+export const adapterCapabilities: Record<AdapterType, AdapterCapabilities> = {
+    [AdapterType.PGLITE]: {
+        adapterType: AdapterType.PGLITE,
+        dialect: Dialect.POSTGRES,
+        clientPlatforms: {
+            [PlatformName.WEB]: true,
+            [PlatformName.MOBILE]: false,
+            [PlatformName.NODE]: false,
+        },
+        hostPlatforms: {
+            [PlatformName.WEB]: true,
+            [PlatformName.MOBILE]: false,
+            [PlatformName.NODE]: false,
+        }
+    },
+    [AdapterType.POSTGRES]: {
+        adapterType: AdapterType.POSTGRES,
+        dialect: Dialect.POSTGRES,
+        clientPlatforms: {
+            [PlatformName.WEB]: true,
+            [PlatformName.MOBILE]: true,
+            [PlatformName.NODE]: true,
+        },
+        hostPlatforms: {
+            [PlatformName.WEB]: false,
+            [PlatformName.MOBILE]: false,
+            [PlatformName.NODE]: true,
+        }
+    },
+    [AdapterType.SQLITE_MOBILE]: {
+        adapterType: AdapterType.SQLITE_MOBILE,
+        dialect: Dialect.SQLITE,
+        clientPlatforms: {
+            [PlatformName.WEB]: false,
+            [PlatformName.MOBILE]: true,
+            [PlatformName.NODE]: false,
+        },
+        hostPlatforms: {
+            [PlatformName.WEB]: false,
+            [PlatformName.MOBILE]: true,
+            [PlatformName.NODE]: false,
+        }
+    },
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 

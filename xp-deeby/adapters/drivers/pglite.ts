@@ -18,22 +18,139 @@
 
 // PGlite uses import.meta which Metro doesn't support
 // Babel plugin will transform import.meta to work with Metro
-import type { Adapter, DatabaseAdapter, AdapterCapabilities } from '../types';
-import { PlatformName, AdapterType } from '../factory';
-import { registerDatabaseName } from '../registry-storage';
-import { PgDialect } from 'drizzle-orm/pg-core/dialect';
-import { PgDatabase } from 'drizzle-orm/pg-core/db';
-import { PgSession, PgPreparedQuery } from 'drizzle-orm/pg-core/session';
+import {AdapterCapabilities, AdapterType, Dialect, RegistryEntry, PlatformName, adapterCapabilities} from '../types';
+import {Adapter, DrizzleDatabase} from '../adapter';
+import {PgDialect} from 'drizzle-orm/pg-core/dialect';
+import {PgDatabase} from 'drizzle-orm/pg-core/db';
+import {PgPreparedQuery, PgSession} from 'drizzle-orm/pg-core/session';
+import type { SchemaBuilder } from '../schema-builder';
+import { 
+  pgTable as pgTableFn, 
+  varchar, 
+  integer, 
+  unique, 
+  real, 
+  index, 
+  text,
+  jsonb,
+  boolean as bool,
+  timestamp
+} from 'drizzle-orm/pg-core';
 
-// Try to import PGlite at the top level - Babel will transform import.meta
-// If this fails, we'll fall back to dynamic import
-let PGliteClass: any;
-try {
-  // Use require for better Metro compatibility, but it might not work with ES modules
-  // We'll try dynamic import in the function instead
-} catch {
-  // Ignore - will use dynamic import
+// UUID helpers for convenience (using varchar since PostgreSQL doesn't have a native UUID type in drizzle)
+const uuid = (name: string) => varchar(name);
+const uuidDefault = (name: string) => uuid(name);
+const uuidPK = (name: string) => uuidDefault(name).primaryKey();
+
+// ============================================================================
+// Early PGlite Initialization
+// ============================================================================
+// Pre-load PGlite module, fsBundle, and wasmModule early to avoid delays
+// and MIME type issues when opening databases
+
+let pgliteModuleCache: any = null;
+let fsBundleCache: Response | null | undefined = undefined;
+let wasmModuleCache: WebAssembly.Module | null | undefined = undefined;
+let initializationPromise: Promise<void> | null = null;
+
+/**
+ * Initialize PGlite early - loads module, fsBundle, and wasmModule
+ * This should be called as early as possible, ideally on module import
+ */
+export async function initializePglite(): Promise<void> {
+  // If already initializing or initialized, return the existing promise
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+
+  initializationPromise = (async () => {
+    try {
+      // 1. Import PGlite module
+      if (!pgliteModuleCache) {
+        console.log('[pglite] Early initialization: Importing @electric-sql/pglite...');
+        pgliteModuleCache = await import('@electric-sql/pglite');
+        console.log('[pglite] PGlite module imported, keys:', Object.keys(pgliteModuleCache || {}));
+      }
+
+      // 2. Pre-load fsBundle as Response object
+      if (fsBundleCache === undefined) {
+        try {
+          const response = await fetch('/pglite/pglite.data');
+          if (response.ok) {
+            fsBundleCache = response;
+            console.log('[pglite] Early initialization: fsBundle loaded');
+          } else {
+            fsBundleCache = null; // Mark as attempted but failed
+            console.warn('[pglite] Early initialization: Could not load fsBundle (status:', response.status, ')');
+          }
+        } catch (error) {
+          fsBundleCache = null; // Mark as attempted but failed
+          console.warn('[pglite] Early initialization: Error loading fsBundle:', error);
+        }
+      }
+
+      // 3. Pre-load and compile WASM module
+      if (wasmModuleCache === undefined) {
+        try {
+          const wasmResponse = await fetch('/pglite/pglite.wasm');
+          if (wasmResponse.ok) {
+            const wasmArrayBuffer = await wasmResponse.arrayBuffer();
+            wasmModuleCache = await WebAssembly.compile(wasmArrayBuffer);
+            console.log('[pglite] Early initialization: WASM module compiled');
+          } else {
+            wasmModuleCache = null; // Mark as attempted but failed
+            console.warn('[pglite] Early initialization: Could not load WASM (status:', wasmResponse.status, ')');
+          }
+        } catch (error) {
+          wasmModuleCache = null; // Mark as attempted but failed
+          console.warn('[pglite] Early initialization: Error loading WASM:', error);
+        }
+      }
+
+      console.log('[pglite] Early initialization complete');
+    } catch (error) {
+      console.error('[pglite] Early initialization failed:', error);
+      throw error;
+    }
+  })();
+
+  return initializationPromise;
 }
+
+// Auto-initialize on module import (non-blocking)
+if (typeof window !== 'undefined') {
+  // Only initialize in browser environment
+  initializePglite().catch((error) => {
+    console.warn('[pglite] Auto-initialization failed (will retry on first use):', error);
+  });
+}
+
+/**
+ * PostgreSQL Schema Builder
+ * Exports schema functions for PostgreSQL dialect
+ */
+export const schema: SchemaBuilder = {
+    table: pgTableFn,
+    text,
+    varchar,
+    integer,
+    real,
+    timestamp,
+    jsonb,
+    bool,
+    uuid,
+    uuidDefault,
+    uuidPK,
+    unique,
+    index,
+};
+
+
+
+
+
+
+
 
 /**
  * SQLite PGlite Adapter Implementation
@@ -41,94 +158,80 @@ try {
  * Note: This uses PostgreSQL, not SQLite, but provides the same interface.
  * Your schema should work with PostgreSQL (which is more feature-rich than SQLite).
  */
-export class PgliteAdapter implements Adapter {
+export class PgliteAdapter extends Adapter {
   // Cache database connections to avoid re-importing PGlite and creating new instances
-  private connectionCache = new Map<string, DatabaseAdapter>();
-  
-  // Cache PGlite module to avoid re-importing
-  private pgliteModule: any = null;
+  private connectionCache = new Map<string, DrizzleDatabase>();
 
-  getCapabilities(): AdapterCapabilities {
+  constructor() {
+    super(AdapterType.PGLITE);
+  }
+
+  /**
+   * Get registry entry for a database
+   */
+  async getRegistryEntry(name: string): Promise<RegistryEntry> {
     return {
-      supportsNamedDatabases: true,
-      supportsGetTableNames: true,
-      databaseType: 'postgres', // PGlite is PostgreSQL
-      platform: PlatformName.WEB,
+      name,
+      adapterType: AdapterType.PGLITE,
+      connectionInfo: {
+        // PGlite uses IndexedDB, no additional connection info needed
+      }
     };
   }
 
   /**
-   * Get or create a database by name
-   * 
-   * PGlite persists to IndexedDB automatically using the format: `idb://{name}`
-   * 
-   * @param name - The logical database name (e.g., "gulfer-test")
-   *               PGlite stores this in IndexedDB automatically
-   * @returns A Drizzle database instance that implements DatabaseAdapter
+   * Open a database connection from a registry entry
+   * Sets this.db and returns this adapter instance
    */
-  async getDatabaseByName(name: string): Promise<DatabaseAdapter> {
+  async openFromRegistry(entry: RegistryEntry): Promise<this> {
+    if (entry.adapterType !== AdapterType.PGLITE) {
+      throw new Error(`PgliteAdapter cannot open ${entry.adapterType} database`);
+    }
+
+    const name = entry.name;
+    
     // Return cached connection if available
     if (this.connectionCache.has(name)) {
-      return this.connectionCache.get(name)!;
-    }
-    // Register the database name in the registry BEFORE creating the database
-    // This ensures it's registered even if database creation fails
-    if (typeof window !== 'undefined') {
-      try {
-        await registerDatabaseName(name, AdapterType.PGLITE);
-        console.log(`[pglite] ✅ Registered database name in registry: ${name} (pglite)`);
-      } catch (error) {
-        // Log error but don't fail - registry is for convenience, not required
-        console.error(`[pglite] ❌ Could not register database name in registry:`, error);
-        // Re-throw if it's a critical error, but for now just warn
-      }
+      this.db = this.connectionCache.get(name)!;
+      return this;
     }
 
     try {
-      // Import PGlite module (cached after first import)
-      if (!this.pgliteModule) {
-        console.log('[pglite] Importing @electric-sql/pglite...');
-        
-        // Use ES module import only
-        this.pgliteModule = await import('@electric-sql/pglite');
-        
-        console.log('[pglite] PGlite module imported, keys:', Object.keys(this.pgliteModule || {}));
-      }
+      // Ensure PGlite is initialized (uses cached resources if available)
+      await initializePglite();
       
-      // Check what we got from the import
-      if (!this.pgliteModule) {
+      // Use cached module
+      const pgliteModule = pgliteModuleCache;
+      if (!pgliteModule) {
         throw new Error('Failed to import @electric-sql/pglite: module is undefined');
       }
       
       // Extract PGlite class from module
-      let PGlite: any = this.pgliteModule.PGlite;
+      let PGlite: any = pgliteModule.PGlite;
       
-      // If PGlite is in the keys but the value is undefined, Metro might have transformed it
-      if (!PGlite && 'PGlite' in this.pgliteModule) {
+      if (!PGlite && 'PGlite' in pgliteModule) {
         console.warn('[pglite] PGlite key exists but value is undefined/null');
-        // Try accessing via bracket notation in case it's a getter
         try {
-          PGlite = this.pgliteModule['PGlite'];
+          PGlite = pgliteModule['PGlite'];
         } catch (e) {
           console.error('[pglite] Error accessing PGlite:', e);
         }
       }
       
-      // If still not found, check if default has it (Metro CommonJS transformation)
-      if (!PGlite && this.pgliteModule.default) {
-        if (typeof this.pgliteModule.default === 'object') {
-          PGlite = this.pgliteModule.default.PGlite;
-        } else if (typeof this.pgliteModule.default === 'function') {
-          PGlite = this.pgliteModule.default;
+      if (!PGlite && pgliteModule.default) {
+        if (typeof pgliteModule.default === 'object') {
+          PGlite = pgliteModule.default.PGlite;
+        } else if (typeof pgliteModule.default === 'function') {
+          PGlite = pgliteModule.default;
         }
       }
       
       if (!PGlite) {
-        console.error('[pglite] PGlite module contents:', Object.keys(this.pgliteModule));
-        throw new Error(`Failed to find PGlite in @electric-sql/pglite module. Available exports: ${Object.keys(this.pgliteModule).join(', ')}`);
+        console.error('[pglite] PGlite module contents:', Object.keys(pgliteModule));
+        throw new Error(`Failed to find PGlite in @electric-sql/pglite module. Available exports: ${Object.keys(pgliteModule).join(', ')}`);
       }
       
-      // Drizzle classes are already imported at top level, no need to cache
+      // Drizzle classes are already imported at top level
       
       // Create a minimal prepared query wrapper that uses PGlite's query method
       class PglitePreparedQuery extends PgPreparedQuery {
@@ -150,191 +253,73 @@ export class PgliteAdapter implements Adapter {
             throw new Error('Invalid query object from getQuery()');
           }
           
-          const sqlString = queryObj.sql;
+          const sql = queryObj.sql;
           const params = queryObj.params || [];
           
-          const result = await this.client.query(sqlString, params);
-          const rows = result.rows || [];
+          // Use PGlite's query method directly
+          const result = await this.client.query(sql, params);
           
-          // Apply Drizzle's column mapping if fields are provided
-          // Fields contain the schema definition with proper column name mapping
+          // Map result to Drizzle format
           if (this.fields && this.fields.length > 0) {
-            // Log field structure for debugging
-            if (rows.length > 0) {
-              console.log('[PgliteAdapter] Mapping fields. First field sample:', this.fields[0]);
-              console.log('[PgliteAdapter] First row before mapping:', rows[0]);
-            }
-            
-            return rows.map((row: any) => {
-              const mapped: any = {};
-              
-              // Map each field from database column name to TypeScript property name
+            const mapped = result.rows.map((row: any) => {
+              const mappedRow: any = {};
               for (const field of this.fields) {
-                // Field structure: {path: Array(1), field: SQLiteText}
-                // field.field is the SQLite column definition (SQLiteText, SQLiteReal, etc.)
-                // field.field.name is the database column name (e.g., 'venue_id')
-                // The TypeScript property name comes from the path or field.name
-                let dbColumnName: string | undefined;
-                let tsPropertyName: string | undefined;
-                
-                // Get database column name from SQLite column definition
-                // SQLite column types (SQLiteText, SQLiteReal, etc.) have a 'name' property
-                if (field.field?.name) {
-                  dbColumnName = field.field.name;
-                } else if (field.sourceColumn?.name) {
-                  dbColumnName = field.sourceColumn.name;
-                } else if (field.column?.name) {
-                  dbColumnName = field.column.name;
-                }
-                
-                // Get TypeScript property name from path or field.name
-                // path is typically ['tableName', 'propertyName'] or ['propertyName']
-                if (field.path && Array.isArray(field.path) && field.path.length > 0) {
-                  // Last element of path is usually the property name
-                  tsPropertyName = field.path[field.path.length - 1];
-                } else if (field.name) {
-                  tsPropertyName = field.name;
-                } else if (field.field?.name) {
-                  // Fallback: use column name as property name
-                  tsPropertyName = field.field.name;
-                }
-                
-                if (!dbColumnName || !tsPropertyName) {
-                  console.warn('[PgliteAdapter] Cannot determine mapping for field:', JSON.stringify(field, null, 2));
-                  continue;
-                }
-                
-                // Map from database column name (snake_case) to TypeScript property name (camelCase)
-                if (row[dbColumnName] !== undefined) {
-                  mapped[tsPropertyName] = row[dbColumnName];
-                } else if (row[tsPropertyName] !== undefined) {
-                  // Already mapped or same name
-                  mapped[tsPropertyName] = row[tsPropertyName];
+                const fieldName = field.name;
+                if (fieldName in row) {
+                  mappedRow[fieldName] = row[fieldName];
                 }
               }
-              
-              // For joined tables or computed fields, preserve original keys
-              // These might be namespaced (e.g., row.venues, row.events) or flat
-              for (const key in row) {
-                if (!(key in mapped)) {
-                  mapped[key] = row[key];
-                }
-              }
-              
-              if (rows.length > 0 && rows.indexOf(row) === 0) {
-                console.log('[PgliteAdapter] First row after mapping:', mapped);
-              }
-              
-              return mapped;
+              return mappedRow;
             });
+            
+            if (this.customResultMapper) {
+              return this.customResultMapper(mapped);
+            }
+            return mapped;
           }
           
-          // If no fields provided, return as-is (for raw queries)
-          return rows;
+          return result.rows;
         }
       }
       
-      // Create a minimal session wrapper
       class PgliteSession extends PgSession {
         private client: any;
         private dialect: any;
-        constructor(client: any, dialect: any, schema: any, options: any) {
-          super(dialect);
+        
+        constructor(client: any, dialect: any) {
+          super(dialect, undefined, undefined);
           this.client = client;
           this.dialect = dialect;
         }
         
-        prepareQuery(query: any, fields: any, name: any, isResponseInArrayMode: any, customResultMapper: any, queryMetadata: any, cacheConfig: any): any {
+        prepareQuery(query: any, fields: any, name: any, isResponseInArrayMode: any, customResultMapper: any, queryMetadata: any, cacheConfig: any): PglitePreparedQuery {
           return new PglitePreparedQuery(this.client, this.dialect, query, fields, name, isResponseInArrayMode, customResultMapper, queryMetadata, cacheConfig);
         }
         
-        async transaction(transactionFn: any, config: any): Promise<any> {
+        async transaction<T>(callback: (tx: any) => Promise<T>): Promise<T> {
           // PGlite doesn't support transactions in the same way, so just execute the function
-          return await transactionFn(this as any);
+          return await callback(this);
         }
       }
       
-      // Create drizzle function that manually constructs the database
-      const drizzle = (client: any, config: any = {}) => {
-        const dialect = new PgDialect({ casing: config.casing });
-        const session = new PgliteSession(client, dialect, undefined, {
-          logger: config.logger,
-          cache: config.cache,
-        });
-        const db = new PgDatabase(dialect, session, undefined) as any;
-        db.$client = client;
-        return db;
-      };
-
-      // PGlite uses IndexedDB for persistence
-      // Format: 'idb://database-name' stores in IndexedDB
-      // PGlite automatically handles persistence - no manual save needed!
-      // We need to provide the data file from the public directory
-      // since Metro bundling interferes with loading it from node_modules
-      // PGlite expects the file to be exactly 4939155 bytes
-      let fsBundle: Blob | undefined;
-      try {
-        // Try to load the data file from public directory
-        const response = await fetch('/pglite/pglite.data');
-        if (response.ok) {
-          const arrayBuffer = await response.arrayBuffer();
-          console.log('[pglite] Loaded pglite.data from public directory:', arrayBuffer.byteLength, 'bytes');
-          
-          // Verify the size matches what PGlite expects
-          if (arrayBuffer.byteLength === 4939155) {
-            fsBundle = new Blob([arrayBuffer]);
-            console.log('[pglite] ✅ File size matches expected size');
-          } else {
-            console.warn(`[pglite] ⚠️ File size mismatch: got ${arrayBuffer.byteLength}, expected 4939155. PGlite will try to load it automatically.`);
-            fsBundle = undefined; // Let PGlite handle it
-          }
-        } else {
-          console.warn('[pglite] Could not load pglite.data from public directory (status:', response.status, '), PGlite will try to load it automatically');
-        }
-      } catch (error) {
-        console.warn('[pglite] Error loading pglite.data from public directory:', error);
-        // PGlite will try to load it automatically
-      }
-      
-      // Load WASM file from public directory to avoid MIME type issues
-      let wasmModule: WebAssembly.Module | undefined;
-      try {
-        const wasmResponse = await fetch('/pglite/pglite.wasm');
-        if (wasmResponse.ok) {
-          const wasmArrayBuffer = await wasmResponse.arrayBuffer();
-          console.log('[pglite] Loaded pglite.wasm from public directory:', wasmArrayBuffer.byteLength, 'bytes');
-          wasmModule = await WebAssembly.compile(wasmArrayBuffer);
-          console.log('[pglite] ✅ WASM module compiled successfully');
-        } else {
-          console.warn('[pglite] Could not load pglite.wasm from public directory (status:', wasmResponse.status, '), PGlite will try to load it automatically');
-        }
-      } catch (error) {
-        console.warn('[pglite] Error loading pglite.wasm from public directory:', error);
-        // PGlite will try to load it automatically
-      }
-      
+      // Use cached fsBundle and wasmModule (loaded during early initialization)
       const pglite = new PGlite(`idb://${name}`, {
-        // Auto-save is built-in - PGlite persists automatically
-        // Provide the data bundle if we loaded it successfully
-        ...(fsBundle ? { fsBundle } : {}),
-        // Provide the WASM module if we loaded it successfully
-        ...(wasmModule ? { wasmModule } : {}),
+        ...(fsBundleCache && fsBundleCache !== null ? { fsBundle: fsBundleCache } : {}),
+        ...(wasmModuleCache && wasmModuleCache !== null ? { wasmModule: wasmModuleCache } : {}),
       });
 
-      // Wait for PGlite to initialize
       await pglite.waitReady;
 
-      // Create Drizzle database instance using standard PGlite driver
-      // Don't pass logger option - let Drizzle use its default (which should work with CDN)
-      const db = drizzle(pglite);
+      const dialect = new PgDialect({ casing: 'default' });
+      const session = new PgliteSession(pglite, dialect);
+      const db = new PgDatabase(dialect, session, undefined) as any;
 
-      // Store PGlite instance reference for getTableNames
       (db as any)._pglite = pglite;
 
-      // Cache the connection
-      this.connectionCache.set(name, db as DatabaseAdapter);
+      this.connectionCache.set(name, db as DrizzleDatabase);
+      this.db = db as DrizzleDatabase;
 
-      return db as DatabaseAdapter;
+      return this;
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
@@ -349,53 +334,134 @@ export class PgliteAdapter implements Adapter {
     }
   }
 
-  /**
-   * Get all table names in the database
-   * 
-   * Queries PostgreSQL's information_schema to get all user tables.
-   * 
-   * @param db - The database instance (must be from this adapter)
-   * @returns Array of table names (excluding system tables and migration tables)
-   */
-  async getTableNames(db: DatabaseAdapter): Promise<string[]> {
+  async getTableNames(): Promise<string[]> {
     try {
-      const dbWithPglite = db as any;
+      const dbWithPglite = this.db as any;
       if (!dbWithPglite._pglite) {
-        return [];
+        throw new Error('Database instance does not have _pglite property');
       }
 
-      // Check all tables in all schemas
       const allTablesResult = await dbWithPglite._pglite.query(`
-        SELECT table_schema, table_name, table_type
+        SELECT table_name 
         FROM information_schema.tables 
-        WHERE table_type = 'BASE TABLE'
-        ORDER BY table_schema, table_name
+        WHERE table_schema = 'public' 
+        AND table_type = 'BASE TABLE'
+        ORDER BY table_name
       `);
-      
-      // Filter in JavaScript instead of SQL (PGLite WHERE clause might have issues)
-      if (allTablesResult.rows && Array.isArray(allTablesResult.rows)) {
-        const publicTables = allTablesResult.rows
-          .filter((row: any) => {
-            const schema = row.table_schema || row['table_schema'];
-            const tableName = row.table_name || row['table_name'];
-            const isPublic = schema === 'public';
-            const isNotSystemTable = tableName && !tableName.startsWith('__');
-            return isPublic && isNotSystemTable;
-          })
-          .map((row: any) => {
-            const tableName = row.table_name || row['table_name'] || '';
-            return tableName;
-          })
-          .filter(Boolean);
-        
-        return publicTables;
-      }
 
-      return [];
+      const allTables = allTablesResult.rows.map((row: any) => row.table_name);
+
+      // Filter out system tables and migration tables
+      return allTables.filter((table: string) => {
+        return !table.startsWith('__') && !table.startsWith('sqlite_');
+      });
     } catch (error) {
       console.error('[pglite.getTableNames] Error getting table names:', error);
-      throw error; // Re-throw so caller can see the error
+      return [];
     }
   }
-}
 
+
+  async getViewNames(): Promise<string[]> {
+    try {
+      const dbWithPglite = this.db as any;
+      if (!dbWithPglite._pglite) {
+        throw new Error('Database instance does not have _pglite property');
+      }
+
+      const result = await dbWithPglite._pglite.query(`
+        SELECT table_name 
+        FROM information_schema.views 
+        WHERE table_schema = 'public'
+        ORDER BY table_name
+      `);
+
+      return result.rows.map((row: any) => row.table_name);
+    } catch (error) {
+      console.error('[pglite.getViewNames] Error getting view names:', error);
+      return [];
+    }
+  }
+
+  async getMaterializedViewNames(): Promise<string[]> {
+    try {
+      const dbWithPglite = this.db as any;
+      if (!dbWithPglite._pglite) {
+        throw new Error('Database instance does not have _pglite property');
+      }
+
+      const result = await dbWithPglite._pglite.query(`
+        SELECT matviewname 
+        FROM pg_matviews 
+        WHERE schemaname = 'public'
+        ORDER BY matviewname
+      `);
+
+      return result.rows.map((row: any) => row.matviewname);
+    } catch (error) {
+      console.error('[pglite.getMaterializedViewNames] Error getting materialized view names:', error);
+      return [];
+    }
+  }
+
+  async getTableColumns(tableName: string): Promise<Array<{
+    name: string;
+    dataType: string;
+    isNullable: boolean;
+  }>> {
+    try {
+      const dbWithPglite = this.db as any;
+      if (!dbWithPglite._pglite) {
+        throw new Error('Database instance does not have _pglite property');
+      }
+
+      const result = await dbWithPglite._pglite.query(`
+        SELECT 
+          column_name as name,
+          data_type as "dataType",
+          is_nullable = 'YES' as "isNullable"
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1
+        ORDER BY ordinal_position
+      `, [tableName]);
+
+      return result.rows.map((row: any) => ({
+        name: row.name,
+        dataType: row.dataType || row.data_type || 'unknown',
+        isNullable: row.isNullable !== undefined ? row.isNullable : row.is_nullable === 'YES',
+      }));
+    } catch (error) {
+      console.error('[pglite.getTableColumns] Error getting table columns:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Delete a PGLite database
+   */
+  async deleteDatabase(entry: RegistryEntry): Promise<void> {
+    const indexedDB = typeof window !== 'undefined' ? window.indexedDB : null;
+    if (!indexedDB) {
+      throw new Error('IndexedDB is not available');
+    }
+
+    // PGlite stores databases as idb://{name}, which creates IndexedDB DBs at /pglite/{name}
+    const indexedDbName = `/pglite/${entry.name}`;
+    await new Promise<void>((resolve, reject) => {
+      const deleteRequest = indexedDB.deleteDatabase(indexedDbName);
+      deleteRequest.onsuccess = () => resolve();
+      deleteRequest.onerror = () => reject(deleteRequest.error);
+      deleteRequest.onblocked = () => {
+        // Database is blocked, wait a bit and try again
+        setTimeout(() => {
+          const retryRequest = indexedDB.deleteDatabase(indexedDbName);
+          retryRequest.onsuccess = () => resolve();
+          retryRequest.onerror = () => reject(retryRequest.error);
+        }, 100);
+      };
+    });
+
+    // Remove from connection cache
+    this.connectionCache.delete(entry.name);
+  }
+}

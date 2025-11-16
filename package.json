@@ -42,6 +42,7 @@
     "expo-sqlite": "^16.0.9",
     "expo-status-bar": "~1.12.1",
     "localforage": "^1.10.0",
+    "postgres": "^3.4.7",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-native": "0.74.5",

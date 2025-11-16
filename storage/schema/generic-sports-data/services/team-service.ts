@@ -19,7 +19,7 @@ import {
 import { eq, and, like } from 'drizzle-orm';
 import * as schema from '../tables';
 import type { Participant } from '../tables';
-import { generateUUID } from '@utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/utils/uuid';
 
 export class TeamService extends BaseService {
   /**

@@ -1,51 +1,116 @@
 // ============================================================================
 // Schema Definitions (Database-agnostic)
 // ============================================================================
-// These functions are abstracted and resolve to the appropriate dialect
-// implementation (SQLite or PostgreSQL) based on the adapter type.
+// These are generic schema functions that must be bound to a driver's schema.
 // 
-// By default, they use SQLite (for drizzle-kit compatibility).
-// To use PostgreSQL schemas, call setSchemaAdapterType(AdapterType.PGLITE) 
-// before defining your schemas.
+// Usage:
+// ```ts
+// import { bindSchema } from './adapters';
+// import { schema as postgresSchema } from './adapters/drivers/postgres';
+// bindSchema(postgresSchema);
+// 
+// // Now use schema functions
+// import { table, text, varchar } from './adapters';
+// ```
 export {
   table, text, varchar, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault,
-  setSchemaAdapterType
-} from './dialects/abstract';
+  bindSchema
+} from './schema';
 
-// ============================================================================
-// Adapter Types and Interface
-// ============================================================================
-export type { Database, DatabaseAdapter, Adapter, AdapterCapabilities } from './types';
+// Export schema builders from drivers
 
-// ============================================================================
-// Adapter Factory
-// ============================================================================
-export { getAdapter, setAdapter, createAdapter, createAdapterByType, getAdapterByType, AdapterType, PlatformName } from './factory';
+export type { SchemaBuilder } from './schema-builder';
+
+export {getAdapter, getCurrentAdapterType, detectPlatform} from './factory'
+
+export { Adapter } from './adapter';
+export type { RegistryEntry } from './types';
+export { AdapterType, PlatformName, Dialect } from './types';
+
+
 
 // ============================================================================
 // Adapter Implementations
 // ============================================================================
 // Note: Adapter classes are NOT exported directly to avoid loading
-// unnecessary dependencies. Use the factory functions instead:
-// - getAdapter() - auto-selects based on platform
-// - getAdapterByType(type) - explicitly select adapter type
-// - createAdapterByType(type) - create adapter without setting as current
+// unnecessary dependencies. Use the factory function:
+// - getAdapter(type?) - auto-selects based on platform, or use specific type
 //
 // If you need direct access to adapter classes, import them explicitly:
 // import { PgliteAdapter } from './drivers/pglite';
 
 // ============================================================================
-// Database Listing Functions
+// Database Registry
 // ============================================================================
-export { listDatabases, listDatabasesWeb } from './list-databases';
-export { registerDatabaseName, getRegistryEntries, type DatabaseRegistryEntry } from './registry-storage';
+export { registerDatabaseEntry, getRegistryEntries, saveRegistryEntries } from './registry-storage';
 
 // ============================================================================
-// Database Metadata Functions
+// Early Initialization
 // ============================================================================
-export { getDatabaseMetadata, type DatabaseMetadata } from './database-metadata';
+// Export initialization functions for early setup
+export { initializePglite } from './drivers/pglite';
+export { initializeStorage } from '../kv';
+
+/**
+ * Initialize adapters and registry early
+ * This sets up the appropriate adapter for the current platform and KV storage (registry)
+ * Should be called as early as possible, ideally on app startup
+ */
+export async function initializeAdapters(): Promise<void> {
+  // Initialize storage (registry) - needed for all platforms
+  await initializeStorage().catch(() => {
+    // Will retry on first use
+  });
+  
+  // Detect platform and initialize only the appropriate adapter
+  const platform = await detectPlatform();
+  
+  if (platform === PlatformName.WEB) {
+    // Web uses PGlite - initialize it
+    const { initializePglite } = await import('./drivers/pglite');
+    await initializePglite().catch(() => {
+      // Will retry on first use
+    });
+  }
+  // Mobile and Node adapters don't need early initialization
+}
+
+// Auto-initialize on module import (non-blocking)
+// This runs immediately when this module is imported
+// Only initializes the adapter for the current platform
+if (typeof window !== 'undefined') {
+  // Detect platform and initialize only the appropriate adapter
+  (async () => {
+    try {
+      const platform = await detectPlatform();
+      
+      // Initialize storage (registry) - needed for all platforms
+      await initializeStorage().catch(() => {
+        // Will retry on first use
+      });
+      
+      // Only initialize the adapter for the current platform
+      if (platform === PlatformName.WEB) {
+        // Web uses PGlite
+        const { initializePglite } = await import('./drivers/pglite');
+        await initializePglite().catch(() => {
+          // Will retry on first use
+        });
+      } else if (platform === PlatformName.MOBILE) {
+        // Mobile uses SQLite Mobile - no early init needed
+        // SQLite Mobile doesn't need pre-loading like PGlite
+      } else {
+        // Node uses Postgres - no early init needed
+      }
+    } catch (error) {
+      console.warn('[adapters] Auto-initialization failed (will retry on first use):', error);
+    }
+  })();
+}
+
+
 
 // ============================================================================
-// Generic Database Operations
+// Postgres Connection Types
 // ============================================================================
-export { getDatabaseByName, deleteDatabaseByName, getTableNames } from './database-operations';
+export type { PostgresConnectionConfig } from './drivers/postgres';

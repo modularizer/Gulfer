@@ -14,10 +14,14 @@ import {
     TouchableOpacity,
     SafeAreaView,
     Modal,
+    TextInput,
+    Platform,
+    ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { getAdapterByType, getRegistryEntries, listDatabasesWeb, getDatabaseMetadata } from '../adapters';
-import { sql } from 'drizzle-orm';
+import { getAdapter, getRegistryEntries, AdapterType } from '../adapters';
+import { PostgresAdapter, type PostgresConnectionConfig } from '../adapters/drivers/postgres';
+import * as DocumentPicker from 'expo-document-picker';
 
 export type NavigateCallback = (dbName: string | null, tableName: string | null, searchParams: Record<string, string>) => void;
 
@@ -114,6 +118,20 @@ export default function DatabaseBrowserLayout({
     const [databaseTableCounts, setDatabaseTableCounts] = useState<Record<string, number>>({});
     const [showDatabaseDropdown, setShowDatabaseDropdown] = useState(false);
     const [isPostgres, setIsPostgres] = useState(false);
+    const [showPostgresForm, setShowPostgresForm] = useState(false);
+    const [showCreatePglite, setShowCreatePglite] = useState(false);
+    const [newPgliteName, setNewPgliteName] = useState('');
+    const [postgresConfig, setPostgresConfig] = useState<PostgresConnectionConfig>({
+        host: '',
+        port: 5432,
+        database: '',
+        user: '',
+        password: '',
+        ssl: 'prefer',
+    });
+    const [postgresConnectionName, setPostgresConnectionName] = useState('');
+    const [connecting, setConnecting] = useState(false);
+    const [connectionError, setConnectionError] = useState<string | null>(null);
     const [sectionsCollapsed, setSectionsCollapsed] = useState<{
         tables: boolean;
         views: boolean;
@@ -171,27 +189,22 @@ export default function DatabaseBrowserLayout({
             }
 
             // Connect to database
-            const adapter = await getAdapterByType(entry.adapterType);
-            if (!adapter.getDatabaseByName || !adapter.getTableNames) {
-                loadingTableListRef.current = false;
-                return;
-            }
+            const adapter = await getAdapter(entry.adapterType as AdapterType);
+            await adapter.openFromRegistry(entry);
 
             // Check if this is a PostgreSQL database
-            const capabilities = adapter.getCapabilities();
-            const isPostgresDb = capabilities.databaseType === 'postgres';
+            // Note: We can determine this from the adapter type in the registry entry
+            const isPostgresDb = entry.adapterType === AdapterType.POSTGRES;
             setIsPostgres(isPostgresDb);
 
-            const database = await adapter.getDatabaseByName(dbName);
-
             // Get table names
-            const tableNames = await adapter.getTableNames(database);
+            const tableNames = await adapter.getTableNames();
 
             // Get view names if supported
             let viewNames: string[] = [];
             if (adapter.getViewNames) {
                 try {
-                    viewNames = await adapter.getViewNames(database);
+                    viewNames = await adapter.getViewNames();
                 } catch (err) {
                     console.error(`[DatabaseBrowserLayout] Error loading view names:`, err);
                 }
@@ -201,7 +214,7 @@ export default function DatabaseBrowserLayout({
             let matViewNames: string[] = [];
             if (isPostgresDb && adapter.getMaterializedViewNames) {
                 try {
-                    matViewNames = await adapter.getMaterializedViewNames(database);
+                    matViewNames = await adapter.getMaterializedViewNames();
                 } catch (err) {
                     console.error(`[DatabaseBrowserLayout] Error loading materialized view names:`, err);
                 }
@@ -213,11 +226,8 @@ export default function DatabaseBrowserLayout({
             await Promise.all(
                 tableNames.map(async (tableName) => {
                     try {
-                        const countQuery = `SELECT COUNT(*) as count FROM "${tableName}"`;
-                        const countResult = await database.execute(sql.raw(countQuery)) as any[];
-                        const count = countResult[0]?.count || countResult[0]?.['count'] || countResult[0]?.[0] || 0;
-                        const parsedCount = typeof count === 'number' ? count : parseInt(String(count), 10);
-                        counts[tableName] = parsedCount;
+                        const count = await adapter.getRowCount(tableName);
+                        counts[tableName] = count;
                     } catch (err) {
                         console.error(`[DatabaseBrowserLayout] Error counting rows for ${tableName}:`, err);
                         counts[tableName] = 0;
@@ -242,7 +252,8 @@ export default function DatabaseBrowserLayout({
         if (loadingDatabasesRef.current) return;
         loadingDatabasesRef.current = true;
         try {
-            const dbNames = await listDatabasesWeb();
+            const registry = await getRegistryEntries();
+            const dbNames = registry.map(entry => entry.name);
             setDatabases(dbNames);
             
             // Load table counts for each database
@@ -250,8 +261,14 @@ export default function DatabaseBrowserLayout({
             await Promise.all(
                 dbNames.map(async (dbName) => {
                     try {
-                        const metadata = await getDatabaseMetadata(dbName);
-                        counts[dbName] = metadata.tableCount;
+                        const entries = await getRegistryEntries();
+                        const entry = entries.find(e => e.name === dbName);
+                        if (entry) {
+                            const adapter = await getAdapter(entry.adapterType as AdapterType);
+                            await adapter.openFromRegistry(entry);
+                            const metadata = await adapter.getMetadata();
+                            counts[dbName] = metadata.tableCount;
+                        }
                     } catch (err) {
                         console.error(`[DatabaseBrowserLayout] Error loading table count for ${dbName}:`, err);
                         counts[dbName] = 0;
@@ -292,6 +309,105 @@ export default function DatabaseBrowserLayout({
         }
     }, [dbName, onNavigate]);
 
+    const handleConnectPostgres = useCallback(async () => {
+        if (!postgresConnectionName || !postgresConfig.host || !postgresConfig.database || !postgresConfig.user) {
+            setConnectionError('Please fill in all required fields');
+            return;
+        }
+
+        setConnecting(true);
+        setConnectionError(null);
+
+        try {
+            const adapter = await getAdapter(AdapterType.POSTGRES) as PostgresAdapter;
+            const entry = await adapter.getRegistryEntry(postgresConnectionName, postgresConfig);
+            
+            // Register the entry
+            const { registerDatabaseEntry } = await import('../adapters');
+            await registerDatabaseEntry(entry);
+            
+            // Test the connection
+            await adapter.openFromRegistry(entry);
+            // Adapter is now connected, can use adapter methods directly
+            
+            // Reload databases and navigate
+            await loadDatabases();
+            setShowPostgresForm(false);
+            onNavigate(postgresConnectionName, null, {});
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            setConnectionError(errorMessage);
+        } finally {
+            setConnecting(false);
+        }
+    }, [postgresConnectionName, postgresConfig, onNavigate, loadDatabases]);
+
+    const handleCreatePglite = useCallback(async () => {
+        if (!newPgliteName.trim()) {
+            return;
+        }
+
+        try {
+            const adapter = await getAdapter(AdapterType.PGLITE);
+            const entry = await adapter.getRegistryEntry(newPgliteName.trim());
+            
+            // Register the entry
+            const { registerDatabaseEntry } = await import('../adapters');
+            await registerDatabaseEntry(entry);
+            
+            // Open to create the database
+            await adapter.openFromRegistry(entry);
+            // Adapter is now connected, can use adapter methods directly
+            
+            await loadDatabases();
+            setShowCreatePglite(false);
+            setNewPgliteName('');
+            onNavigate(newPgliteName.trim(), null, {});
+        } catch (error) {
+            console.error('Error creating PGLite database:', error);
+        }
+    }, [newPgliteName, onNavigate, loadDatabases]);
+
+    const handleOpenSqliteFile = useCallback(async () => {
+        try {
+            if (Platform.OS === 'web') {
+                // For web, create a file input
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.db,.sqlite,.sqlite3';
+                input.onchange = async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0];
+                    if (!file) return;
+
+                    const arrayBuffer = await file.arrayBuffer();
+                    const uint8Array = new Uint8Array(arrayBuffer);
+                    
+                    // For web, we'd need to use sql.js to open the file
+                    // This is a placeholder - you may need to implement file-based SQLite opening
+                    console.log('SQLite file selected:', file.name, uint8Array.length, 'bytes');
+                    // TODO: Implement SQLite file opening for web
+                };
+                input.click();
+            } else {
+                // For mobile, use document picker
+                const result = await DocumentPicker.getDocumentAsync({
+                    type: ['application/x-sqlite3', 'application/vnd.sqlite3'],
+                    copyToCacheDirectory: true,
+                });
+
+                if (result.canceled || !result.assets[0]) {
+                    return;
+                }
+
+                const file = result.assets[0];
+                console.log('SQLite file selected:', file.uri);
+                // TODO: Implement SQLite file opening for mobile
+            }
+        } catch (error) {
+            console.error('Error opening SQLite file:', error);
+        }
+    }, []);
+
     const handleTableSelect = useCallback((tableName: string) => {
         if (onTableSelect) {
             onTableSelect(tableName);
@@ -326,25 +442,166 @@ export default function DatabaseBrowserLayout({
         return sorted;
     }, [tables, tableRowCounts]);
 
-    // If no database selected, center the dropdown
+    // If no database selected, show connection options
     if (!dbName) {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.centeredContent}>
-                    {/* Database Dropdown - Centered */}
-                    <View style={styles.centeredDropdownContainer}>
-                        <TouchableOpacity
-                            style={styles.centeredDropdownButton}
-                            onPress={() => setShowDatabaseDropdown(true)}
-                        >
-                            <View style={styles.databaseDropdownContent}>
-                                <Text style={styles.databaseDropdownText} numberOfLines={1}>
-                                    Select Database
-                                </Text>
+                    <ScrollView style={styles.connectionOptionsScroll} contentContainerStyle={styles.connectionOptionsContainer}>
+                        <Text style={styles.connectionTitle}>Connect to Database</Text>
+
+                        {/* Existing Databases */}
+                        {databases.length > 0 && (
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Existing Databases</Text>
+                                <TouchableOpacity
+                                    style={styles.connectionButton}
+                                    onPress={() => setShowDatabaseDropdown(true)}
+                                >
+                                    <Text style={styles.connectionButtonText}>Select Database</Text>
+                                    <Text style={styles.connectionButtonIcon}>▼</Text>
+                                </TouchableOpacity>
                             </View>
-                            <Text style={styles.databaseDropdownIcon}>▼</Text>
-                        </TouchableOpacity>
-                    </View>
+                        )}
+
+                        {/* Postgres Connection */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>PostgreSQL (Remote)</Text>
+                            {!showPostgresForm ? (
+                                <TouchableOpacity
+                                    style={styles.connectionButton}
+                                    onPress={() => setShowPostgresForm(true)}
+                                >
+                                    <Text style={styles.connectionButtonText}>Connect to Postgres</Text>
+                                    <Text style={styles.connectionButtonIcon}>→</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <View style={styles.connectionForm}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Connection Name"
+                                        value={postgresConnectionName}
+                                        onChangeText={setPostgresConnectionName}
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Host"
+                                        value={postgresConfig.host}
+                                        onChangeText={(text) => setPostgresConfig({ ...postgresConfig, host: text })}
+                                        autoCapitalize="none"
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Port (default: 5432)"
+                                        value={postgresConfig.port.toString()}
+                                        onChangeText={(text) => setPostgresConfig({ ...postgresConfig, port: parseInt(text) || 5432 })}
+                                        keyboardType="numeric"
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Database"
+                                        value={postgresConfig.database}
+                                        onChangeText={(text) => setPostgresConfig({ ...postgresConfig, database: text })}
+                                        autoCapitalize="none"
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Username"
+                                        value={postgresConfig.user}
+                                        onChangeText={(text) => setPostgresConfig({ ...postgresConfig, user: text })}
+                                        autoCapitalize="none"
+                                    />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Password"
+                                        value={postgresConfig.password}
+                                        onChangeText={(text) => setPostgresConfig({ ...postgresConfig, password: text })}
+                                        secureTextEntry
+                                        autoCapitalize="none"
+                                    />
+                                    {connectionError && (
+                                        <Text style={styles.errorText}>{connectionError}</Text>
+                                    )}
+                                    <View style={styles.formButtons}>
+                                        <TouchableOpacity
+                                            style={[styles.formButton, styles.formButtonCancel]}
+                                            onPress={() => {
+                                                setShowPostgresForm(false);
+                                                setConnectionError(null);
+                                            }}
+                                        >
+                                            <Text style={styles.formButtonText}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.formButton, styles.formButtonSubmit]}
+                                            onPress={handleConnectPostgres}
+                                            disabled={connecting}
+                                        >
+                                            {connecting ? (
+                                                <ActivityIndicator color="#fff" />
+                                            ) : (
+                                                <Text style={[styles.formButtonText, styles.formButtonTextSubmit]}>Connect</Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
+
+                        {/* PGLite Database */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>PGLite (Browser)</Text>
+                            {!showCreatePglite ? (
+                                <TouchableOpacity
+                                    style={styles.connectionButton}
+                                    onPress={() => setShowCreatePglite(true)}
+                                >
+                                    <Text style={styles.connectionButtonText}>Create PGLite Database</Text>
+                                    <Text style={styles.connectionButtonIcon}>+</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <View style={styles.connectionForm}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Database Name"
+                                        value={newPgliteName}
+                                        onChangeText={setNewPgliteName}
+                                        autoCapitalize="none"
+                                    />
+                                    <View style={styles.formButtons}>
+                                        <TouchableOpacity
+                                            style={[styles.formButton, styles.formButtonCancel]}
+                                            onPress={() => {
+                                                setShowCreatePglite(false);
+                                                setNewPgliteName('');
+                                            }}
+                                        >
+                                            <Text style={styles.formButtonText}>Cancel</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.formButton, styles.formButtonSubmit]}
+                                            onPress={handleCreatePglite}
+                                            disabled={!newPgliteName.trim()}
+                                        >
+                                            <Text style={[styles.formButtonText, styles.formButtonTextSubmit]}>Create</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
+
+                        {/* SQLite File */}
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>SQLite File</Text>
+                            <TouchableOpacity
+                                style={styles.connectionButton}
+                                onPress={handleOpenSqliteFile}
+                            >
+                                <Text style={styles.connectionButtonText}>Open SQLite File</Text>
+                                <Text style={styles.connectionButtonIcon}>📁</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </ScrollView>
 
                     {/* Database Dropdown Modal */}
                     <Modal
@@ -791,6 +1048,105 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 8,
         elevation: 8,
+    },
+    connectionOptionsScroll: {
+        flex: 1,
+        width: '100%',
+    },
+    connectionOptionsContainer: {
+        padding: 20,
+        alignItems: 'center',
+        maxWidth: 500,
+        width: '100%',
+        alignSelf: 'center',
+    },
+    connectionTitle: {
+        fontSize: 24,
+        fontWeight: '600',
+        marginBottom: 30,
+        color: '#333',
+    },
+    section: {
+        width: '100%',
+        marginBottom: 24,
+    },
+    sectionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+        marginBottom: 12,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    connectionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 16,
+        backgroundColor: '#f5f5f5',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+    },
+    connectionButtonText: {
+        fontSize: 16,
+        color: '#333',
+        fontWeight: '500',
+    },
+    connectionButtonIcon: {
+        fontSize: 16,
+        color: '#667eea',
+        fontWeight: '600',
+    },
+    connectionForm: {
+        width: '100%',
+        padding: 16,
+        backgroundColor: '#fafafa',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+    },
+    input: {
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+        borderRadius: 6,
+        padding: 12,
+        fontSize: 16,
+        marginBottom: 12,
+        color: '#333',
+    },
+    formButtons: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+        marginTop: 8,
+    },
+    formButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 6,
+        minWidth: 80,
+        alignItems: 'center',
+    },
+    formButtonCancel: {
+        backgroundColor: '#f0f0f0',
+    },
+    formButtonSubmit: {
+        backgroundColor: '#667eea',
+    },
+    formButtonText: {
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#333',
+    },
+    formButtonTextSubmit: {
+        color: '#fff',
+    },
+    errorText: {
+        color: '#d32f2f',
+        fontSize: 14,
+        marginBottom: 12,
     },
 });
 

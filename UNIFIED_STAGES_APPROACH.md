@@ -392,3 +392,4 @@ The `type` column uses sport-specific terminology. Examples:
 The application should maintain a mapping of valid types per sport for validation.
 
 
+

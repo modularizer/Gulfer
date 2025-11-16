@@ -7,7 +7,8 @@
 
 import { setupStorage } from '../../setup';
 import { golf } from '../../sports';
-import { getAdapter, getDatabaseByName } from '../../../xp-deeby/adapters';
+import { getAdapter } from '../../adapters';
+import { registerDatabaseEntry } from '../../../xp-deeby/adapters';
 import { sql } from 'drizzle-orm';
 
 export async function runGolfTest(addLog: (message: string, type?: 'log' | 'error' | 'success') => void) {
@@ -24,7 +25,8 @@ export async function runGolfTest(addLog: (message: string, type?: 'log' | 'erro
   // Verify which adapter is actually being used
   const adapter = await getAdapter();
   const capabilities = adapter.getCapabilities();
-  addLog(`   Adapter type: ${capabilities.databaseType} (${capabilities.platform})`, 'log');
+  const platform = capabilities.hostPlatforms.web ? 'web' : capabilities.hostPlatforms.mobile ? 'mobile' : 'node';
+  addLog(`   Adapter type: ${capabilities.adapterType} (${platform})`, 'log');
   addLog('✅ Database setup complete!\n', 'success');
 
   // Step 2: Upsert players (will create or update based on name)
@@ -69,7 +71,7 @@ export async function runGolfTest(addLog: (message: string, type?: 'log' | 'erro
     const db = await getDatabaseByName('gulfer-test');
     const adapter = await getAdapter();
     if (adapter.getTableNames) {
-      const tableNames = await adapter.getTableNames(db);
+      const tableNames = await adapter.getTableNames();
       addLog(`   Found ${tableNames.length} tables: ${tableNames.slice(0, 5).join(', ')}${tableNames.length > 5 ? '...' : ''}`, 'log');
       
       // Count rows in participants table
@@ -186,17 +188,20 @@ export async function runBasicPgliteTest(addLog: (message: string, type?: 'log' 
   addLog('🧪 Starting basic PGLite CRUD test...\n', 'log');
 
   try {
-    // Step 1: Get database instance
+    // Step 1: Get database instance using registry
     addLog('📦 Getting database instance...', 'log');
     const adapter = await getAdapter();
     const capabilities = adapter.getCapabilities();
-    addLog(`   Adapter: ${capabilities.databaseType} (${capabilities.platform})`, 'log');
+    const platform = capabilities.hostPlatforms.web ? 'web' : capabilities.hostPlatforms.mobile ? 'mobile' : 'node';
+    addLog(`   Adapter: ${capabilities.adapterType} (${platform})`, 'log');
     
-    if (!adapter.getDatabaseByName) {
-      throw new Error('Adapter does not support getDatabaseByName');
-    }
+    // Get or create registry entry
+    const entry = await adapter.getRegistryEntry('gulfer-test-basic');
+    await registerDatabaseEntry(entry);
     
-    const db = await adapter.getDatabaseByName('gulfer-test-basic');
+    // Open database from registry
+    await adapter.openFromRegistry(entry);
+    const db = adapter.db;
     addLog('✅ Database instance obtained!\n', 'success');
 
     // Step 2: Create a simple table

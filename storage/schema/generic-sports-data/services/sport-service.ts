@@ -10,7 +10,7 @@ import { like } from 'drizzle-orm';
 import * as schema from '../tables';
 import type { Sport } from '../tables';
 import { upsertEntity } from '../query-builders';
-import { generateUUID } from '@utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/utils/uuid';
 
 export class SportService extends BaseTableService<Sport> {
   protected getTableName(): string {

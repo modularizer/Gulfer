@@ -14,7 +14,7 @@ import * as schema from '../tables';
 import type { VenueEventFormat, Venue, EventFormat, VenueEventFormatStage, VenueEventFormatStageInsert } from '../tables';
 import { upsertEntity } from '../query-builders';
 import { queryStages, type StageWithDetails } from '../query-builders';
-import { generateUUID } from '@utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/utils/uuid';
 import { VenueService } from './venue-service';
 import { EventFormatService, type EventFormatWithDetails } from './event-format-service';
 

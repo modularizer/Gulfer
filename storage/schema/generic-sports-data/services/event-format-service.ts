@@ -13,7 +13,7 @@ import * as schema from '../tables';
 import type { EventFormat, Sport, ScoreFormat, EventFormatStage} from '../tables';
 import { upsertEntity } from '../query-builders';
 import { queryStages, upsertStagesWithDetails, type StageWithDetails } from '../query-builders';
-import { generateUUID } from '@utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/utils/uuid';
 import { SportService } from './sport-service';
 import { ScoreFormatService } from './score-format-service';
 
