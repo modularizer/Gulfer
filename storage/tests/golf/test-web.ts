@@ -5,11 +5,10 @@
  * It can be run in a browser without depending on the rest of the codebase.
  */
 
-import { setupStorage } from '../../setup';
-import { golf } from '../../sports';
-import { getAdapter } from '../../adapters';
-import { registerDatabaseEntry } from '../../../xp-deeby/adapters';
-import { sql } from 'drizzle-orm';
+import {setupStorage} from '../../setup';
+import {golf} from '../../sports';
+import {AdapterType, getDatabaseByName} from '../../../xp-deeby/adapters';
+import {sql} from 'drizzle-orm';
 
 export async function runGolfTest(addLog: (message: string, type?: 'log' | 'error' | 'success') => void) {
   addLog('🏌️  Starting storage test...\n', 'log');
@@ -18,15 +17,10 @@ export async function runGolfTest(addLog: (message: string, type?: 'log' | 'erro
   addLog('📦 Setting up database...', 'log');
   addLog('   Using adapter: pglite (PostgreSQL in WASM, no headers needed!)', 'log');
   const storage = await setupStorage('gulfer-test', {
-    adapterType: 'pglite',
+    adapterType: AdapterType.PGLITE,
     sports: { golf },
   });
-  
-  // Verify which adapter is actually being used
-  const adapter = await getAdapter();
-  const capabilities = adapter.getCapabilities();
-  const platform = capabilities.hostPlatforms.web ? 'web' : capabilities.hostPlatforms.mobile ? 'mobile' : 'node';
-  addLog(`   Adapter type: ${capabilities.adapterType} (${platform})`, 'log');
+
   addLog('✅ Database setup complete!\n', 'success');
 
   // Step 2: Upsert players (will create or update based on name)
@@ -69,18 +63,14 @@ export async function runGolfTest(addLog: (message: string, type?: 'log' | 'erro
   addLog('🔍 Verifying data persistence...', 'log');
   try {
     const db = await getDatabaseByName('gulfer-test');
-    const adapter = await getAdapter();
-    if (adapter.getTableNames) {
-      const tableNames = await adapter.getTableNames();
-      addLog(`   Found ${tableNames.length} tables: ${tableNames.slice(0, 5).join(', ')}${tableNames.length > 5 ? '...' : ''}`, 'log');
-      
-      // Count rows in participants table
-      if (tableNames.includes('participants')) {
-        const { sql } = await import('drizzle-orm');
-        const result = await db.execute(sql`SELECT COUNT(*) as count FROM participants`) as any[];
-        const count = result[0]?.count ?? 0;
-        addLog(`   Participants table has ${count} rows`, 'log');
-      }
+    const tableNames = await db.getTableNames();
+    addLog(`   Found ${tableNames.length} tables: ${tableNames.slice(0, 5).join(', ')}${tableNames.length > 5 ? '...' : ''}`, 'log');
+
+    // Count rows in participants table
+    if (tableNames.includes('participants')) {
+    const result = await db.execute(sql`SELECT COUNT(*) as count FROM participants`) as any[];
+    const count = result[0]?.count ?? 0;
+    addLog(`   Participants table has ${count} rows`, 'log');
     }
   } catch (error) {
     addLog(`   ⚠️  Could not verify persistence: ${error instanceof Error ? error.message : String(error)}`, 'log');
@@ -190,18 +180,11 @@ export async function runBasicPgliteTest(addLog: (message: string, type?: 'log' 
   try {
     // Step 1: Get database instance using registry
     addLog('📦 Getting database instance...', 'log');
-    const adapter = await getAdapter();
-    const capabilities = adapter.getCapabilities();
+    // getDatabaseByName returns the adapter (which implements DrizzleDatabase)
+    const db = await getDatabaseByName('gulfer-test-basic');
+    const capabilities = db.getCapabilities();
     const platform = capabilities.hostPlatforms.web ? 'web' : capabilities.hostPlatforms.mobile ? 'mobile' : 'node';
     addLog(`   Adapter: ${capabilities.adapterType} (${platform})`, 'log');
-    
-    // Get or create registry entry
-    const entry = await adapter.getRegistryEntry('gulfer-test-basic');
-    await registerDatabaseEntry(entry);
-    
-    // Open database from registry
-    await adapter.openFromRegistry(entry);
-    const db = adapter.db;
     addLog('✅ Database instance obtained!\n', 'success');
 
     // Step 2: Create a simple table

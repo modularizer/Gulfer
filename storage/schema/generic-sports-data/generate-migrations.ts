@@ -8,7 +8,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
+import { convertBackticksToQuotes, hashSQL } from '../../../xp-deeby/utils';
 
 const PROJECT_ROOT = path.join(__dirname, '../../../');
 const CONFIG_PATH = path.resolve(__dirname, 'drizzle.config.ts');
@@ -19,21 +19,6 @@ interface Migration {
   name: string;
   hash: string;
   sql: string;
-}
-
-/**
- * Convert backticks to double quotes in SQL (SQLite standard)
- */
-function convertToSQLite(sql: string): string {
-  // Replace backticks with double quotes
-  return sql.replace(/`/g, '"');
-}
-
-/**
- * Generate hash from SQL content
- */
-function hashSQL(sql: string): string {
-  return crypto.createHash('md5').update(sql).digest('hex').substring(0, 16);
 }
 
 /**
@@ -66,7 +51,7 @@ function generateMigrationsIndex(): void {
     let sql = fs.readFileSync(filePath, 'utf-8');
     
     // Convert backticks to double quotes
-    sql = convertToSQLite(sql);
+    sql = convertBackticksToQuotes(sql);
     
     // Write back the converted SQL
     fs.writeFileSync(filePath, sql);

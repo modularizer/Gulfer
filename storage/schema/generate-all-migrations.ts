@@ -8,7 +8,7 @@
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
+import { convertBackticksToQuotes, hashSQL } from '../xp-deeby/utils';
 
 const PROJECT_ROOT = path.join(__dirname, '../');
 
@@ -41,20 +41,6 @@ const modules: ModuleConfig[] = [
 ];
 
 /**
- * Convert backticks to double quotes in SQL (SQLite standard)
- */
-function convertToSQLite(sql: string): string {
-  return sql.replace(/`/g, '"');
-}
-
-/**
- * Generate hash from SQL content
- */
-function hashSQL(sql: string): string {
-  return crypto.createHash('md5').update(sql).digest('hex').substring(0, 16);
-}
-
-/**
  * Generate migrations index for a module
  */
 function generateMigrationsIndex(module: ModuleConfig): void {
@@ -79,7 +65,7 @@ function generateMigrationsIndex(module: ModuleConfig): void {
   for (const file of files) {
     const filePath = path.join(module.migrationsDir, file);
     let sql = fs.readFileSync(filePath, 'utf-8');
-    sql = convertToSQLite(sql);
+    sql = convertBackticksToQuotes(sql);
     fs.writeFileSync(filePath, sql);
     
     const hash = hashSQL(sql);

@@ -6,7 +6,7 @@
  */
 
 import {AdapterType, RegistryEntry} from '../types';
-import {Adapter, DrizzleDatabase} from '../adapter';
+import {Database, DrizzleDatabase} from '../database';
 import { sql } from 'drizzle-orm';
 import type { SchemaBuilder } from '../schema-builder';
 import { 
@@ -22,14 +22,7 @@ import {
   timestamp
 } from 'drizzle-orm/pg-core';
 
-export interface PostgresConnectionConfig {
-  host: string;
-  port: number;
-  database: string;
-  user: string;
-  password: string;
-  ssl?: boolean | 'prefer';
-}
+
 
 // UUID helpers for convenience (using varchar since PostgreSQL doesn't have a native UUID type in drizzle)
 const uuid = (name: string) => varchar(name);
@@ -59,7 +52,7 @@ export const schema: SchemaBuilder = {
 /**
  * PostgreSQL Remote Adapter Implementation
  */
-export class PostgresAdapter extends Adapter {
+export class PostgresAdapter extends Database {
   // Cache database connections by connection identifier
   private connectionCache = new Map<string, { db: DrizzleDatabase; client: any }>();
 

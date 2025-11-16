@@ -20,17 +20,17 @@
  */
 
 import { eq, and, type SQL } from 'drizzle-orm';
-import type { Database } from '../../../adapters';
 import * as schema from '../tables';
-import { type QueryBuilderState } from './base';
+import { type QueryBuilderState } from '../../../../xp-deeby/utils';
 import type {
   Participant,
   TeamMember,
   ParticipantInsert,
   TeamMemberInsert,
 } from '../tables';
-import { upsertEntity, upsertEntities, deleteMissingChildren } from './upsert';
+import { upsertEntity, upsertEntities, deleteMissingChildren } from '../../../../xp-deeby/utils';
 import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import {Database} from "../../../../xp-deeby/adapters";
 
 // ============================================================================
 // Meta-Types: Raw Drizzle Join Result Types (camelCase)

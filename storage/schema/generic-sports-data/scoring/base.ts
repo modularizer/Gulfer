@@ -7,9 +7,9 @@
 
 import type { EventStage } from '../tables';
 import type { z } from 'zod';
-import type { Database } from '../../../../xp-deeby/adapters';
-import { ScoreFormatService } from '../services';
 import type { ScoreFormat as ScoreFormatRecord } from '../tables';
+import {Database} from "../../../../xp-deeby/adapters";
+import {ScoreFormatService} from "../services/score-format-service";
 
 // ============================================================================
 // Core Types

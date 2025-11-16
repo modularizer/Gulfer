@@ -21,7 +21,7 @@
 import { eq, type SQL } from 'drizzle-orm';
 import type { Database } from '../../../../xp-deeby/adapters';
 import * as schema from '../tables';
-import { applyQueryModifiers, type QueryBuilderState } from './base';
+import { applyQueryModifiers, type QueryBuilderState } from '../../../../xp-deeby/utils';
 import type {
   Venue,
   VenueEventFormat,
@@ -40,7 +40,7 @@ import type {
   EventFormatStageInsert,
   EventInsert,
 } from '../tables';
-import { upsertEntity, upsertEntities, deleteMissingChildren } from './upsert';
+import { upsertEntity, upsertEntities, deleteMissingChildren } from '../../../../xp-deeby/utils';
 
 // ============================================================================
 // Meta-Types: Raw Drizzle Join Result Types (camelCase)

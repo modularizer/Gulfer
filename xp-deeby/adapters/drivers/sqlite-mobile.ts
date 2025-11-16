@@ -7,7 +7,7 @@
 import {ColumnBuilder, sql} from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import {AdapterType, RegistryEntry} from '../types';
-import { Adapter } from '../adapter';
+import {Database, DrizzleDatabase} from '../database';
 import {IndexConstraint, SchemaBuilder, TableConstraints} from '../schema-builder';
 import { sqliteTable, text, integer, unique, real, index, customType } from 'drizzle-orm/sqlite-core';
 
@@ -77,7 +77,7 @@ export const schema: SchemaBuilder = {
 /**
  * SQLite Mobile Adapter Implementation
  */
-export class SqliteMobileAdapter extends Adapter {
+export class SqliteMobileAdapter extends Database {
 
   constructor() {
     super(AdapterType.SQLITE_MOBILE);
@@ -112,7 +112,7 @@ export class SqliteMobileAdapter extends Adapter {
 
     const dbName = entry.connectionInfo?.fileName || `${entry.name}.db`;
     const sqlite = await SQLite.openDatabaseAsync(dbName);
-    this.db = drizzleExpo(sqlite) as SqliteMobileDatabase;
+    this.db = drizzleExpo(sqlite) as DrizzleDatabase;
     return this;
   }
 

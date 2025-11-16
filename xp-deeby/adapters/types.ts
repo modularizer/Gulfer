@@ -95,15 +95,13 @@ export const adapterCapabilities: Record<AdapterType, AdapterCapabilities> = {
 }
 
 
-
-
-
-
-
-
-
-
-
-
+export interface PostgresConnectionConfig {
+    host: string;
+    port: number;
+    database: string;
+    user: string;
+    password: string;
+    ssl?: boolean | 'prefer';
+}
 
 

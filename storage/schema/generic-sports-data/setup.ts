@@ -144,10 +144,8 @@ export async function setupDatabase(db: Database): Promise<void> {
     // Verify tables were created
     console.log('[setupDatabase] Verifying tables were created...');
     const adapter = await getAdapter();
-    if (adapter.getTableNames) {
-      const tableNames = await adapter.getTableNames();
-      console.log(`[setupDatabase] Found ${tableNames.length} tables after CREATE:`, tableNames);
-    }
+    const tableNames = await adapter.getTableNames();
+    console.log(`[setupDatabase] Found ${tableNames.length} tables after CREATE:`, tableNames);
     
     console.log('✅ Database schema created/verified');
   } catch (error) {

@@ -12,6 +12,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
+import { makeIdempotent, convertToPostgres, convertBackticksToQuotes } from '../../../xp-deeby/utils';
 
 const PROJECT_ROOT = path.join(__dirname, '../../../');
 const SCRIPTS_DIR = path.join(__dirname, './create-scripts');
@@ -20,61 +21,6 @@ interface CreateScript {
   dialect: string;
   sql: string;
   hash: string;
-}
-
-/**
- * Convert CREATE TABLE to CREATE TABLE IF NOT EXISTS (idempotent)
- */
-function makeIdempotent(sql: string): string {
-  let result = sql;
-  
-  // Remove statement-breakpoint comments first
-  result = result.replace(/--> statement-breakpoint\n/gi, '');
-  
-  // Replace CREATE TABLE with CREATE TABLE IF NOT EXISTS (only if not already present)
-  // Match: CREATE TABLE (optional quotes) table_name
-  // But NOT: CREATE TABLE IF NOT EXISTS
-  result = result.replace(/CREATE TABLE\s+(?!IF NOT EXISTS\s+)(["']?)(\w+)\1/gi, 'CREATE TABLE IF NOT EXISTS "$2"');
-  
-  // Replace CREATE INDEX with CREATE INDEX IF NOT EXISTS (only if not already present)
-  // Match: CREATE (UNIQUE )?INDEX (optional quotes) index_name
-  // But NOT: CREATE INDEX IF NOT EXISTS
-  result = result.replace(/CREATE (UNIQUE )?INDEX\s+(?!IF NOT EXISTS\s+)(["']?)(\w+)\2/gi, 'CREATE $1INDEX IF NOT EXISTS "$3"');
-  
-  return result;
-}
-
-/**
- * Convert SQLite SQL to PostgreSQL SQL
- */
-function convertToPostgres(sql: string): string {
-  let result = sql;
-  
-  // SQLite uses INTEGER PRIMARY KEY AUTOINCREMENT
-  // PostgreSQL uses SERIAL PRIMARY KEY
-  result = result.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY');
-  
-  // SQLite uses text(length) for VARCHAR
-  // PostgreSQL doesn't allow type modifiers on text, must use VARCHAR(length)
-  // Match: "notes" text(200), with any whitespace (tabs, spaces, newlines)
-  // The \s+ matches one or more whitespace characters (including tabs)
-  result = result.replace(/"(\w+)"\s+text\((\d+)\)/gi, '"$1" VARCHAR($2)');
-  // Also match standalone text(200) without quotes (fallback)
-  result = result.replace(/\btext\((\d+)\)/gi, 'VARCHAR($1)');
-  
-  // SQLite uses INTEGER for booleans with mode: 'boolean'
-  // PostgreSQL also uses INTEGER (we keep it for compatibility)
-  // Schema definitions should use 0/1 for defaults, not false/true
-  
-  // SQLite timestamp is INTEGER with mode: 'timestamp'
-  // PostgreSQL uses TIMESTAMP or BIGINT
-  // Keep as INTEGER for now (can store Unix timestamps)
-  
-  // Foreign key syntax differences
-  // SQLite: ON UPDATE no action ON DELETE cascade
-  // PostgreSQL: ON UPDATE NO ACTION ON DELETE CASCADE (uppercase, but both work)
-  
-  return result;
 }
 
 /**
@@ -118,7 +64,7 @@ function generateSQLiteScript(): CreateScript {
     let sql = fs.readFileSync(filePath, 'utf-8');
     
     // Convert backticks to double quotes (already done in generate-migrations, but ensure)
-    sql = sql.replace(/`/g, '"');
+    sql = convertBackticksToQuotes(sql);
     
     combinedSQL += sql + '\n\n';
   }
@@ -139,18 +85,94 @@ function generateSQLiteScript(): CreateScript {
  * Generate CREATE script for PostgreSQL
  */
 function generatePostgresScript(): CreateScript {
-  // Generate SQLite script first (uses drizzle-kit with SQLite dialect)
-  const sqliteScript = generateSQLiteScript();
+  const configPath = path.resolve(__dirname, 'drizzle.config.ts');
+  const migrationsDir = path.join(__dirname, './migrations-postgres');
   
-  // Convert SQLite SQL to PostgreSQL SQL
-  // This handles dialect differences like text(200) -> VARCHAR(200)
-  let postgresSQL = convertToPostgres(sqliteScript.sql);
+  // Generate migrations using drizzle-kit with PostgreSQL dialect
+  try {
+    // Create a temporary PostgreSQL config
+    const tempConfigPath = path.join(__dirname, 'drizzle.config.postgres.ts');
+    const originalConfig = fs.readFileSync(configPath, 'utf-8');
+    const postgresConfig = originalConfig
+      .replace(
+        /dialect:\s*['"]sqlite['"]/,
+        "dialect: 'postgresql'"
+      )
+      .replace(
+        /out:\s*[^,}]+/,
+        `out: ${JSON.stringify(migrationsDir)}`
+      )
+      .replace(
+        /dbCredentials:\s*\{[^}]*\}/,
+        `dbCredentials: {
+    url: 'postgresql://localhost:5432/temp', // Temporary URL for generation only
+  }`
+      );
+    fs.writeFileSync(tempConfigPath, postgresConfig);
+    
+    try {
+      execSync(`npx drizzle-kit generate --config "${tempConfigPath}"`, { 
+        stdio: 'pipe',
+        cwd: PROJECT_ROOT,
+        encoding: 'utf-8'
+      });
+    } catch (error: any) {
+      // Check if it's just a warning or actual error
+      const output = (error.stdout || '') + (error.stderr || '');
+      if (error.status !== 0 && !output.includes('No schema changes')) {
+        throw error;
+      }
+    } finally {
+      // Clean up temp config
+      if (fs.existsSync(tempConfigPath)) {
+        fs.unlinkSync(tempConfigPath);
+      }
+    }
+  } catch (error: any) {
+    // If PostgreSQL generation fails, fall back to conversion
+    console.warn('⚠️  PostgreSQL generation failed, falling back to SQLite conversion');
+    const sqliteScript = generateSQLiteScript();
+    let postgresSQL = convertToPostgres(sqliteScript.sql);
+    const hash = crypto.createHash('md5').update(postgresSQL).digest('hex').substring(0, 16);
+    return {
+      dialect: 'postgres',
+      sql: postgresSQL.trim(),
+      hash,
+    };
+  }
   
-  const hash = crypto.createHash('md5').update(postgresSQL).digest('hex').substring(0, 16);
+  // Read all migration files and combine
+  if (!fs.existsSync(migrationsDir)) {
+    throw new Error('PostgreSQL migrations directory not found');
+  }
+  
+  const sqlFiles = fs.readdirSync(migrationsDir)
+    .filter(f => f.endsWith('.sql'))
+    .sort(); // Process in order
+  
+  if (sqlFiles.length === 0) {
+    throw new Error('No PostgreSQL migration files found');
+  }
+  
+  let combinedSQL = '';
+  for (const file of sqlFiles) {
+    const filePath = path.join(migrationsDir, file);
+    let sql = fs.readFileSync(filePath, 'utf-8');
+    
+    // Convert backticks to double quotes
+    sql = convertBackticksToQuotes(sql);
+    
+    combinedSQL += sql + '\n\n';
+  }
+  
+  // Make idempotent
+  combinedSQL = makeIdempotent(combinedSQL);
+  
+  const hash = crypto.createHash('md5').update(combinedSQL).digest('hex').substring(0, 16);
   
   return {
     dialect: 'postgres',
-    sql: postgresSQL.trim(),
+    sql: combinedSQL.trim(),
     hash,
   };
 }

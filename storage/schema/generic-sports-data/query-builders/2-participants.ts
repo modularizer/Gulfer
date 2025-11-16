@@ -18,9 +18,8 @@
  */
 
 import { eq, and, type SQL } from 'drizzle-orm';
-import type { Database } from '../../../adapters';
 import * as schema from '../tables';
-import { applyQueryModifiers, type QueryBuilderState } from './base';
+import { applyQueryModifiers, type QueryBuilderState } from '../../../../xp-deeby/utils';
 import type {
   Participant,
   Event,
@@ -31,8 +30,9 @@ import type {
   EventInsert,
   ParticipantEventStageScoreInsert,
 } from '../tables';
-import { upsertEntity, upsertEntities } from './upsert';
+import { upsertEntity, upsertEntities } from '../../../../xp-deeby/utils';
 import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import {Database} from "../../../../xp-deeby/adapters";
 
 // ============================================================================
 // Meta-Types: Raw Drizzle Join Result Types (camelCase)

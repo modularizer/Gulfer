@@ -6,11 +6,13 @@
  */
 
 import {defaultAdapterByHostPlatform, AdapterType, PlatformName, adapterCapabilities, type AdapterCapabilities} from "./types";
-import {Adapter} from "./adapter";
+import {Database, type DrizzleDatabase as Database} from "./database";
+import {getRegistryEntries, registerDatabaseEntry} from "./registry-storage";
+import {bindSchema} from "./schema";
 
 
 // Cache adapters by type to reuse instances (and their connection caches)
-const adapterCache = new Map<AdapterType, Adapter>();
+const adapterCache = new Map<AdapterType, Database>();
 // Track the current adapter type
 let currentAdapterType: AdapterType | null = null;
 
@@ -42,7 +44,7 @@ export async function detectPlatform(): Promise<PlatformName> {
 /**
  * Create an adapter by type
  */
-async function createAdapterByType(type: AdapterType): Promise<Adapter> {
+async function createAdapterByType(type: AdapterType): Promise<Database> {
   switch (type) {
     case AdapterType.PGLITE: {
       const { PgliteAdapter } = await import('./drivers/pglite');
@@ -67,7 +69,7 @@ async function createAdapterByType(type: AdapterType): Promise<Adapter> {
  * @param type - Optional adapter type. If not provided, auto-selects based on platform
  * @returns The adapter instance (cached and reused)
  */
-export async function getAdapter(type?: AdapterType): Promise<Adapter> {
+export async function getAdapter(type?: AdapterType): Promise<Database> {
     if (!type){
         type = defaultAdapterByHostPlatform[await detectPlatform()];
     }
@@ -88,4 +90,45 @@ export function getCurrentAdapterType(): AdapterType | null {
     return currentAdapterType;
 }
 
+
+export async function getDatabaseByName(name: string, adapterType?: AdapterType): Promise<Database> {
+    // Look up the name in the registry
+    const registryEntries = await getRegistryEntries();
+    let entry = registryEntries.find(e => e.name === name);
+
+    // If not found, create a new entry using the default adapter for the platform
+    if (!entry) {
+        const adapter = await getAdapter(adapterType); // Auto-selects based on platform
+        entry = await adapter.getRegistryEntry(name);
+        await registerDatabaseEntry(entry);
+    }
+
+    // Get the adapter for the type found in registry
+    const adapter = await getAdapter(entry.adapterType);
+
+    // Bind schema based on adapter type (as late as possible)
+    switch (entry.adapterType) {
+        case AdapterType.PGLITE: {
+            const { schema: pgliteSchema } = await import('./drivers/pglite');
+            bindSchema(pgliteSchema);
+            break;
+        }
+        case AdapterType.SQLITE_MOBILE: {
+            const { schema: sqliteMobileSchema } = await import('./drivers/sqlite-mobile');
+            bindSchema(sqliteMobileSchema);
+            break;
+        }
+        case AdapterType.POSTGRES: {
+            const { schema: postgresSchema } = await import('./drivers/postgres');
+            bindSchema(postgresSchema);
+            break;
+        }
+    }
+
+    // Open database from registry
+    await adapter.openFromRegistry(entry);
+
+    // Return the adapter itself (it implements DrizzleDatabase via passthrough)
+    return adapter;
+}
 

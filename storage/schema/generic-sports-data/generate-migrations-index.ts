@@ -9,7 +9,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
+import { hashSQL, convertToPostgres, convertBackticksToQuotes } from '../../../xp-deeby/utils';
 
 const MIGRATIONS_DIR = path.join(__dirname, './migrations');
 const SQLITE_DIR = path.join(MIGRATIONS_DIR, './sqlite');
@@ -21,26 +21,6 @@ interface Migration {
   hash: string;
   sql: string;
   postgres: string;
-}
-
-/**
- * Generate hash from SQL content
- */
-function hashSQL(sql: string): string {
-  return crypto.createHash('sha256').update(sql).digest('hex').substring(0, 16);
-}
-
-/**
- * Convert SQLite SQL to PostgreSQL SQL
- * This is only used during generation, not at runtime
- */
-function convertToPostgres(sqliteSQL: string): string {
-  let result = sqliteSQL;
-  // Convert backticks to double quotes
-  result = result.replace(/`/g, '"');
-  // Convert AUTOINCREMENT to SERIAL
-  result = result.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY');
-  return result;
 }
 
 /**
@@ -87,7 +67,9 @@ function generateMigrationsIndex(): void {
       postgresSQL = fs.readFileSync(postgresPath, 'utf-8');
     } else {
       // Generate PostgreSQL version from SQLite version and save it
-      postgresSQL = convertToPostgres(sqliteSQL);
+      // First ensure backticks are converted
+      const normalizedSQLite = convertBackticksToQuotes(sqliteSQL);
+      postgresSQL = convertToPostgres(normalizedSQLite);
       fs.writeFileSync(postgresPath, postgresSQL);
       console.log(`   Generated PostgreSQL migration: ${file}`);
     }

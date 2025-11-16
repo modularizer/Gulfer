@@ -19,7 +19,7 @@
 // PGlite uses import.meta which Metro doesn't support
 // Babel plugin will transform import.meta to work with Metro
 import {AdapterCapabilities, AdapterType, Dialect, RegistryEntry, PlatformName, adapterCapabilities} from '../types';
-import {Adapter, DrizzleDatabase} from '../adapter';
+import {Database, DrizzleDatabase} from '../database';
 import {PgDialect} from 'drizzle-orm/pg-core/dialect';
 import {PgDatabase} from 'drizzle-orm/pg-core/db';
 import {PgPreparedQuery, PgSession} from 'drizzle-orm/pg-core/session';
@@ -158,7 +158,7 @@ export const schema: SchemaBuilder = {
  * Note: This uses PostgreSQL, not SQLite, but provides the same interface.
  * Your schema should work with PostgreSQL (which is more feature-rich than SQLite).
  */
-export class PgliteAdapter extends Adapter {
+export class PgliteAdapter extends Database {
   // Cache database connections to avoid re-importing PGlite and creating new instances
   private connectionCache = new Map<string, DrizzleDatabase>();
 

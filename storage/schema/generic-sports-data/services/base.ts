@@ -5,8 +5,8 @@
  * All services should extend this base class.
  */
 
-import type { Database } from '../../../../xp-deeby/adapters';
 import { eq, inArray, type SQL } from 'drizzle-orm';
+import {Database} from "../../../../xp-deeby/adapters";
 
 export abstract class BaseService {
   protected db: Database;

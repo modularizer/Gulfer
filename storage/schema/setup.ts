@@ -17,8 +17,8 @@
  * ```
  */
 
-import type { Database, AdapterType } from '../../xp-deeby/adapters';
-import { getDatabaseByName, getAdapterByType } from '../../xp-deeby/adapters';
+import {Database, AdapterType} from '../../xp-deeby/adapters';
+import { getDatabaseByName } from '../../xp-deeby/adapters';
 import { setupDatabase } from './generic-sports-data/setup';
 import { setupDatabase as setupAccountsDatabase } from './accounts/setup';
 
@@ -56,13 +56,9 @@ export async function setupSchemaByName(
   name: string,
   adapterType?: AdapterType
 ): Promise<Database> {
-  // Set adapter if type is provided
-  if (adapterType) {
-    await getAdapterByType(adapterType);
-  }
-  
+
   // Step 1: Get or create database by name
-  const db = await getDatabaseByName(name);
+  const db = await getDatabaseByName(name, adapterType);
   
   // Step 2: Run CREATE scripts and migrations from both modules
   // Run generic-sports-data first (accounts may depend on participants)

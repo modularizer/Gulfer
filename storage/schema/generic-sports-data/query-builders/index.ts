@@ -41,6 +41,6 @@ export { queryVenues, upsertVenueWithDetails } from './4-venues';
 // 5-account-settings: Account settings and setting options
 // Account settings query builders moved to accounts/ folder
 
-// Export upsert utilities
-export { upsertEntity, upsertEntities, deleteMissingChildren } from './upsert';
+// Export upsert utilities (re-exported from xp-deeby)
+export { upsertEntity, upsertEntities, deleteMissingChildren } from '../../../../xp-deeby/utils';
 

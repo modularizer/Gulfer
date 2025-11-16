@@ -20,9 +20,8 @@
  */
 
 import { eq, and, notInArray, type SQL } from 'drizzle-orm';
-import type { Database } from '../../../adapters';
 import * as schema from '../tables';
-import { applyQueryModifiers, type QueryBuilderState } from './base';
+import { applyQueryModifiers, type QueryBuilderState } from '../../../../xp-deeby/utils';
 import type {
   Event,
   Venue,
@@ -51,8 +50,9 @@ import type {
   ParticipantEventStageScoreInsert,
   PhotoInsert,
 } from '../tables';
-import { upsertEntity, upsertEntities, deleteMissingChildren } from './upsert';
-import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import { upsertEntity, upsertEntities, deleteMissingChildren } from '../../../../xp-deeby/utils';
+import { generateUUID } from '../../../../xp-deeby/utils';
+import {Database} from "../../../../xp-deeby/adapters";
 
 // ============================================================================
 // Meta-Types: Raw Drizzle Join Result Types (camelCase)
@@ -628,6 +628,7 @@ export async function upsertEventWithDetails(
     if (keepPhotoIds.length > 0) {
       await db.delete(schema.photos)
         .where(
+            // @ts-ignore
           and(
             eq(schema.photos.refId, data.event.id),
             eq(schema.photos.refTable, 'events'),
@@ -639,6 +640,7 @@ export async function upsertEventWithDetails(
     // Delete all photos for this event if none provided
     await db.delete(schema.photos)
       .where(
+          // @ts-ignore
         and(
           eq(schema.photos.refId, data.event.id),
           eq(schema.photos.refTable, 'events')
