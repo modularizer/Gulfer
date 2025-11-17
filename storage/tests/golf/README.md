@@ -28,7 +28,7 @@ npx tsx storage/tests/golf/test-web.ts
 ## Test Coverage
 
 The golf test suite covers:
-1. Database setup with sqlite-web adapter
+1. Driver setup with sqlite-web adapter
 2. Creating players (participants)
 3. Creating golf courses (venues with event formats)
 4. Creating golf rounds (events)

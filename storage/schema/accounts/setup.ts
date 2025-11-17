@@ -5,21 +5,21 @@
  * 2. Runs migrations (for schema upgrades)
  */
 
-import type { Database } from '../../../xp-deeby/adapters';
-import { sql } from 'drizzle-orm';
-import { getAdapter } from '../../../xp-deeby/adapters';
-import { createScripts } from './create-scripts';
-import { runMigrations } from './setup-migrations';
+import type {Database} from '../../../xp-deeby/adapters';
+import {getAdapter} from '../../../xp-deeby/adapters';
+import {sql} from 'drizzle-orm';
+import {createScripts} from './create-scripts';
+import {runMigrations} from './setup-migrations';
+import {Dialect} from "../../../xp-deeby/adapters/abstract/capabilities";
 
 async function getCreateScript(db: Database): Promise<string> {
   const adapter = await getAdapter();
   const capabilities = adapter.getCapabilities();
-  const dialect = capabilities.dialect === 'postgres' ? 'postgres' : 'sqlite';
+  const dialect = capabilities.dialect;
   
-  if (dialect === 'postgres' && createScripts.postgres) {
+  if (dialect === Dialect.POSTGRES && createScripts.postgres) {
     return createScripts.postgres.sql;
   }
-  
   return createScripts.sqlite.sql;
 }
 

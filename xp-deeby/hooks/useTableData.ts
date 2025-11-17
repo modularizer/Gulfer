@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { sql } from 'drizzle-orm';
-import {getAdapter, getRegistryEntries} from "../adapters";
+import {getDatabaseByName} from "../adapters";
 
 export interface TableColumn {
   name: string;
@@ -75,20 +75,9 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
     try {
       setLoading(true);
       setError(null);
-      
-      // Get adapter type from registry
-      const entries = await getRegistryEntries();
-      const entry = entries.find((e: any) => e.name === dbName);
-      
-      if (!entry) {
-        setError(`Database ${dbName} not found in registry`);
-        setLoading(false);
-        return;
-      }
-      
+
       // Connect to database
-      const adapter = await getAdapter(entry.adapterType);
-      await adapter.openFromRegistry(entry);
+      const adapter = await getDatabaseByName(dbName);
       
       // Get column information using adapter method (dialect-agnostic)
       let tableColumns: TableColumn[] = [];
@@ -126,7 +115,7 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       }
       
       console.log(`[useTableData] Data query for ${currentTable}:`, query);
-      const queryRows = await adapter.db.execute(sql.raw(query)) as any[];
+      const queryRows = await adapter.execute(sql.raw(query)) as any[];
       console.log(`[useTableData] Data query result for ${currentTable}:`, queryRows.length, 'rows');
       console.log(`[useTableData] First row sample:`, queryRows[0]);
       
@@ -150,7 +139,7 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       if (currentTable === tableName) {
         setColumns(tableColumns);
         setRows(tableRows);
-        setTotalRowCount(parsedTotalCount);
+        setTotalRowCount(totalCount);
       }
       
       // Cache the data
@@ -159,7 +148,7 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
         [cacheKey]: {
           columns: tableColumns,
           rows: tableRows,
-          totalRowCount: parsedTotalCount,
+          totalRowCount: totalCount,
           timestamp: Date.now(),
         },
       }));

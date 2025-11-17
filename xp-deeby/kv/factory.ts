@@ -5,7 +5,7 @@
  */
 
 import type { KeyValueStorage } from './types';
-import { detectPlatform, PlatformName } from '../adapters';
+import {detectPlatform, PlatformName} from "../platform";
 
 let currentStorage: KeyValueStorage | null = null;
 let storageInitializationPromise: Promise<KeyValueStorage> | null = null;
@@ -24,7 +24,7 @@ export async function initializeStorage(): Promise<KeyValueStorage> {
   }
 
   storageInitializationPromise = (async () => {
-    const platform = await detectPlatform();
+    const platform = detectPlatform();
     
     if (platform === PlatformName.WEB) {
       const { IndexedDBStorage } = await import('./drivers/indexeddb');

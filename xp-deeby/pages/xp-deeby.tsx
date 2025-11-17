@@ -1,5 +1,5 @@
 /**
- * Database Browser - Table View Page
+ * Driver Browser - Table View Page
  *
  * Displays table data with sorting, filtering, pagination, and column visibility.
  */
@@ -209,7 +209,7 @@ export default function XpDeebyTableView({onNavigate}: { onNavigate: NavigateCal
         return new Map();
     });
 
-    // Database connection and query state
+    // Driver connection and query state
     const [db, setDb] = useState<any>(null);
     const [tables, setTables] = useState<string[]>([]); // List of valid table names
     // Initialize queryText from URL param if provided (query mode or non-default query), otherwise empty
@@ -648,7 +648,7 @@ export default function XpDeebyTableView({onNavigate}: { onNavigate: NavigateCal
     useEffect(() => {
         // Don't auto-execute when tableName is empty string (query mode)
         // Only auto-execute if:
-        // 1. Database is loaded
+        // 1. Driver is loaded
         // 2. Table name exists and is not empty string
         // 3. Query text exists and matches the expected query for this table/page
         // 4. Query hasn't been manually edited
@@ -888,7 +888,7 @@ export default function XpDeebyTableView({onNavigate}: { onNavigate: NavigateCal
             <DatabaseBrowserLayout 
                 dbName={''}
                 onNavigate={onNavigate}
-                headerTitle="Select Database"
+                headerTitle="Select Driver"
                 showSidebar={true}
             >
                 <View style={styles.noDatabaseContainer} />

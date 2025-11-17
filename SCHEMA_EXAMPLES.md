@@ -89,7 +89,7 @@ Sports
 | **Scoring Data** | Single integer | Flexible JSON structure |
 | **Sport Flexibility** | Golf-specific | Generic, sport-agnostic |
 
-## Database Schema Comparison
+## Driver Schema Comparison
 
 ### Current: `playerRoundHoleScores`
 ```sql

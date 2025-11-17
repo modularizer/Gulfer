@@ -11,7 +11,7 @@ The codebase has been migrated from a custom ORM to Drizzle ORM with cross-platf
 - `sql.js` - WASM SQLite for web
 - `@types/sql.js` - TypeScript types
 
-### 2. Database Infrastructure ✅
+### 2. Driver Infrastructure ✅
 - **Adapter** (`src/services/storage/db/sqlite.ts`): Cross-platform database initialization
   - Web: Uses sql.js with IndexedDB persistence
   - React Native: Uses expo-sqlite
@@ -38,8 +38,8 @@ The codebase has been migrated from a custom ORM to Drizzle ORM with cross-platf
 
 - **Utils** (`src/services/storage/db/utils.ts`): Data transformation
   - JSON serialization/deserialization for location fields
-  - `transformRecord` - Database → Application format
-  - `transformForDb` - Application → Database format
+  - `transformRecord` - Driver → Application format
+  - `transformForDb` - Application → Driver format
 
 ### 3. Storage Services Converted ✅
 - ✅ `courseStorage.ts` - Course management

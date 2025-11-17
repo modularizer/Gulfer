@@ -1,5 +1,5 @@
 /**
- * Database Browser Layout Component
+ * Driver Browser Layout Component
  * 
  * Shared layout component for database browser pages with sidebar and main content.
  * Used by [db]/[table] page (which handles both table view and query mode).
@@ -19,9 +19,10 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { getAdapter, getRegistryEntries, AdapterType } from '../adapters';
-import { PostgresAdapter, type PostgresConnectionConfig } from '../adapters/drivers/postgres';
+import {getAdapter, getRegistryEntries, AdapterType, PostgresConnectionConfig} from '../adapters';
+import { PostgresAdapter } from '../adapters/implementations/postgres/database';
 import * as DocumentPicker from 'expo-document-picker';
+import {makeDatabaseByName} from "../adapters/factory/database";
 
 export type NavigateCallback = (dbName: string | null, tableName: string | null, searchParams: Record<string, string>) => void;
 
@@ -343,26 +344,17 @@ export default function DatabaseBrowserLayout({
     }, [postgresConnectionName, postgresConfig, onNavigate, loadDatabases]);
 
     const handleCreatePglite = useCallback(async () => {
-        if (!newPgliteName.trim()) {
+        const name = newPgliteName.trim();
+        if (!name) {
             return;
         }
 
         try {
-            const adapter = await getAdapter(AdapterType.PGLITE);
-            const entry = await adapter.getRegistryEntry(newPgliteName.trim());
-            
-            // Register the entry
-            const { registerDatabaseEntry } = await import('../adapters');
-            await registerDatabaseEntry(entry);
-            
-            // Open to create the database
-            await adapter.openFromRegistry(entry);
-            // Adapter is now connected, can use adapter methods directly
-            
+            await makeDatabaseByName(name, AdapterType.PGLITE);
             await loadDatabases();
             setShowCreatePglite(false);
             setNewPgliteName('');
-            onNavigate(newPgliteName.trim(), null, {});
+            onNavigate(name, null, {});
         } catch (error) {
             console.error('Error creating PGLite database:', error);
         }
@@ -431,7 +423,7 @@ export default function DatabaseBrowserLayout({
 
     // Sort tables: non-empty first, then empty tables
     const sortedTables = useMemo(() => {
-        const sorted = [...tables].sort((a, b) => {
+        return [...tables].sort((a, b) => {
             const countA = tableRowCounts[a] ?? 0;
             const countB = tableRowCounts[b] ?? 0;
             if ((countA === 0 && countB === 0) || (countA > 0 && countB > 0)) {
@@ -439,7 +431,6 @@ export default function DatabaseBrowserLayout({
             }
             return countA === 0 ? 1 : -1;
         });
-        return sorted;
     }, [tables, tableRowCounts]);
 
     // If no database selected, show connection options
@@ -448,7 +439,7 @@ export default function DatabaseBrowserLayout({
             <SafeAreaView style={styles.container}>
                 <View style={styles.centeredContent}>
                     <ScrollView style={styles.connectionOptionsScroll} contentContainerStyle={styles.connectionOptionsContainer}>
-                        <Text style={styles.connectionTitle}>Connect to Database</Text>
+                        <Text style={styles.connectionTitle}>Connect to Driver</Text>
 
                         {/* Existing Databases */}
                         {databases.length > 0 && (
@@ -458,7 +449,7 @@ export default function DatabaseBrowserLayout({
                                     style={styles.connectionButton}
                                     onPress={() => setShowDatabaseDropdown(true)}
                                 >
-                                    <Text style={styles.connectionButtonText}>Select Database</Text>
+                                    <Text style={styles.connectionButtonText}>Select Driver</Text>
                                     <Text style={styles.connectionButtonIcon}>▼</Text>
                                 </TouchableOpacity>
                             </View>
@@ -499,7 +490,7 @@ export default function DatabaseBrowserLayout({
                                     />
                                     <TextInput
                                         style={styles.input}
-                                        placeholder="Database"
+                                        placeholder="Driver"
                                         value={postgresConfig.database}
                                         onChangeText={(text) => setPostgresConfig({ ...postgresConfig, database: text })}
                                         autoCapitalize="none"
@@ -548,7 +539,7 @@ export default function DatabaseBrowserLayout({
                             )}
                         </View>
 
-                        {/* PGLite Database */}
+                        {/* PGLite Driver */}
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>PGLite (Browser)</Text>
                             {!showCreatePglite ? (
@@ -556,14 +547,14 @@ export default function DatabaseBrowserLayout({
                                     style={styles.connectionButton}
                                     onPress={() => setShowCreatePglite(true)}
                                 >
-                                    <Text style={styles.connectionButtonText}>Create PGLite Database</Text>
+                                    <Text style={styles.connectionButtonText}>Create PGLite Driver</Text>
                                     <Text style={styles.connectionButtonIcon}>+</Text>
                                 </TouchableOpacity>
                             ) : (
                                 <View style={styles.connectionForm}>
                                     <TextInput
                                         style={styles.input}
-                                        placeholder="Database Name"
+                                        placeholder="Driver Name"
                                         value={newPgliteName}
                                         onChangeText={setNewPgliteName}
                                         autoCapitalize="none"
@@ -603,7 +594,7 @@ export default function DatabaseBrowserLayout({
                         </View>
                     </ScrollView>
 
-                    {/* Database Dropdown Modal */}
+                    {/* Driver Dropdown Modal */}
                     <Modal
                         visible={showDatabaseDropdown}
                         transparent={true}
@@ -653,7 +644,7 @@ export default function DatabaseBrowserLayout({
                                 <View style={styles.collapseHandleBar} />
                             </View>
                         </TouchableOpacity>
-                        {/* Database Dropdown - First item */}
+                        {/* Driver Dropdown - First item */}
                         <View style={styles.databaseDropdownRow}>
                             <TouchableOpacity
                                 style={styles.databaseDropdownButton}
@@ -673,7 +664,7 @@ export default function DatabaseBrowserLayout({
                             </TouchableOpacity>
                         </View>
 
-                        {/* Database Dropdown Modal */}
+                        {/* Driver Dropdown Modal */}
                         <Modal
                             visible={showDatabaseDropdown}
                             transparent={true}

@@ -28,81 +28,59 @@
 
 import type { 
   SchemaBuilder, 
-  Table, 
-  ColumnBuilder, 
+  Table,
   ColumnConfig,
   TableConstraints,
   UniqueConstraint,
   IndexConstraint
-} from './schema-builder';
+} from '../abstract/builders';
+import {ColumnBuilder} from "drizzle-orm";
+import {AdapterType, defaultAdapterByHostPlatform} from "../implementations/types";
+import {detectPlatform} from "../../platform";
+import * as pglite from "../implementations/pglite/builders";
+import * as postgres from "../implementations/postgres/builders";
+import * as sqliteMobile from "../implementations/sqlite-mobile/builders";
+
+
 
 // Current bound schema - defaults to null (must be bound before use)
 let boundSchema: SchemaBuilder | null = null;
-let bindingPromise: Promise<void> | null = null;
+
+
+/**
+ * Create an adapter by type
+ */
+export function getSchema(adapterType?: AdapterType): SchemaBuilder {
+    if (!adapterType && boundSchema) {
+        return boundSchema;
+    }
+    if (!adapterType){
+        adapterType = defaultAdapterByHostPlatform[detectPlatform()];
+    }
+    switch (adapterType) {
+        case AdapterType.PGLITE: {
+            return pglite.schema;
+        }
+        case AdapterType.SQLITE_MOBILE: {
+            return sqliteMobile.schema;
+        }
+        case AdapterType.POSTGRES: {
+            return postgres.schema;
+        }
+        default:
+            throw new Error(`Unknown adapter type: ${adapterType}`);
+    }
+}
 
 /**
  * Bind a driver's schema implementation
  * This must be called before using any schema functions
  */
-export function bindSchema(schema: SchemaBuilder): void {
-  boundSchema = schema;
-  bindingPromise = null;
+export async function bindSchema(adapterType?: AdapterType): Promise<void> {
+    boundSchema = await getSchema(adapterType);
 }
 
-/**
- * Get the currently bound schema
- * If no schema is bound, attempts to bind a default schema based on platform
- */
-function getSchema(): SchemaBuilder {
-  if (!boundSchema) {
-    // Try to bind a default schema synchronously if possible
-    // This handles the case where table modules are imported before explicit binding
-    if (!bindingPromise) {
-      bindingPromise = (async () => {
-        try {
-          // Detect platform and bind appropriate schema
-          if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
-            // Browser/Web - use PGlite
-            const { schema: pgliteSchema } = await import('./drivers/pglite');
-            bindSchema(pgliteSchema);
-          } else {
-            // Default to SQLite Mobile (more compatible across platforms)
-            const { schema: sqliteMobileSchema } = await import('./drivers/sqlite-mobile');
-            bindSchema(sqliteMobileSchema);
-          }
-        } catch (error) {
-          // If binding fails, throw the original error
-          throw new Error(
-            'No schema bound. Call bindSchema() with a driver schema before using schema functions.\n' +
-            'Example: import { schema as postgresSchema } from "./adapters/drivers/postgres";\n' +
-            '         import { bindSchema } from "./adapters/schema";\n' +
-            '         bindSchema(postgresSchema);'
-          );
-        }
-      })();
-    }
-    
-    // If we're in an async context and binding is in progress, wait for it
-    // Otherwise, throw immediately (for synchronous table definitions)
-    if (bindingPromise) {
-      // This will throw, but the error message will guide the user
-      throw new Error(
-        'No schema bound. Schema binding is in progress. If this error persists, ensure bindSchema() is called before importing table definitions.\n' +
-        'Example: import { schema as postgresSchema } from "./adapters/drivers/postgres";\n' +
-        '         import { bindSchema } from "./adapters/schema";\n' +
-        '         bindSchema(postgresSchema);'
-      );
-    }
-    
-    throw new Error(
-      'No schema bound. Call bindSchema() with a driver schema before using schema functions.\n' +
-      'Example: import { schema as postgresSchema } from "./adapters/drivers/postgres";\n' +
-      '         import { bindSchema } from "./adapters/schema";\n' +
-      '         bindSchema(postgresSchema);'
-    );
-  }
-  return boundSchema;
-}
+
 
 /**
  * Generic schema functions - these delegate to the bound schema

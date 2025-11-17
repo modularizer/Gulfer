@@ -1,6 +1,5 @@
-import {initializeStorage} from "../kv";
-import {detectPlatform} from "./factory";
-import {PlatformName} from "./types";
+import {initializeStorage} from "../../kv";
+import {detectPlatform, PlatformName} from "../../platform";
 
 
 
@@ -16,11 +15,11 @@ export async function initializeAdapters(): Promise<void> {
     });
 
     // Detect platform and initialize only the appropriate adapter
-    const platform = await detectPlatform();
+    const platform = detectPlatform();
 
     if (platform === PlatformName.WEB) {
         // Web uses PGlite - initialize it
-        const { initializePglite } = await import('./drivers/pglite');
+        const { initializePglite } = await import('../implementations/pglite/setup');
         await initializePglite().catch(() => {
             // Will retry on first use
         });

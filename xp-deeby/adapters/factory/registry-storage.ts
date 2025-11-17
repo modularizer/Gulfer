@@ -5,9 +5,8 @@
  * across different platforms using the generic key-value storage system.
  */
 
-import { AdapterType } from './types';
-import { getStorage } from '../kv';
-import type { RegistryEntry } from './types';
+import { getStorage } from '../../kv';
+import {RegistryEntry} from "../implementations/pglite/capabilities";
 
 const registryKey = 'databases';
 
