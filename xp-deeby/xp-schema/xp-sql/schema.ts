@@ -17,17 +17,29 @@ import {getDialectFromName, XPDialect} from "./dialects";
 import {XPDatabaseConnectionPlus} from "../xp-plus";
 
 /**
+ * Schema with tables exposed as properties
+ * This type allows tables to be accessed as properties (e.g., schema.users, schema.posts)
+ */
+export type SchemaWithTables<Tables extends Record<string, UnboundTable | Table>> = 
+  Schema<Tables> & {
+    readonly [K in keyof Tables]: Tables[K];
+  };
+
+/**
  * Schema object that holds tables as properties
  */
 export class Schema<Tables extends Record<string, UnboundTable | Table> = Record<string, UnboundTable | Table>> {
+  [key: string]: any; // Allow table access via index signature
+  
   constructor(public tables: Tables) {
     // Set tables as properties for direct access
+    // TypeScript types are provided by the SchemaWithTables type
     for (const [key, table] of Object.entries(tables)) {
       (this as any)[key] = table;
     }
   }
 
-  bindByDialectName(dialectName: string): Promise<Schema<Record<keyof Tables, Table>>> {
+  bindByDialectName(dialectName: string): Promise<SchemaWithTables<Record<keyof Tables, Table>>> {
       return getDialectFromName(dialectName).then(dialect => this.bind(dialect))
   }
 
@@ -35,14 +47,14 @@ export class Schema<Tables extends Record<string, UnboundTable | Table> = Record
    * Bind all tables in the schema to a dialect
    * Returns a new schema with bound tables
    */
-  bind(dialect: SQLDialect): Schema<Record<keyof Tables, Table>> {
+  bind(dialect: SQLDialect): SchemaWithTables<Record<keyof Tables, Table>> {
     const boundTables = {} as Record<keyof Tables, Table>;
 
     for (const [key, table] of Object.entries(this.tables)) {
       boundTables[key as keyof Tables] = bindTable(table, dialect) as Table;
     }
     
-    return new Schema(boundTables);
+    return new Schema(boundTables) as SchemaWithTables<Record<keyof Tables, Table>>;
   }
 
   /**
@@ -89,7 +101,7 @@ export class Schema<Tables extends Record<string, UnboundTable | Table> = Record
  */
 export function xpschema<Tables extends Record<string, UnboundTable | Table>>(
   tables: Tables
-): Schema<Tables> {
-  return new Schema(tables);
+): SchemaWithTables<Tables> {
+  return new Schema(tables) as SchemaWithTables<Tables>;
 }
 

@@ -1,21 +1,21 @@
 import {Condition, ResolvedCondition, UnresolvedCondition, XPDatabaseConnectionPlus} from "./database";
-import {SQL, type Table} from "drizzle-orm";
+import {SQL, type Table, getTableName} from "drizzle-orm";
 import {QueryResult, SelectQueryBuilder} from "../xp-sql/drivers/types";
 import {UpsertResult} from "../../utils";
 
+export class XPDatabaseTablePlus<TTable extends Table = Table> {
+    public readonly tableName: string;
+    [key: string]: any; // Allow column access via index signature
 
-export class XPDatabaseTablePlus {
-    [key: string]: any;
-    public tableName: string;
-
-    constructor(private database: XPDatabaseConnectionPlus, private table: Table) {
+    constructor(private database: XPDatabaseConnectionPlus, private table: TTable) {
         this.database = database;
         this.table = table;
-        //@ts-ignore
         this.tableName = getTableName(this.table);
-        //@ts-ignore
-        for (let [k, v] of Object.entries(this.table.columns)) {
-            this[k] = v;
+        
+        // Expose columns as properties for runtime access
+        // TypeScript types are provided by the intersection type below
+        for (const [k, v] of Object.entries(this.table.columns)) {
+            (this as any)[k] = v;
         }
     }
 
@@ -101,5 +101,13 @@ export class XPDatabaseTablePlus {
     async getRowCount(): Promise<number> {
         return this.count();
     }
-
 }
+
+/**
+ * XPDatabaseTablePlus with columns exposed as properties
+ * This type allows columns to be accessed as properties (e.g., table.id, table.name)
+ */
+export type XPDatabaseTablePlusWithColumns<TTable extends Table> = 
+    XPDatabaseTablePlus<TTable> & {
+        readonly [K in keyof TTable['_']['columns']]: TTable['_']['columns'][K];
+    };

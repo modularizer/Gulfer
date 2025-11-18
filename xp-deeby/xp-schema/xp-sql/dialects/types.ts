@@ -2,10 +2,10 @@ import {errors} from "@ts-morph/common";
 import NotImplementedError = errors.NotImplementedError;
 import {DrizzleDatabaseConnectionDriver} from "../drivers/types";
 import type {ColumnBuilder, Table, Column} from "drizzle-orm";
+import {UnboundColumnBuilder} from "./implementations/unbound";
 
 
 export interface ColumnLevelEntity {}
-export interface Column extends ColumnLevelEntity {}
 export interface Index extends ColumnLevelEntity {}
 export interface Constraint extends ColumnLevelEntity {}
 
@@ -17,7 +17,7 @@ export type ColumnBuilderWithReferences = ColumnBuilder & {
      * Add a foreign key reference to another column
      * @param refFn Function that returns the column to reference
      */
-    references(refFn: () => Column): ColumnBuilderWithReferences;
+    references(refFn: () => Column | UnboundColumnBuilder): ColumnBuilderWithReferences;
 };
 
 /**

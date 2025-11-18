@@ -6,6 +6,7 @@
  */
 
 import type {ColumnBuilder, Table} from 'drizzle-orm';
+import type {InferSelectModel, InferInsertModel} from 'drizzle-orm';
 import {sql} from 'drizzle-orm';
 import {
     DialectBuilders,
@@ -263,7 +264,10 @@ export function bindColumn(
         console.warn(`defaultNow() not available on column builder, skipping`);
       }
     } else if (modifier.method === 'references' && typeof builder.references === 'function') {
-      builder = builder.references(...modifier.args);
+      builder = builder.references( () => {
+         const col = modifier.args[0]();
+         return bindColumn(col, dialect);
+      });
     } else if (modifier.method === '$type' && typeof builder.$type === 'function') {
       // $type is a TypeScript-only method, but we still need to call it
       // It takes no runtime arguments
@@ -283,26 +287,90 @@ export function bindColumn(
 // ============================================================================
 
 /**
- * Unbound table definition
- * Stores table name and column definitions, but not yet bound to a dialect
+ * Helper to get the bound table for type inference
+ * Uses PostgreSQL as the default dialect
  */
-export interface UnboundTable {
-  readonly __unbound: true;
-  readonly name: string;
-  readonly columns: Record<string, UnboundColumnData>;
-  readonly constraints?: (table: Table) => any[];
+let pgDialectForInference: SQLDialect | null = null;
+
+/**
+ * Get or create the PostgreSQL dialect for type inference
+ * This is lazily loaded to avoid circular dependencies
+ */
+function getPgDialectForInference(): SQLDialect {
+  if (!pgDialectForInference) {
+    // Lazy import to avoid circular dependencies
+    const pgModule = require('./pg');
+    pgDialectForInference = pgModule.default || pgModule.pgDialect;
+    if (!pgDialectForInference) {
+      throw new Error('Failed to load PostgreSQL dialect for type inference');
+    }
+  }
+  return pgDialectForInference;
 }
 
 /**
- * Create an unbound table
+ * Unbound table definition
+ * Stores table name and column definitions, but not yet bound to a dialect
+ * Includes $inferSelect and $inferInsert properties that leverage Drizzle's type inference
+ * by binding to PostgreSQL as the default dialect for type computation
+ * 
+ * Columns are exposed as properties on the table object (e.g., table.name, table.id)
+ * for use in references and type inference.
  */
-export function unboundTable(
+export interface UnboundTable<TColumns extends Record<string, UnboundColumnBuilder | UnboundColumnData> = Record<string, UnboundColumnBuilder | UnboundColumnData>> {
+  readonly __unbound: true;
+  readonly __name: string;
+  readonly columns: Record<string, UnboundColumnData>;
+  readonly constraints?: (table: Table) => any[];
+  
+  /**
+   * Infer the select type from this table
+   * Uses Drizzle's InferSelectModel by binding to PostgreSQL dialect
+   * Usage: type User = typeof users.$inferSelect;
+   * 
+   * This is computed at runtime by binding the table to PostgreSQL and using
+   * the bound table's $inferSelect property. The type is inferred from the
+   * bound table type.
+   */
+  readonly $inferSelect: InferSelectModel<Table>;
+  
+  /**
+   * Infer the insert type from this table
+   * Uses Drizzle's InferInsertModel by binding to PostgreSQL dialect
+   * Usage: type UserInsert = typeof users.$inferInsert;
+   * 
+   * This is computed at runtime by binding the table to PostgreSQL and using
+   * the bound table's $inferInsert property. The type is inferred from the
+   * bound table type.
+   */
+  readonly $inferInsert: InferInsertModel<Table>;
+}
+
+/**
+ * Unbound table with columns exposed as properties
+ * This intersection type allows columns to be accessed as properties (e.g., table.name)
+ */
+export type UnboundTableWithColumns<TColumns extends Record<string, UnboundColumnBuilder | UnboundColumnData>> = 
+  UnboundTable<TColumns> & {
+    readonly [K in keyof TColumns]: TColumns[K];
+  };
+
+/**
+ * Create an unbound table
+ * Columns are exposed as properties on the returned table object for use in references
+ */
+export function unboundTable<
+  TColumns extends Record<string, UnboundColumnBuilder | UnboundColumnData>
+>(
   name: string,
-  columns: Record<string, UnboundColumnBuilder | UnboundColumnData | ColumnBuilder>,
+  columns: TColumns,
   constraints?: (table: Table) => any[]
-): UnboundTable {
+): UnboundTableWithColumns<TColumns> {
   // Convert UnboundColumnBuilder instances to data
   const columnData: Record<string, UnboundColumnData> = {};
+  // Store original column builders/data for property access
+  const columnBuilders: Record<string, UnboundColumnBuilder | UnboundColumnData> = {};
+  
   for (const [key, column] of Object.entries(columns)) {
     // Check if it's a bound column - if so, throw error
     if (isBoundColumn(column)) {
@@ -313,6 +381,9 @@ export function unboundTable(
       );
     }
     
+    // Store the original builder/data for property access
+    columnBuilders[key] = column;
+    
     if (column instanceof UnboundColumnBuilder) {
       columnData[key] = column.getData();
     } else {
@@ -321,12 +392,44 @@ export function unboundTable(
     }
   }
 
-  return {
+  // Create the base table object
+  const baseTable = {
     __unbound: true,
-    name,
+    __name: name,
     columns: columnData,
     constraints,
   };
+  
+  // Bind to PostgreSQL to get the inference types (lazily, only when accessed)
+  // This allows us to get the correct TypeScript types while deferring the actual binding
+  let boundTableForInference: Table | null = null;
+  const getBoundTableForInference = () => {
+    if (!boundTableForInference) {
+      boundTableForInference = bindTable(baseTable as UnboundTable, getPgDialectForInference());
+    }
+    return boundTableForInference;
+  };
+  
+  // Create table object with columns exposed as properties
+  const table = {
+    ...baseTable,
+    // Expose columns as properties for use in references (e.g., usersTable.name)
+    ...columnBuilders,
+    // Add $inferSelect and $inferInsert as getters that bind to PostgreSQL for inference
+    // The types are inferred from the bound table
+    get $inferSelect() {
+      return (getBoundTableForInference() as any).$inferSelect;
+    },
+    get $inferInsert() {
+      return (getBoundTableForInference() as any).$inferInsert;
+    },
+  } as UnboundTableWithColumns<TColumns> & {
+    // TypeScript will infer the correct types from the bound table
+    $inferSelect: ReturnType<typeof getBoundTableForInference>['$inferSelect'];
+    $inferInsert: ReturnType<typeof getBoundTableForInference>['$inferInsert'];
+  };
+  
+  return table;
 }
 
 /**
@@ -427,14 +530,14 @@ export function bindTable(
 
   // Create the table using the dialect's table builder
   const tableBuilder = dialect.table;
-  return tableBuilder(unboundTable.name, boundColumns, unboundTable.constraints);
+  return tableBuilder(unboundTable.__name, boundColumns, unboundTable.constraints);
 }
 
 /**
  * Check if a value is an unbound table
  */
 export function isUnboundTable(value: any): value is UnboundTable {
-  return value && typeof value === 'object' && value.__unbound === true && value.name !== undefined;
+  return value && typeof value === 'object' && value.__unbound === true && value.__name !== undefined;
 }
 
 
