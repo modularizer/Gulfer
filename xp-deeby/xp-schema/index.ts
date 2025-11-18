@@ -1,0 +1,2 @@
+export {connect, XPDatabaseConnectionPlus, schema, XPSchemaPlus, XPDatabaseTablePlus} from './xp-plus';
+export {getRegistryEntries, getRegistryEntry, saveRegistryEntry, saveRegistryEntries, clearRegistry, removeRegistryEnty} from './registry-storage';
