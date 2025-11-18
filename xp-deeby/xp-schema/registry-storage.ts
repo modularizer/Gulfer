@@ -24,6 +24,13 @@ export async function getRegistryEntry(name: string) {
     return (await getRegistryEntries({name}))[0];
 }
 
+export async function createOrRetrieveRegistryEntry(entry: DbConnectionInfo) {
+    const existing = await getRegistryEntry(entry.name);
+    if (existing) return existing;
+    await saveRegistryEntry(entry);
+}
+
+
 /**
  * Save registry entries to storage
  */

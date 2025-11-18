@@ -13,6 +13,8 @@ import { bindTable } from './dialects/implementations/unbound';
 import {connect, XPDatabaseConnection} from "./connection";
 import {DbConnectionInfo} from "./drivers/types";
 import {Table} from "drizzle-orm";
+import {getDialectFromName, XPDialect} from "./dialects";
+import {XPDatabaseConnectionPlus} from "../xp-plus";
 
 /**
  * Schema object that holds tables as properties
@@ -25,13 +27,17 @@ export class Schema<Tables extends Record<string, UnboundTable | Table> = Record
     }
   }
 
+  bindByDialectName(dialectName: string): Promise<Schema<Record<keyof Tables, Table>>> {
+      return getDialectFromName(dialectName).then(dialect => this.bind(dialect))
+  }
+
   /**
    * Bind all tables in the schema to a dialect
    * Returns a new schema with bound tables
    */
   bind(dialect: SQLDialect): Schema<Record<keyof Tables, Table>> {
     const boundTables = {} as Record<keyof Tables, Table>;
-    
+
     for (const [key, table] of Object.entries(this.tables)) {
       boundTables[key as keyof Tables] = bindTable(table, dialect) as Table;
     }
@@ -81,7 +87,7 @@ export class Schema<Tables extends Record<string, UnboundTable | Table> = Record
  * 
  * ```
  */
-export function schema<Tables extends Record<string, UnboundTable | Table>>(
+export function xpschema<Tables extends Record<string, UnboundTable | Table>>(
   tables: Tables
 ): Schema<Tables> {
   return new Schema(tables);

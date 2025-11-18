@@ -11,7 +11,7 @@ import * as schema from '../tables';
 import type { ParticipantEventStageScoreInsert } from '../tables';
 import { queryEvents, type EventWithDetails, upsertEntity } from '../query-builders';
 import { computeGroupResult, aggregateStageResults, StageScoringInfo, EventScoringInfo, GroupResult, getScoringMethod, precomputeStageStats, defaultScoreStage, recomputeStatsFromResult } from '../scoring';
-import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
 
 export class ScoringService extends BaseService {
   /**

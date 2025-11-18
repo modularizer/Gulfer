@@ -1,7 +1,7 @@
 import {errors} from "@ts-morph/common";
 import NotImplementedError = errors.NotImplementedError;
 import {DrizzleDatabaseConnectionDriver} from "../drivers/types";
-import type {ColumnBuilder, Table} from "drizzle-orm";
+import type {ColumnBuilder, Table, Column} from "drizzle-orm";
 
 
 export interface ColumnLevelEntity {}
@@ -9,8 +9,26 @@ export interface Column extends ColumnLevelEntity {}
 export interface Index extends ColumnLevelEntity {}
 export interface Constraint extends ColumnLevelEntity {}
 
+/**
+ * ColumnBuilder with .references() method added
+ */
+export type ColumnBuilderWithReferences = ColumnBuilder & {
+    /**
+     * Add a foreign key reference to another column
+     * @param refFn Function that returns the column to reference
+     */
+    references(refFn: () => Column): ColumnBuilderWithReferences;
+};
 
-
+/**
+ * Timestamp ColumnBuilder with .defaultNow() method added
+ */
+export type TimestampColumnBuilderWithDefaultNow = ColumnBuilderWithReferences & {
+    /**
+     * Set the default value to the current timestamp
+     */
+    defaultNow(): TimestampColumnBuilderWithDefaultNow;
+};
 
 export type Columns = Record<string, ColumnBuilder>;
 
@@ -29,7 +47,8 @@ export const notImplementedForDialect = (feature: string = "Feature", dialect: s
     return notImplemented(`${feature} has not been implemented for dialect "${dialect}"`)
 }
 export type TableBuilderFn<T extends Columns = Columns> = (name: string, columns: T, constraintBuilder?: (table: Table) => (Constraint | Index)[]) => Table;
-export type ColumnBuilderFn<T extends ColumnOpts = ColumnOpts> = (name: string, opts?: T) => ColumnBuilder;
+export type ColumnBuilderFn<T extends ColumnOpts = ColumnOpts> = (name: string, opts?: T) => ColumnBuilderWithReferences;
+export type TimestampColumnBuilderFn<T extends ColumnOpts = ColumnOpts> = (name: string, opts?: T) => TimestampColumnBuilderWithDefaultNow;
 export type IndexBuilderFn<T extends IndexOpts = IndexOpts> = (name: string, opts: T) => Index;
 export type UniqueConstraintBuilderFn<T extends ConstraintOpts = ConstraintOpts> = (name: string, opts: T) => Constraint;
 export type CheckConstraintBuilderFn<T extends ConstraintOpts = ConstraintOpts> = (name: string, opts: T) => Constraint;
@@ -169,7 +188,7 @@ export interface DialectColumnBuilders  {
     boolean: ColumnBuilderFn<BooleanOptions>;
     date: ColumnBuilderFn<DateOptions>;
     time: ColumnBuilderFn<TimeOptions>;
-    timestamp: ColumnBuilderFn<TimestampOptions>;
+    timestamp: TimestampColumnBuilderFn<TimestampOptions>;
     blob: ColumnBuilderFn<BlobOptions>;
 }
 export type ColumnType = keyof DialectColumnBuilders;

@@ -10,7 +10,7 @@ import { queryEvents, upsertEventWithDetails, type EventWithDetails } from '../q
 import { eq, and, inArray, gte, lte, type SQL } from 'drizzle-orm';
 import * as schema from '../tables';
 import type { Event, Participant, Photo, EventStage } from '../tables';
-import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
 import { VenueEventFormatService } from './venue-event-format-service';
 
 export class EventService extends BaseService {

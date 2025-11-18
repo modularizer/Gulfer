@@ -6,6 +6,7 @@
  */
 
 import type {ColumnBuilder, Table} from 'drizzle-orm';
+import {sql} from 'drizzle-orm';
 import {
     DialectBuilders,
     DialectColumnBuilders,
@@ -112,6 +113,30 @@ export class UnboundColumnBuilder {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: '$type', args: [] }],
+    };
+    return this;
+  }
+
+  /**
+   * Add .references() modifier for foreign key constraints
+   * Usage: text('user_id').references(() => usersTable.id)
+   */
+  references(refFn: () => any): this {
+    this.data = {
+      ...this.data,
+      modifiers: [...this.data.modifiers, { method: 'references', args: [refFn] }],
+    };
+    return this;
+  }
+
+  /**
+   * Add .defaultNow() modifier (for timestamp columns)
+   * Usage: timestamp('created_at').defaultNow()
+   */
+  defaultNow(): this {
+    this.data = {
+      ...this.data,
+      modifiers: [...this.data.modifiers, { method: 'defaultNow', args: [] }],
     };
     return this;
   }
@@ -229,6 +254,16 @@ export function bindColumn(
       builder = builder.notNull();
     } else if (modifier.method === 'default' && typeof builder.default === 'function') {
       builder = builder.default(...modifier.args);
+    } else if (modifier.method === 'defaultNow') {
+      // defaultNow() is equivalent to default(sql`CURRENT_TIMESTAMP`)
+      // We'll use the default() method with a SQL function
+      if (typeof builder.default === 'function') {
+        builder = builder.default(sql`CURRENT_TIMESTAMP`);
+      } else {
+        console.warn(`defaultNow() not available on column builder, skipping`);
+      }
+    } else if (modifier.method === 'references' && typeof builder.references === 'function') {
+      builder = builder.references(...modifier.args);
     } else if (modifier.method === '$type' && typeof builder.$type === 'function') {
       // $type is a TypeScript-only method, but we still need to call it
       // It takes no runtime arguments
