@@ -72,15 +72,46 @@ type ComputeColumnInsertType<TType, THasDefault extends boolean> =
       : TType; // Required
 
 /**
+ * Column configuration flags
+ */
+export interface UColumnFlags {
+  /** Whether the column has a default value (set to true after .default() is called) */
+  readonly hasDefault?: boolean;
+  /** Whether the column is a primary key (set to true after .primaryKey() is called) */
+  readonly isPrimaryKey?: boolean;
+  /** Whether the column is unique (set to true after .unique() is called) */
+  readonly isUnique?: boolean;
+}
+
+/**
  * Chainable unbound column builder
  * Mimics Drizzle's ColumnBuilder API but stores modifiers instead of applying them
  * 
  * @template TType - The TypeScript type that this column will produce.
  *                   For nullable columns, this includes `null` (e.g., `string | null`).
  *                   For non-nullable columns, this is just the base type (e.g., `string`).
- * @template THasDefault - Whether the column has a default value (true after .default() is called)
+ * @template TFlags - Configuration flags for the column (hasDefault, isPrimaryKey, isUnique)
+ * 
+ * @example
+ * // Nullable column
+ * text('name') // UColumn<string | null, {}>
+ * 
+ * // Non-nullable column
+ * text('name').notNull() // UColumn<string, {}>
+ * 
+ * // Column with default
+ * text('name').default('') // UColumn<string | null, { hasDefault: true }>
+ * 
+ * // Primary key
+ * text('id').primaryKey() // UColumn<string, { isPrimaryKey: true }>
+ * 
+ * // Unique column
+ * text('email').unique() // UColumn<string | null, { isUnique: true }>
  */
-export class UColumn<TType = any, THasDefault extends boolean = false> {
+export class UColumn<
+  TType = any,
+  TFlags extends UColumnFlags = {}
+> {
   private data: ColData;
 
   constructor(type: string, name: string, options?: any) {
@@ -104,9 +135,9 @@ export class UColumn<TType = any, THasDefault extends boolean = false> {
   /**
    * Add .notNull() modifier
    * Returns a builder with the base type (removes null from the type)
-   * Preserves the default state
+   * Preserves the default state, primary key state, and unique state
    */
-  notNull(): UColumn<BaseType<TType>, THasDefault> {
+  notNull(): UColumn<BaseType<TType>, TFlags> {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: 'notNull', args: [] }],
@@ -118,9 +149,10 @@ export class UColumn<TType = any, THasDefault extends boolean = false> {
   /**
    * Add .primaryKey() modifier
    * Primary keys are always non-nullable, so this removes null from the type
-   * Preserves the default state
+   * Sets isPrimaryKey to true so we can detect it at the type level
+   * Preserves the unique state and default state
    */
-  primaryKey(): UColumn<BaseType<TType>, THasDefault> {
+  primaryKey(): UColumn<BaseType<TType>, TFlags & { isPrimaryKey: true }> {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: 'primaryKey', args: [] }],
@@ -131,9 +163,10 @@ export class UColumn<TType = any, THasDefault extends boolean = false> {
 
   /**
    * Add .default() modifier
-   * Returns a builder with THasDefault = true
+   * Sets hasDefault to true
+   * Preserves the primary key state and unique state
    */
-  default(value: any): UColumn<TType, true> {
+  default(value: any): UColumn<TType, TFlags & { hasDefault: true }> {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: 'default', args: [value] }],
@@ -144,10 +177,10 @@ export class UColumn<TType = any, THasDefault extends boolean = false> {
   /**
    * Add .$type() modifier (for TypeScript type inference)
    * Usage: text('data').$type<MyType>()
-   * Returns a builder with the overridden type, preserving nullable and default state
+   * Returns a builder with the overridden type, preserving nullable, default, primary key, and unique state
    * If the original type was nullable (included null), the new type will also be nullable
    */
-  $type<T>(): UColumn<IncludesNull<TType> extends true ? T | null : T, THasDefault> {
+  $type<T>(): UColumn<IncludesNull<TType> extends true ? T | null : T, TFlags> {
     // $type overrides the column type
     // We need to create a new instance with the overridden type
     // Check if the original type included null (nullable)
@@ -180,30 +213,45 @@ export class UColumn<TType = any, THasDefault extends boolean = false> {
    * Note: Use `typeof` to access this as a type: `typeof column.$inferInsert`
    * This is a type-level property, not a runtime property.
    */
-  declare readonly $inferInsert: ComputeColumnInsertType<TType, THasDefault>;
+  declare readonly $inferInsert: ComputeColumnInsertType<TType, TFlags extends { hasDefault: true } ? true : false>;
+
+  /**
+   * Add .unique() modifier
+   * Sets isUnique to true so we can detect it at the type level
+   * Preserves all other type parameters (type, default, primary key state)
+   */
+  unique(): UColumn<TType, TFlags & { isUnique: true }> {
+    this.data = {
+      ...this.data,
+      modifiers: [...this.data.modifiers, { method: 'unique', args: [] }],
+    };
+    return this as any;
+  }
 
   /**
    * Add .references() modifier for foreign key constraints
    * Usage: text('user_id').references(() => usersTable.id)
+   * Preserves all type parameters
    */
-  references(refFn: () => any): this {
+  references(refFn: () => any): UColumn<TType, TFlags> {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: 'references', args: [refFn] }],
     };
-    return this;
+    return this as any;
   }
 
   /**
    * Add .defaultNow() modifier (for timestamp columns)
    * Usage: timestamp('created_at').defaultNow()
+   * Preserves all type parameters
    */
-  defaultNow(): this {
+  defaultNow(): UColumn<TType, TFlags> {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: 'defaultNow', args: [] }],
     };
-    return this;
+    return this as any;
   }
 
   /**
@@ -219,6 +267,114 @@ export class UColumn<TType = any, THasDefault extends boolean = false> {
    */
   [key: string]: any;
 }
+
+// ============================================================================
+// Type Aliases for Common UColumn Variations
+// ============================================================================
+
+/**
+ * A nullable column (default state)
+ * @example text('name') // NullableColumn<string>
+ */
+export type NullableColumn<TType> = UColumn<TType | null, {}>;
+
+/**
+ * A non-nullable column (after .notNull())
+ * @example text('name').notNull() // NonNullableColumn<string>
+ */
+export type NonNullableColumn<TType> = UColumn<TType, {}>;
+
+/**
+ * A column with a default value (after .default())
+ * @example text('name').default('') // ColumnWithDefault<string | null>
+ */
+export type ColumnWithDefault<TType> = UColumn<TType, { hasDefault: true }>;
+
+/**
+ * A unique column (after .unique())
+ * @example text('email').unique() // UniqueColumn<string | null>
+ */
+export type UniqueColumn<TType> = UColumn<TType, { isUnique: true }>;
+
+/**
+ * A primary key column (after .primaryKey())
+ * @example text('id').primaryKey() // PKColumn<string>
+ */
+export type PKColumn<TType> = UColumn<TType, { isPrimaryKey: true }>;
+
+/**
+ * A unique, non-nullable column
+ * @example text('email').unique().notNull() // UniqueNonNullableColumn<string>
+ */
+export type UniqueNonNullableColumn<TType> = UColumn<TType, { isUnique: true }>;
+
+/**
+ * A unique column with a default value
+ * @example text('email').unique().default('') // UniqueColumnWithDefault<string | null>
+ */
+export type UniqueColumnWithDefault<TType> = UColumn<TType, { hasDefault: true; isUnique: true }>;
+
+/**
+ * A primary key that is also unique
+ * @example text('id').primaryKey().unique() // PKUniqueColumn<string>
+ */
+export type PKUniqueColumn<TType> = UColumn<TType, { isPrimaryKey: true; isUnique: true }>;
+
+/**
+ * A primary key with a default value
+ * @example uuid('id').primaryKey().default(generateUUID) // PKColumnWithDefault<string>
+ */
+export type PKColumnWithDefault<TType> = UColumn<TType, { hasDefault: true; isPrimaryKey: true }>;
+
+/**
+ * A non-nullable column with a default value
+ * @example text('name').notNull().default('') // NonNullableColumnWithDefault<string>
+ */
+export type NonNullableColumnWithDefault<TType> = UColumn<TType, { hasDefault: true }>;
+
+/**
+ * A unique, non-nullable column with a default value
+ * @example text('email').unique().notNull().default('') // UniqueNonNullableColumnWithDefault<string>
+ */
+export type UniqueNonNullableColumnWithDefault<TType> = UColumn<TType, { hasDefault: true; isUnique: true }>;
+
+/**
+ * A primary key that is unique and has a default value
+ * @example uuid('id').primaryKey().unique().default(generateUUID) // PKUniqueColumnWithDefault<string>
+ */
+export type PKUniqueColumnWithDefault<TType> = UColumn<TType, { hasDefault: true; isPrimaryKey: true; isUnique: true }>;
+
+/**
+ * Helper type to simplify UColumn to its most specific alias for better IDE display
+ * This makes the type system prefer showing aliases like PKColumn, UniqueColumn, etc.
+ * instead of the full generic UColumn<TType, THasDefault, TIsPrimaryKey, TIsUnique>
+ * 
+ * Note: This is a display-only transformation. The underlying type is still UColumn,
+ * so all type operations (like ExtractColumnType) will still work correctly.
+ */
+export type SimplifyUColumn<T> = T extends UColumn<infer TType, infer TFlags>
+  ? TFlags extends { isPrimaryKey: true; hasDefault: true; isUnique: true }
+    ? PKUniqueColumnWithDefault<BaseType<TType>>
+    : TFlags extends { isPrimaryKey: true; hasDefault: true }
+    ? PKColumnWithDefault<BaseType<TType>>
+    : TFlags extends { isPrimaryKey: true; isUnique: true }
+    ? PKUniqueColumn<BaseType<TType>>
+    : TFlags extends { isPrimaryKey: true }
+    ? PKColumn<BaseType<TType>>
+    : TFlags extends { hasDefault: true; isUnique: true }
+    ? UniqueColumnWithDefault<TType>
+    : TFlags extends { hasDefault: true }
+    ? ColumnWithDefault<TType>
+    : TFlags extends { isUnique: true }
+    ? IncludesNull<TType> extends true
+      ? UniqueColumn<BaseType<TType>>
+      : UniqueNonNullableColumn<BaseType<TType>>
+    : IncludesNull<TType> extends true
+      ? NullableColumn<BaseType<TType>>
+      : NonNullableColumn<BaseType<TType>>
+  : T extends ColData
+    ? T  // Keep ColData as-is
+    : T;
 
 /**
  * Check if a column is already bound (is a ColumnBuilder, not UnboundColumnData)
@@ -360,7 +516,7 @@ export function bindColumn(
  * Columns are exposed as properties on the table object (e.g., table.name, table.id)
  * for use in references and type inference.
  */
-export interface UnboundTable<TColumns extends Record<string, UColumn | ColData> = Record<string, UColumn | ColData>> {
+export interface UnboundTable<TColumns extends Record<string, UColumn<any, any> | ColData> = Record<string, UColumn<any, any> | ColData>> {
   readonly __unbound: true;
   readonly __name: string;
   readonly columns: Record<string, ColData>;
@@ -376,7 +532,9 @@ type ExtractColumnType<T> = T extends UColumn<infer Type, any> ? Type : any;
 /**
  * Helper type to check if a column has a default value
  */
-type HasDefault<T> = T extends UColumn<any, infer HasDefault> ? HasDefault : false;
+type HasDefault<T> = T extends UColumn<any, infer TFlags> 
+  ? TFlags extends { hasDefault: true } ? true : false
+  : false;
 
 /**
  * Helper type to compute the select type from columns
@@ -409,6 +567,58 @@ type ComputeInsertType<TColumns extends Record<string, UColumn | ColData>> = {
 };
 
 /**
+ * Helper type to check if a column has a primaryKey modifier
+ * For ColData, we can check the modifiers array at the type level
+ * For UColumn, we check the isPrimaryKey flag in TFlags
+ */
+type HasPrimaryKey<T> = T extends ColData
+  ? { [K in keyof T['modifiers']]: T['modifiers'][K] extends { method: 'primaryKey' } ? true : false }[number] extends true
+    ? true
+    : false
+  : T extends UColumn<any, infer TFlags>
+    ? TFlags extends { isPrimaryKey: true }
+      ? true
+      : false
+    : false;
+
+/**
+ * Helper type to check if a column is unique
+ * For ColData, we can check the modifiers array at the type level
+ * For UColumn, we check the isUnique flag in TFlags
+ */
+type IsUnique<T> = T extends ColData
+  ? { [K in keyof T['modifiers']]: T['modifiers'][K] extends { method: 'unique' } ? true : false }[number] extends true
+    ? true
+    : false
+  : T extends UColumn<any, infer TFlags>
+    ? TFlags extends { isUnique: true }
+      ? true
+      : false
+    : false;
+
+/**
+ * Helper type to find the primary key column key in a table
+ * Returns the key of the column that has a primaryKey modifier, or never if none exists
+ */
+type FindPrimaryKeyColumnKey<TColumns extends Record<string, UColumn<any, any> | ColData>> = {
+  [K in keyof TColumns]: HasPrimaryKey<TColumns[K]> extends true ? K : never;
+}[keyof TColumns];
+
+/**
+ * Helper type to get the primary key column type
+ * Now that UColumn tracks TIsPrimaryKey, we can detect primary keys at the type level!
+ * Returns the specific column type if a primary key exists, or undefined if none exists
+ */
+type GetPrimaryKeyColumn<TColumns extends Record<string, UColumn<any, any> | ColData>> = 
+  FindPrimaryKeyColumnKey<TColumns> extends infer PKKey
+    ? [PKKey] extends [never]
+      ? undefined  // No primary key found
+      : PKKey extends keyof TColumns
+        ? TColumns[PKKey]  // Primary key detected, return specific column
+        : undefined
+    : undefined;
+
+/**
  * Unbound table with columns exposed as properties and type inference
  * This intersection type allows columns to be accessed as properties (e.g., table.name)
  * and provides $inferSelect and $inferInsert type-level properties
@@ -418,7 +628,7 @@ type ComputeInsertType<TColumns extends Record<string, UColumn | ColData>> = {
  */
 export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>> =
   UnboundTable<TColumns> & {
-    readonly [K in keyof TColumns]: TColumns[K];
+    readonly [K in keyof TColumns]: SimplifyUColumn<TColumns[K]>;
   } & {
     /**
      * Infer the select type from this table
@@ -437,6 +647,17 @@ export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>>
      * Note: Use `typeof` to access this as a type: `typeof usersTable.$inferInsert`
      */
     readonly $inferInsert: ComputeInsertType<TColumns>;
+    
+    /**
+     * Get the primary key column from this table
+     * Returns the column that has .primaryKey() modifier, or undefined if none exists
+     * Usage: const pkColumn = usersTable.$primaryKey;
+     *        type PkType = typeof usersTable.$primaryKey.$inferSelect;
+     * 
+     * Note: This is strongly typed - returns the specific column type if detected at type level,
+     * or undefined if not detected (runtime will still return the correct column if it exists)
+     */
+    readonly $primaryKey: GetPrimaryKeyColumn<TColumns>;
   };
 
 /**
@@ -514,6 +735,29 @@ export function unboundTable<
     constraints,
   };
   
+  // Find the primary key column (if any) at runtime
+  let primaryKeyColumn: UColumn<any, any> | ColData | undefined = undefined;
+  for (const key in columns) {
+    if (!columns.hasOwnProperty(key)) continue;
+    
+    const column = columns[key];
+    let hasPrimaryKey = false;
+    
+    if (column instanceof UColumn) {
+      const data = column.getData();
+      hasPrimaryKey = data.modifiers.some(m => m.method === 'primaryKey');
+    } else {
+      // Must be ColData
+      const data = column as ColData;
+      hasPrimaryKey = data.modifiers.some(m => m.method === 'primaryKey');
+    }
+    
+    if (hasPrimaryKey) {
+      primaryKeyColumn = column;
+      break; // Take the first primary key found
+    }
+  }
+
   // Create table object with columns exposed as properties
   // The types are computed at the type level using ComputeSelectType and ComputeInsertType
   // We use the original columns parameter directly to preserve literal types
@@ -524,6 +768,11 @@ export function unboundTable<
     // Use the original columns parameter to preserve specific types
     // TypeScript will preserve the literal object type even with mixed column types
     ...columns,
+    // Add $primaryKey getter that returns the primary key column
+    // Type assertion is needed because runtime type doesn't match type-level inference
+    get $primaryKey(): GetPrimaryKeyColumn<TColumns> {
+      return primaryKeyColumn as GetPrimaryKeyColumn<TColumns>;
+    },
   } as UTable<TColumns>;
   
   return result;

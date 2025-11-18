@@ -8,7 +8,7 @@ const uuid = (name: string) => varchar(name, {length: 16}).default(generateUUID)
 // Step 2: Define Schema
 const usersTable = table('users', {
     id: uuid('id').primaryKey(),
-    name: text('name'),
+    name: text('name').unique(),
     birthday: timestamp('birthday').notNull(),
     gender: varchar('gender', {enum: ['male', 'female'] as const}),
     bio: text('bio'),
@@ -17,8 +17,12 @@ const usersTable = table('users', {
 
 type UserInsert = typeof usersTable.$inferInsert;
 type UserSelect = typeof usersTable.$inferSelect;
-// type UserGenderInsert = typeof usersTable.gender.$inferInsert;
-// type UserGenderSelect = typeof usersTable.gender.$inferSelect;
+type UserGenderInsert = typeof usersTable.gender.$inferInsert;
+type UserGenderSelect = typeof usersTable.gender.$inferSelect;
+const pkColumn = usersTable.$primaryKey;
+type PkType = typeof usersTable.$primaryKey.$inferSelect;
+
+const x: PkType = "cool";
 
 const postsTable = table('posts', {
     author: text('name').notNull().references(() => usersTable.name),
