@@ -22,13 +22,15 @@ type UserGenderSelect = typeof usersTable.gender.$inferSelect;
 const pkColumn = usersTable.$primaryKey;
 type PkType = typeof usersTable.$primaryKey.$inferSelect;
 
-const x: PkType = "cool";
-
 const postsTable = table('posts', {
-    author: text('name').notNull().references(() => usersTable.name),
+    author: text('name').notNull().references(() => usersTable.gender),
     postedAt: timestamp('posted_at').defaultNow(),
     content: varchar('content', {length: 2000}),
 })
+
+// Test $ref property
+const authorRef = postsTable.author.$ref;
+type AuthorRefType = typeof postsTable.author.$ref;
 
 // Step 3: Define Schema
 export const schema = xpschema({

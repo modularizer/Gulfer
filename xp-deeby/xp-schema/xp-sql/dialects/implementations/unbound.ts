@@ -81,7 +81,20 @@ export interface UColumnFlags {
   readonly isPrimaryKey?: boolean;
   /** Whether the column is unique (set to true after .unique() is called) */
   readonly isUnique?: boolean;
+  /** The referenced column type (set when .references() is called) */
+  readonly ref?: UColumn<any, any> | ColData | ColumnBuilder | (() => UColumn<any, any> | ColData | ColumnBuilder);
 }
+
+/**
+ * Helper type to extract the ref type from a UColumn
+ */
+type ExtractRefType<T> = T extends UColumn<any, infer TFlags>
+  ? TFlags extends { ref: infer TRef }
+    ? TRef extends (() => infer TResolved)
+      ? TResolved
+      : TRef
+    : undefined
+  : undefined;
 
 /**
  * Chainable unbound column builder
@@ -113,6 +126,7 @@ export class UColumn<
   TFlags extends UColumnFlags = {}
 > {
   private data: ColData;
+  private _ref?: UColumn<any, any> | ColData | ColumnBuilder | (() => UColumn<any, any> | ColData | ColumnBuilder);
 
   constructor(type: string, name: string, options?: any) {
     this.data = {
@@ -231,14 +245,41 @@ export class UColumn<
   /**
    * Add .references() modifier for foreign key constraints
    * Usage: text('user_id').references(() => usersTable.id)
-   * Preserves all type parameters
+   * Stores the reference as a function, UColumn, ColData, or ColumnBuilder
    */
-  references(refFn: () => any): UColumn<TType, TFlags> {
+  references<TRefColumn extends UColumn<any, any> | ColData | ColumnBuilder>(
+    ref: TRefColumn | (() => TRefColumn)
+  ): UColumn<TType, TFlags & { ref: TRefColumn }> {
+    // Store the reference (function, UColumn, ColData, or ColumnBuilder)
+    this._ref = typeof ref === 'function' ? ref : ref;
     this.data = {
       ...this.data,
-      modifiers: [...this.data.modifiers, { method: 'references', args: [refFn] }],
+      modifiers: [...this.data.modifiers, { method: 'references', args: [typeof ref === 'function' ? ref : () => ref] }],
     };
     return this as any;
+  }
+
+  /**
+   * Get the referenced column (if this column has a foreign key reference)
+   * Usage: const refColumn = column.$ref;
+   * Returns the column that this column references, resolving functions if needed
+   * Returns undefined if no reference exists
+   * 
+   * The return type is inferred from TFlags['ref'], which is set when .references() is called
+   */
+  get $ref(): TFlags extends { ref: infer TRef }
+    ? TRef extends (() => infer TResolved)
+      ? TResolved
+      : TRef
+    : undefined {
+    if (!this._ref) {
+      return undefined as any;
+    }
+    // If it's a function, resolve it; otherwise return as-is
+    if (typeof this._ref === 'function') {
+      return this._ref() as any;
+    }
+    return this._ref as any;
   }
 
   /**
@@ -353,7 +394,10 @@ export type PKUniqueColumnWithDefault<TType> = UColumn<TType, { hasDefault: true
  * so all type operations (like ExtractColumnType) will still work correctly.
  */
 export type SimplifyUColumn<T> = T extends UColumn<infer TType, infer TFlags>
-  ? TFlags extends { isPrimaryKey: true; hasDefault: true; isUnique: true }
+  ? // If it has a ref, preserve it - don't simplify
+    TFlags extends { ref: any }
+    ? T  // Keep the original type to preserve ref information
+    : TFlags extends { isPrimaryKey: true; hasDefault: true; isUnique: true }
     ? PKUniqueColumnWithDefault<BaseType<TType>>
     : TFlags extends { isPrimaryKey: true; hasDefault: true }
     ? PKColumnWithDefault<BaseType<TType>>
