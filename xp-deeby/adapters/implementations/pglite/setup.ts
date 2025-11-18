@@ -141,14 +141,75 @@ export async function initializePglite(): Promise<CreateDB>  {
 
                     // Map result to Drizzle format
                     if (this.fields && this.fields.length > 0) {
-                        const mapped = result.rows.map((row: any) => {
+                        const mapped = result.rows.map((row: any, rowIndex: number) => {
                             const mappedRow: any = {};
-                            for (const field of this.fields) {
-                                const fieldName = field.name;
+                            const rowKeys = Object.keys(row);
+                            
+                            for (const fieldDef of this.fields) {
+                                if (!fieldDef || typeof fieldDef !== 'object') {
+                                    throw new Error(
+                                        `PGLite field mapping error: invalid field object. ` +
+                                        `Field type: ${typeof fieldDef}. ` +
+                                        `Row index: ${rowIndex}`
+                                    );
+                                }
+                                
+                                // Field definition can have different structures:
+                                // 1. { name: 'fieldName' } - direct name
+                                // 2. { field: columnObject, path: [...] } - Drizzle column reference
+                                // 3. columnObject directly - Drizzle column
+                                let fieldName: string | undefined;
+                                
+                                if (fieldDef.name && typeof fieldDef.name === 'string') {
+                                    fieldName = fieldDef.name;
+                                } else if (fieldDef.field && fieldDef.field.name && typeof fieldDef.field.name === 'string') {
+                                    fieldName = fieldDef.field.name;
+                                } else if (fieldDef.field && typeof fieldDef.field === 'object' && 'name' in fieldDef.field) {
+                                    fieldName = String(fieldDef.field.name);
+                                } else if (typeof fieldDef === 'object' && 'name' in fieldDef) {
+                                    fieldName = String(fieldDef.name);
+                                }
+                                
+                                if (!fieldName || typeof fieldName !== 'string') {
+                                    const fieldKeys = Object.keys(fieldDef).join(', ');
+                                    throw new Error(
+                                        `PGLite field mapping error: cannot extract field name. ` +
+                                        `Field keys: [${fieldKeys}]. ` +
+                                        `Field structure: has 'name': ${'name' in fieldDef}, has 'field': ${'field' in fieldDef}. ` +
+                                        `Row index: ${rowIndex}`
+                                    );
+                                }
+                                
+                                // Try both the original field name and snake_case version
+                                // since the dialect converts to snake_case
+                                const snakeCaseName = fieldName.replace(/([A-Z])/g, '_$1').toLowerCase();
+                                
                                 if (fieldName in row) {
                                     mappedRow[fieldName] = row[fieldName];
+                                } else if (snakeCaseName in row) {
+                                    mappedRow[fieldName] = row[snakeCaseName];
+                                } else if (fieldName.toLowerCase() in row) {
+                                    mappedRow[fieldName] = row[fieldName.toLowerCase()];
                                 }
                             }
+                            
+                            // If field mapping resulted in empty object but row has data, this is an error
+                            if (Object.keys(mappedRow).length === 0 && Object.keys(row).length > 0) {
+                                const extractedFieldNames: string[] = [];
+                                for (const f of this.fields) {
+                                    if (f?.name) extractedFieldNames.push(f.name);
+                                    else if (f?.field?.name) extractedFieldNames.push(f.field.name);
+                                    else extractedFieldNames.push('unknown');
+                                }
+                                throw new Error(
+                                    `PGLite field mapping failed: no fields matched. ` +
+                                    `Expected fields: [${extractedFieldNames.join(', ')}]. ` +
+                                    `Row keys: [${rowKeys.join(', ')}]. ` +
+                                    `Row data: ${JSON.stringify(row, null, 2)}. ` +
+                                    `Row index: ${rowIndex}`
+                                );
+                            }
+                            
                             return mappedRow;
                         });
 

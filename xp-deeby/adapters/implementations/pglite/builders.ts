@@ -30,10 +30,6 @@ import {
 } from 'drizzle-orm/pg-core';
 import {SchemaBuilder} from "../../abstract/builders";
 
-// UUID helpers for convenience (using varchar since PostgreSQL doesn't have a native UUID type in drizzle)
-const uuid = (name: string) => varchar(name);
-const uuidDefault = (name: string) => uuid(name);
-const uuidPK = (name: string) => uuidDefault(name).primaryKey();
 
 
 /**

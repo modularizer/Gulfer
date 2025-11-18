@@ -50,7 +50,7 @@ import type {
   ParticipantEventStageScoreInsert,
   PhotoInsert,
 } from '../tables';
-import { upsertEntity, upsertEntities, deleteMissingChildren } from '../../../../xp-deeby/utils';
+import { deleteMissingChildren } from '../../../../xp-deeby/utils';
 import { generateUUID } from '../../../../xp-deeby/utils';
 import {Database} from "../../../../xp-deeby/adapters";
 
@@ -450,7 +450,7 @@ export async function upsertEventWithDetails(
   // 1. Upsert venue/format hierarchy (bottom-up)
   if (data.sport) {
     const sport = data.sport as Partial<SportInsert>;
-    await upsertEntity(db, schema.sports, sport, { name: sport.name });
+    await schema.sports.using(db).upsertWhere(sport, 'name');
   }
   
   if (data.scoreFormat) {
@@ -459,19 +459,19 @@ export async function upsertEventWithDetails(
     if (scoreFormat.name) condition.name = scoreFormat.name;
     if (scoreFormat.sportId) condition.sportId = scoreFormat.sportId;
     if (scoreFormat.scoringMethodName) condition.scoringMethodName = scoreFormat.scoringMethodName;
-    await upsertEntity(db, schema.scoreFormats, scoreFormat, condition);
+    await schema.scoreFormats.using(db).upsertWhere(scoreFormat, condition);
   }
   
   if (data.eventFormat) {
     const eventFormat = data.eventFormat as Partial<EventFormatInsert>;
-    await upsertEntity(db, schema.eventFormats, eventFormat, {
+    await schema.eventFormats.using(db).upsertWhere(eventFormat, {
       name: eventFormat.name,
       sportId: eventFormat.sportId,
     });
   }
   
   if (data.venue) {
-    await upsertEntity(db, schema.venues, data.venue as Partial<VenueInsert>, { id: data.venue.id });
+      await schema.venues.using(db).upsertWhere(data.venue as Partial<VenueInsert>, { id: data.venue.id });
   }
   
   if (data.venueEventFormat) {

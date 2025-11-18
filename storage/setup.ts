@@ -31,8 +31,8 @@
 import { setupSchemaByName } from './schema';
 import { SportsDataServices } from './schema/generic-sports-data';
 import type { Sport } from './schema/generic-sports-data/sports';
-import type { AdapterType } from '../xp-deeby/adapters';
 import { golf } from './sports';
+import {AdapterType} from "../xp-deeby/adapters/abstract/capabilities";
 
 /**
  * Set up storage with database and services

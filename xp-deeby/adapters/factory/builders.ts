@@ -40,6 +40,8 @@ import {detectPlatform} from "../../platform";
 import * as pglite from "../implementations/pglite/builders";
 import * as postgres from "../implementations/postgres/builders";
 import * as sqliteMobile from "../implementations/sqlite-mobile/builders";
+import {Database} from "../abstract/database";
+import {DatabaseTable} from "../abstract/database-table";
 
 
 
@@ -97,7 +99,9 @@ export function table(
   columns: Record<string, ColumnBuilder>,
   constraints?: TableConstraints
 ): Table {
-  return getSchema().table(name, columns, constraints);
+  const tb = getSchema().table(name, columns, constraints);
+  tb.using = (db: Database): DatabaseTable => db.getTable(tb); // bind to a specific connection
+  return tb;
 }
 
 /**

@@ -11,9 +11,8 @@ import { BaseTableService } from './base-table-service';
 import { eq, like } from 'drizzle-orm';
 import * as schema from '../tables';
 import type { EventFormat, Sport, ScoreFormat, EventFormatStage} from '../tables';
-import { upsertEntity } from '../query-builders';
 import { queryStages, upsertStagesWithDetails, type StageWithDetails } from '../query-builders';
-import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/utils';
 import { SportService } from './sport-service';
 import { ScoreFormatService } from './score-format-service';
 
@@ -149,7 +148,7 @@ export class EventFormatService extends BaseTableService<EventFormat> {
    * Create or update an event format
    */
   async saveEventFormat(eventFormat: Partial<EventFormat>): Promise<void> {
-    await upsertEntity(this.db, schema.eventFormats, eventFormat, {
+    await this.db.upsertWhere(schema.eventFormats, eventFormat, {
       name: eventFormat.name,
       sportId: eventFormat.sportId,
     });

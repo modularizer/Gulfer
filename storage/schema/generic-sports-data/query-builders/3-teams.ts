@@ -28,8 +28,8 @@ import type {
   ParticipantInsert,
   TeamMemberInsert,
 } from '../tables';
-import { upsertEntity, upsertEntities, deleteMissingChildren } from '../../../../xp-deeby/utils';
-import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import { deleteMissingChildren } from '../../../../xp-deeby/utils';
+import { generateUUID } from '../../../../xp-deeby/utils';
 import {Database} from "../../../../xp-deeby/adapters";
 
 // ============================================================================
@@ -556,8 +556,10 @@ export async function upsertTeamWithDetails(
       teamId: data.team.id,
       participantId: memberId,
     }));
-    
-    await upsertEntities(db, schema.teamMembers, teamMembers as Partial<TeamMemberInsert>[], (tm) => ({ id: tm.id }));
+
+    teamMembers.map((tm: any) => {
+        db.upsertWhere(schema.teamMembers, tm, {id: tm.id})
+    })
     
     // Delete teamMembers that are no longer in the list
     const keepTeamMemberIds = teamMembers.map(tm => tm.id).filter((id): id is string => !!id);

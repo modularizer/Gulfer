@@ -252,7 +252,6 @@ export class PlayerService extends BaseService {
 
             // Check if anything actually changed
             const hasChanges = Object.keys(updatedPlayer).some(key => {
-                if (key === 'id' || key === 'isTeam') return false;
                 return (existingPlayer as any)[key] !== (updatedPlayer as any)[key];
             });
 
@@ -270,36 +269,6 @@ export class PlayerService extends BaseService {
                 console.log(`[PlayerService.upsertPlayer] Existing player data:`, existingPlayer);
                 
                 const saved = await this.getPlayer(existingPlayer.id);
-                console.log(`[PlayerService.upsertPlayer] Retrieved player:`, saved);
-                
-                if (!saved) {
-                    // Try to get raw data to debug
-                    let rawData: any[] = [];
-                    try {
-                        rawData = await this.db
-                            .select()
-                            .from(schema.participants)
-                            .where(eq(schema.participants.id, existingPlayer.id))
-                            .limit(1);
-                        console.error(`[PlayerService.upsertPlayer] Raw data from database:`, rawData);
-                    } catch (rawError) {
-                        console.error(`[PlayerService.upsertPlayer] Error getting raw data:`, rawError);
-                    }
-                    
-                    // Construct a minimal player from raw data if available
-                    if (rawData.length > 0) {
-                        console.log(`[PlayerService.upsertPlayer] Constructing ParticipantWithDetails from raw data`);
-                        const constructedPlayer: ParticipantWithDetails = {
-                            participant: rawData[0] as Participant,
-                            teams: [],
-                            teamMembers: [],
-                            events: [],
-                        };
-                        return { result: 'unchanged', player: constructedPlayer };
-                    }
-                    
-                    throw new Error(`Failed to retrieve player: Player with ID ${existingPlayer.id} exists in database (${JSON.stringify(rawData)}) but query builder returned null. This is likely a query builder parsing issue with PGLite.`);
-                }
                 return { result: 'unchanged', player: saved };
             }
         } else {

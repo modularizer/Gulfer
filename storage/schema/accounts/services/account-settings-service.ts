@@ -9,11 +9,10 @@ import { BaseService } from '../../generic-sports-data/services/base';
 import type { Database } from '../../../../xp-deeby/adapters';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../schema/tables';
-import type { SettingOption, SettingOptionInsert, AccountSettingOption, AccountSettingOptionInsert } from '../schema/tables';
-import { upsertEntity } from '../../generic-sports-data/query-builders';
-import { queryAccountSettings, upsertAccountSettings } from '../query-builders/account-settings';
-import type { AccountWithSettings, SettingOptionWithAccountValues } from '../query-builders/account-settings';
-import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import type { SettingOption, SettingOptionInsert, AccountSettingOption } from '../schema/tables';
+import { queryAccountSettings, upsertAccountSettings } from '../query-builders';
+import type { AccountWithSettings, SettingOptionWithAccountValues } from '../query-builders';
+import { generateUUID } from '../../../../xp-deeby/utils';
 
 import { z } from 'zod';
 
@@ -45,6 +44,7 @@ export class AccountSettingsService extends BaseService {
         ...existing[0],
         spec,
       };
+      schema.settingOptions.using(this.db).upsertWhere(spec, 'name')
       await upsertEntity(this.db, schema.settingOptions, updated);
       return updated as SettingOption;
     }

@@ -28,7 +28,18 @@ export abstract class BaseService {
       .where(eq(table.id, id))
       .limit(1);
     
-    return results.length > 0 ? (results[0] as T) : null;
+    if (results.length === 0) {
+      return null;
+    }
+    
+    const result = results[0];
+    
+    // Verify the result actually has data (not an empty object from failed mapping)
+    if (!result || typeof result !== 'object' || Object.keys(result).length === 0) {
+      return null;
+    }
+    
+    return result as T;
   }
 
   /**

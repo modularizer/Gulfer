@@ -260,6 +260,11 @@ export abstract class Sport {
     // Auto-register: upsert Sport in database
     await this._selfRegister();
     
+    // Verify that _cachedId was set
+    if (!this._cachedId) {
+      throw new Error(`Failed to register sport "${this.name}": _cachedId was not set after _selfRegister()`);
+    }
+    
     // Auto-register scoring methods from eventFormats
     await this._registerScoringMethods();
     
@@ -277,18 +282,16 @@ export abstract class Sport {
 
     // Check if sport already exists (exact name match)
     const allSports = await this.sportService.getAllSports();
-    const existing = allSports.find(s => s.name?.toLowerCase() === this.name.toLowerCase());
+    const existing = allSports.find((s: { name: string; }) => s.name?.toLowerCase() === this.name.toLowerCase());
     let sport: SportRecord;
     
     if (existing) {
-      // Update existing sport
-      sport = existing;
-      await this.sportService.updateSport(sport.id, {
+      // Update existing sport - use the returned sport from updateSport
+      sport = await this.sportService.updateSport(existing.id, {
         name: this.name,
         notes: this.description,
         metadata: this.metadata || null,
       });
-      this._cachedId = sport.id;
     } else {
       // Create new sport
       sport = await this.sportService.createSport({
@@ -296,8 +299,24 @@ export abstract class Sport {
         notes: this.description,
         metadata: this.metadata || null,
       });
-      this._cachedId = sport.id;
     }
+    
+    // Ensure sport has an ID and set _cachedId
+    if (!sport) {
+      throw new Error(`Failed to register sport "${this.name}": createSport/updateSport returned null or undefined`);
+    }
+    
+    // Check if sport has an id property (handle both camelCase and snake_case)
+    const sportId = sport.id || (sport as any).sport_id || (sport as any)['id'];
+    if (!sportId) {
+      const sportKeys = Object.keys(sport);
+      throw new Error(
+        `Failed to register sport "${this.name}": sport was created/updated but does not have an ID. ` +
+        `Sport object keys: ${sportKeys.join(', ')}, ` +
+        `Sport object: ${JSON.stringify(sport, null, 2)}`
+      );
+    }
+    this._cachedId = sportId;
   }
 
   /**
@@ -355,7 +374,7 @@ export abstract class Sport {
 
     for (const scoringMethod of scoringMethodsSet) {
       const scoreFormats = await this.scoreFormatService.getScoreFormatsByScoringMethod(scoringMethod.name);
-      const scoreFormat = scoreFormats.find(sf => sf.sportId === sportId);
+      const scoreFormat = scoreFormats.find((sf: { sportId: string; }) => sf.sportId === sportId);
       if (scoreFormat) {
         scoreFormatMap.set(scoringMethod.name, scoreFormat);
       }
@@ -371,7 +390,7 @@ export abstract class Sport {
 
       // Check if event format already exists
       const existing = await this.eventFormatService.getEventFormatsBySport(sportId);
-      const existingFormat = existing.find(ef => ef.name === formatDef.name);
+      const existingFormat = existing.find((ef: { name: string; }) => ef.name === formatDef.name);
       
       if (existingFormat) {
         // Update existing event format
@@ -483,7 +502,7 @@ export abstract class Sport {
     }
     const formats = await this.scoreFormatService.getScoreFormatsByScoringMethod(scoringMethodName);
     const sportId = this.getSportId();
-    return formats.find(sf => sf.sportId === sportId) || null;
+    return formats.find((sf: { sportId: string; }) => sf.sportId === sportId) || null;
   }
 
   /**
@@ -495,7 +514,7 @@ export abstract class Sport {
     }
     const allFormats = await this.scoreFormatService.getAllScoreFormats();
     const sportId = this.getSportId();
-    return allFormats.filter(sf => sf.sportId === sportId);
+    return allFormats.filter((sf: { sportId: string; }) => sf.sportId === sportId);
   }
 
   // ============================================================================

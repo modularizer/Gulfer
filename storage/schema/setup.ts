@@ -17,10 +17,11 @@
  * ```
  */
 
-import {Database, AdapterType} from '../../xp-deeby/adapters';
+import {Database} from '../../xp-deeby/adapters';
 import { getDatabaseByName } from '../../xp-deeby/adapters';
 import { setupDatabase } from './generic-sports-data/setup';
 import { setupDatabase as setupAccountsDatabase } from './accounts/setup';
+import {AdapterType} from "../../xp-deeby/adapters/abstract/capabilities";
 
 /**
  * Set up database schema by name

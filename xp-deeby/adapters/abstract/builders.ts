@@ -39,6 +39,8 @@ export interface Table {
      * Drizzle tables have internal symbols and other properties
      */
     [key: string]: any;
+
+
 }
 
 /**
@@ -90,7 +92,9 @@ export type TextBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder
 export type VarcharBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder;
 export type IntegerBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder;
 export type RealBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder;
+export type NumericBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder;
 export type TimestampBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder;
+export type JsonBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder;
 export type JsonbBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder;
 export type BoolBuilder = (name: string, config?: ColumnConfig) => ColumnBuilder;
 export type UuidBuilder = (name: string, ...args: any[]) => ColumnBuilder;

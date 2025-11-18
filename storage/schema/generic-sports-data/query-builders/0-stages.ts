@@ -31,7 +31,7 @@ import type {
   EventStageInsert,
   ParticipantEventStageScoreInsert,
 } from '../tables';
-import { upsertEntity, upsertEntities, deleteMissingChildren } from '../../../../xp-deeby/utils';
+import { deleteMissingChildren } from '../../../../xp-deeby/utils';
 import {Database} from "../../../../xp-deeby/adapters";
 
 // ============================================================================
@@ -405,8 +405,7 @@ export async function upsertStagesWithDetails(
           number: eventFormatStage.number,
         };
       }
-      
-      await upsertEntity(db, schema.eventFormatStages, eventFormatStage, condition);
+      await schema.eventStages.using(db).upsertWhere(eventFormatStage, condition);
     }
     
     // Upsert venueEventFormatStage if provided
@@ -427,14 +426,13 @@ export async function upsertStagesWithDetails(
           number: venueEventFormatStage.number,
         };
       }
-      
-      await upsertEntity(db, schema.venueEventFormatStages, venueEventFormatStage, condition);
+      await schema.venueEventFormatStages.using(db).upsertWhere(venueEventFormatStage, condition);
     }
     
     // Upsert eventStage if provided
     if (stageData.eventStage && eventId) {
       const eventStageId = stageData.eventStage.id;
-      await upsertEntity(db, schema.eventStages, {
+      await schema.eventStages.using(db, {
         ...stageData.eventStage,
         eventId,
       } as Partial<EventStageInsert>, { id: eventStageId });
@@ -445,8 +443,10 @@ export async function upsertStagesWithDetails(
           ...score,
           eventStageId,
         }));
-        await upsertEntities(db, schema.participantEventStageScores, scores as Partial<ParticipantEventStageScoreInsert>[], (score) => ({ id: score.id }));
-        
+
+        scores.map((score: any) => {
+            db.upsertWhere(schema.participantEventStageScores, score, {id: score.id})
+        })
         // Delete scores that are no longer in the list
         const keepScoreIds = stageData.scores.map(s => s.id).filter((id): id is string => !!id);
         await deleteMissingChildren(

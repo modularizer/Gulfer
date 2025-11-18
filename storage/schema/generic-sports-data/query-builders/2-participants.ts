@@ -30,8 +30,7 @@ import type {
   EventInsert,
   ParticipantEventStageScoreInsert,
 } from '../tables';
-import { upsertEntity, upsertEntities } from '../../../../xp-deeby/utils';
-import { generateUUID } from '../../../../xp-deeby/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/utils';
 import {Database} from "../../../../xp-deeby/adapters";
 
 // ============================================================================
