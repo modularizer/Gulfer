@@ -5,9 +5,8 @@
  * These functions are schema-agnostic and can be used with any migration set.
  */
 
-import type { Database } from '../adapters';
+import type { XPDatabaseConnectionPlus } from '../../index';
 import { sql } from 'drizzle-orm';
-import { getAdapter } from '../adapters';
 
 /**
  * Migration definition
@@ -43,7 +42,7 @@ export interface RunMigrationsOptions {
  * Get set of applied migration hashes
  */
 async function getAppliedMigrations(
-  db: Database,
+  db: XPDatabaseConnectionPlus,
   migrationsTableName: string
 ): Promise<Set<string>> {
   try {
@@ -78,15 +77,13 @@ async function getAppliedMigrations(
  * ```
  */
 export async function runMigrations(
-  db: Database,
+  db: XPDatabaseConnectionPlus,
   options: RunMigrationsOptions
 ): Promise<void> {
   const { migrationsTableName, migrations, onMigrationApplied } = options;
   
-  // Get adapter to determine dialect
-  const adapter = await getAdapter();
-  const capabilities = adapter.getCapabilities();
-  const dialect = capabilities.dialect === 'postgres' ? 'postgres' : 'sqlite';
+  // Get dialect from database connection
+  const dialect = db.dialect.dialectName === 'pg' ? 'postgres' : 'sqlite';
   
   // Create migrations tracking table
   // Use dialect-appropriate syntax

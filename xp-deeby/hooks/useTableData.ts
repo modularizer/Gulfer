@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { sql } from 'drizzle-orm';
-import {getDatabaseByName} from "../adapters";
+import { connect, getRegistryEntry } from "../xp-schema";
 
 export interface TableColumn {
   name: string;
@@ -77,28 +77,30 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       setError(null);
 
       // Connect to database
-      const adapter = await getDatabaseByName(dbName);
+      const entry = await getRegistryEntry(dbName);
+      if (!entry) {
+        throw new Error(`Database ${dbName} not found in registry`);
+      }
+      const db = await connect(entry);
       
-      // Get column information using adapter method (dialect-agnostic)
+      // Get column information using database method (dialect-agnostic)
       let tableColumns: TableColumn[] = [];
-      if (adapter.getTableColumns) {
-        try {
-          const columnInfo = await adapter.getTableColumns(currentTable);
-          tableColumns = columnInfo.map((col) => ({
-            name: col.name,
-            dataType: col.dataType,
-          }));
-        } catch (err) {
-          console.error(`[useTableData] Error getting column info via adapter:`, err);
-          // Fallback: try to infer columns from first row if available
-        }
+      try {
+        const columnInfo = await db.getTableColumns(currentTable);
+        tableColumns = columnInfo.map((col) => ({
+          name: col.name,
+          dataType: col.dataType,
+        }));
+      } catch (err) {
+        console.error(`[useTableData] Error getting column info:`, err);
+        // Fallback: try to infer columns from first row if available
       }
       
-      // If we couldn't get columns via adapter, we'll infer them from the data
+      // If we couldn't get columns, we'll infer them from the data
       // This will be handled after we fetch the rows
       
       // Get total row count - no filtering here, that's done client-side
-      const totalCount = await adapter.getRowCount(currentTable);
+      const totalCount = await db.getRowCount(currentTable);
       console.log(`[useTableData] Total count for ${currentTable}:`, totalCount);
       
       // Build query - no client-side filtering or sorting here
@@ -115,7 +117,7 @@ export function useTableData(options: UseTableDataOptions): UseTableDataResult {
       }
       
       console.log(`[useTableData] Data query for ${currentTable}:`, query);
-      const queryRows = await adapter.execute(sql.raw(query)) as any[];
+      const queryRows = await db.execute(sql.raw(query)) as any[];
       console.log(`[useTableData] Data query result for ${currentTable}:`, queryRows.length, 'rows');
       console.log(`[useTableData] First row sample:`, queryRows[0]);
       

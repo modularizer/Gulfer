@@ -16,7 +16,7 @@ import {
     BigintOptions,
     SmallintOptions,
     BooleanOptions,
-    JsonOptions, ColumnInfo, DrizzleColumnInfo,
+    JsonOptions, ColumnInfo, DrizzleColumnInfo, ColumnBuilderFn,
 } from "../types";
 import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {sql} from "drizzle-orm";

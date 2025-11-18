@@ -11,7 +11,7 @@ import {
     StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { getAdapter, getRegistryEntries } from '../adapters';
+import { connect, getRegistryEntries } from '../xp-schema';
 import { sql } from 'drizzle-orm';
 import TableViewer, { TableViewerColumn, TableViewerRow } from '../components/TableViewer';
 import QueryEditor from '../components/QueryEditor';
@@ -419,18 +419,17 @@ export default function XpDeebyTableView({onNavigate}: { onNavigate: NavigateCal
                 const entry = entries.find(e => e.name === dbName);
                 if (!entry || cancelled) return;
 
-                const adapter = await getAdapter(entry.adapterType);
+                const db = await connect(entry);
                 if (cancelled) return;
 
-                await adapter.openFromRegistry(entry);
                 if (!cancelled) {
-                    setDb(adapter.db);
+                    setDb(db);
                 }
 
-                // Load table names if adapter supports it
+                // Load table names
                 if (!cancelled) {
                     try {
-                        const tableNames = await adapter.getTableNames();
+                        const tableNames = await db.getTableNames();
                         if (!cancelled) {
                             setTables(tableNames);
                         }

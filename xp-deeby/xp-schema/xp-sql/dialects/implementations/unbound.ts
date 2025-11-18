@@ -6,7 +6,6 @@
  */
 
 import type {ColumnBuilder, Table} from 'drizzle-orm';
-import type {InferSelectModel, InferInsertModel} from 'drizzle-orm';
 import {sql} from 'drizzle-orm';
 import {
     DialectBuilders,
@@ -39,20 +38,50 @@ import NotImplementedError = errors.NotImplementedError;
  * Unbound column definition
  * Stores the column type and options, but not yet bound to a dialect
  */
-export interface UnboundColumnData {
+export interface ColData {
   readonly __unbound: true;
   readonly type: string;
   readonly name: string;
   readonly options?: any;
   readonly modifiers: Array<{ method: string; args: any[] }>;
+  readonly nullable: boolean; // true if column is nullable (default), false if .notNull() was called
+  readonly typeOverride?: any; // Type override from .$type<T>()
 }
+
+/**
+ * Helper type to check if a type includes null
+ */
+type IncludesNull<T> = null extends T ? true : false;
+
+/**
+ * Helper type to extract the base type (without null)
+ */
+type BaseType<T> = null extends T ? Exclude<T, null> : T;
+
+/**
+ * Helper type to compute the insert type for a single column
+ * - Columns with defaults are optional (can be undefined)
+ * - Nullable columns are optional (can be null or undefined)
+ * - Non-nullable columns without defaults are required
+ */
+type ComputeColumnInsertType<TType, THasDefault extends boolean> = 
+  THasDefault extends true
+    ? TType | undefined // Has default, so optional
+    : IncludesNull<TType> extends true
+      ? TType | undefined // Nullable, so optional
+      : TType; // Required
 
 /**
  * Chainable unbound column builder
  * Mimics Drizzle's ColumnBuilder API but stores modifiers instead of applying them
+ * 
+ * @template TType - The TypeScript type that this column will produce.
+ *                   For nullable columns, this includes `null` (e.g., `string | null`).
+ *                   For non-nullable columns, this is just the base type (e.g., `string`).
+ * @template THasDefault - Whether the column has a default value (true after .default() is called)
  */
-export class UnboundColumnBuilder {
-  private data: UnboundColumnData;
+export class UColumn<TType = any, THasDefault extends boolean = false> {
+  private data: ColData;
 
   constructor(type: string, name: string, options?: any) {
     this.data = {
@@ -61,62 +90,97 @@ export class UnboundColumnBuilder {
       name,
       options,
       modifiers: [],
+      nullable: true, // Columns start as nullable
     };
   }
 
   /**
    * Get the underlying data
    */
-  getData(): UnboundColumnData {
+  getData(): ColData {
     return this.data;
   }
 
   /**
    * Add .notNull() modifier
+   * Returns a builder with the base type (removes null from the type)
+   * Preserves the default state
    */
-  notNull(): this {
+  notNull(): UColumn<BaseType<TType>, THasDefault> {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: 'notNull', args: [] }],
+      nullable: false, // Mark as non-nullable
     };
-    return this;
+    return this as any;
   }
 
   /**
    * Add .primaryKey() modifier
+   * Primary keys are always non-nullable, so this removes null from the type
+   * Preserves the default state
    */
-  primaryKey(): this {
+  primaryKey(): UColumn<BaseType<TType>, THasDefault> {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: 'primaryKey', args: [] }],
+      nullable: false, // Primary keys are never nullable
     };
-    return this;
+    return this as any;
   }
 
   /**
    * Add .default() modifier
+   * Returns a builder with THasDefault = true
    */
-  default(value: any): this {
+  default(value: any): UColumn<TType, true> {
     this.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: 'default', args: [value] }],
     };
-    return this;
+    return this as any;
   }
 
   /**
    * Add .$type() modifier (for TypeScript type inference)
    * Usage: text('data').$type<MyType>()
+   * Returns a builder with the overridden type, preserving nullable and default state
+   * If the original type was nullable (included null), the new type will also be nullable
    */
-  $type<T>(): this {
-    // $type doesn't take arguments in Drizzle, it's just for TypeScript
-    // We'll store a marker to indicate type inference is desired
-    this.data = {
+  $type<T>(): UColumn<IncludesNull<TType> extends true ? T | null : T, THasDefault> {
+    // $type overrides the column type
+    // We need to create a new instance with the overridden type
+    // Check if the original type included null (nullable)
+    const wasNullable = this.data.nullable;
+    const newBuilder = new UColumn(this.data.type, this.data.name, this.data.options);
+    newBuilder.data = {
       ...this.data,
       modifiers: [...this.data.modifiers, { method: '$type', args: [] }],
+      typeOverride: undefined as T, // Store the type override (using undefined as a placeholder for the type)
+      nullable: wasNullable, // Preserve nullable state
     };
-    return this;
+    return newBuilder as any;
   }
+
+  /**
+   * Infer the select type from this column
+   * Computed from the column TypeScript type
+   * Usage: type Gender = typeof column.$inferSelect;
+   * 
+   * Note: Use `typeof` to access this as a type: `typeof column.$inferSelect`
+   * This is a type-level property, not a runtime property.
+   */
+  declare readonly $inferSelect: TType;
+  
+  /**
+   * Infer the insert type from this column
+   * Columns with defaults are optional, nullable columns are optional
+   * Usage: type GenderInsert = typeof column.$inferInsert;
+   * 
+   * Note: Use `typeof` to access this as a type: `typeof column.$inferInsert`
+   * This is a type-level property, not a runtime property.
+   */
+  declare readonly $inferInsert: ComputeColumnInsertType<TType, THasDefault>;
 
   /**
    * Add .references() modifier for foreign key constraints
@@ -205,7 +269,7 @@ function getDialectFromBoundColumn(column: ColumnBuilder): string | null {
  * Also accepts already bound columns - if dialect matches, returns as-is
  */
 export function bindColumn(
-  column: UnboundColumnData | ColumnBuilder,
+  column: ColData | ColumnBuilder,
   dialect: SQLDialect
 ): ColumnBuilder {
   // Check if already bound
@@ -236,7 +300,7 @@ export function bindColumn(
   }
 
   // Not bound - proceed with binding
-  const unboundColumn = column as UnboundColumnData;
+  const unboundColumn = column as ColData;
   
   // Get the column builder function from dialect
   const builderFn = (dialect as any)[unboundColumn.type];
@@ -286,27 +350,6 @@ export function bindColumn(
 // Unbound Table
 // ============================================================================
 
-/**
- * Helper to get the bound table for type inference
- * Uses PostgreSQL as the default dialect
- */
-let pgDialectForInference: SQLDialect | null = null;
-
-/**
- * Get or create the PostgreSQL dialect for type inference
- * This is lazily loaded to avoid circular dependencies
- */
-function getPgDialectForInference(): SQLDialect {
-  if (!pgDialectForInference) {
-    // Lazy import to avoid circular dependencies
-    const pgModule = require('./pg');
-    pgDialectForInference = pgModule.default || pgModule.pgDialect;
-    if (!pgDialectForInference) {
-      throw new Error('Failed to load PostgreSQL dialect for type inference');
-    }
-  }
-  return pgDialectForInference;
-}
 
 /**
  * Unbound table definition
@@ -317,42 +360,83 @@ function getPgDialectForInference(): SQLDialect {
  * Columns are exposed as properties on the table object (e.g., table.name, table.id)
  * for use in references and type inference.
  */
-export interface UnboundTable<TColumns extends Record<string, UnboundColumnBuilder | UnboundColumnData> = Record<string, UnboundColumnBuilder | UnboundColumnData>> {
+export interface UnboundTable<TColumns extends Record<string, UColumn | ColData> = Record<string, UColumn | ColData>> {
   readonly __unbound: true;
   readonly __name: string;
-  readonly columns: Record<string, UnboundColumnData>;
+  readonly columns: Record<string, ColData>;
   readonly constraints?: (table: Table) => any[];
-  
-  /**
-   * Infer the select type from this table
-   * Uses Drizzle's InferSelectModel by binding to PostgreSQL dialect
-   * Usage: type User = typeof users.$inferSelect;
-   * 
-   * This is computed at runtime by binding the table to PostgreSQL and using
-   * the bound table's $inferSelect property. The type is inferred from the
-   * bound table type.
-   */
-  readonly $inferSelect: InferSelectModel<Table>;
-  
-  /**
-   * Infer the insert type from this table
-   * Uses Drizzle's InferInsertModel by binding to PostgreSQL dialect
-   * Usage: type UserInsert = typeof users.$inferInsert;
-   * 
-   * This is computed at runtime by binding the table to PostgreSQL and using
-   * the bound table's $inferInsert property. The type is inferred from the
-   * bound table type.
-   */
-  readonly $inferInsert: InferInsertModel<Table>;
 }
 
 /**
- * Unbound table with columns exposed as properties
- * This intersection type allows columns to be accessed as properties (e.g., table.name)
+ * Helper type to extract the TypeScript type from a UColumn
+ * The type itself encodes nullability (if it includes null, it's nullable)
  */
-export type UnboundTableWithColumns<TColumns extends Record<string, UnboundColumnBuilder | UnboundColumnData>> = 
+type ExtractColumnType<T> = T extends UColumn<infer Type, any> ? Type : any;
+
+/**
+ * Helper type to check if a column has a default value
+ */
+type HasDefault<T> = T extends UColumn<any, infer HasDefault> ? HasDefault : false;
+
+/**
+ * Helper type to compute the select type from columns
+ * The type already includes null if the column is nullable
+ */
+type ComputeSelectType<TColumns extends Record<string, UColumn | ColData>> = {
+  readonly [K in keyof TColumns]: ExtractColumnType<TColumns[K]>;
+};
+
+/**
+ * Helper type to check if a column should be optional in insert
+ */
+type IsOptionalInInsert<T> = 
+  HasDefault<T> extends true
+    ? true // Has default, so optional
+    : IncludesNull<ExtractColumnType<T>> extends true
+      ? true // Nullable, so optional
+      : false; // Required
+
+/**
+ * Helper type to compute the insert type from columns
+ * - Columns with defaults are optional (can be undefined) - checked first
+ * - Nullable columns are optional (can be null or undefined)
+ * - Non-nullable columns without defaults are required
+ */
+type ComputeInsertType<TColumns extends Record<string, UColumn | ColData>> = {
+  readonly [K in keyof TColumns as IsOptionalInInsert<TColumns[K]> extends true ? never : K]: ExtractColumnType<TColumns[K]>;
+} & {
+  readonly [K in keyof TColumns as IsOptionalInInsert<TColumns[K]> extends true ? K : never]?: ExtractColumnType<TColumns[K]> | undefined;
+};
+
+/**
+ * Unbound table with columns exposed as properties and type inference
+ * This intersection type allows columns to be accessed as properties (e.g., table.name)
+ * and provides $inferSelect and $inferInsert type-level properties
+ * 
+ * The $inferSelect and $inferInsert types are computed from the column types
+ * Use `typeof table.$inferSelect` to access the type.
+ */
+export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>> =
   UnboundTable<TColumns> & {
     readonly [K in keyof TColumns]: TColumns[K];
+  } & {
+    /**
+     * Infer the select type from this table
+     * Computed from the column TypeScript types
+     * Usage: type User = typeof usersTable.$inferSelect;
+     * 
+     * Note: Use `typeof` to access this as a type: `typeof usersTable.$inferSelect`
+     */
+    readonly $inferSelect: ComputeSelectType<TColumns>;
+    
+    /**
+     * Infer the insert type from this table
+     * Columns with defaults are optional, nullable columns are optional
+     * Usage: type UserInsert = typeof usersTable.$inferInsert;
+     * 
+     * Note: Use `typeof` to access this as a type: `typeof usersTable.$inferInsert`
+     */
+    readonly $inferInsert: ComputeInsertType<TColumns>;
   };
 
 /**
@@ -381,18 +465,26 @@ export type UnboundTableWithColumns<TColumns extends Record<string, UnboundColum
  * @throws Error at runtime if any column is a bound Drizzle ColumnBuilder.
  */
 export function unboundTable<
-  TColumns extends Record<string, UnboundColumnBuilder | UnboundColumnData>
+  const TColumns extends Record<string, UColumn<any, any> | ColData>
 >(
   name: string,
   columns: TColumns,
   constraints?: (table: Table) => any[]
-): UnboundTableWithColumns<TColumns> {
+): UTable<TColumns> {
   // Convert UnboundColumnBuilder instances to data
-  const columnData: Record<string, UnboundColumnData> = {};
-  // Store original column builders/data for property access
-  const columnBuilders: Record<string, UnboundColumnBuilder | UnboundColumnData> = {};
+  // Use Record<string, ColData> for runtime storage (doesn't affect type inference)
+    const columnData: Partial<Record<keyof TColumns, ColData>> = {};
+
+    // Store original column builders/data for property access
+  // Use TColumns type to preserve specific column types instead of Record<string, UColumn | ColData>
+  const columnBuilders = {} as TColumns;
   
-  for (const [key, column] of Object.entries(columns)) {
+  // Iterate over columns using keyof to preserve types
+  for (const key in columns) {
+    if (!columns.hasOwnProperty(key)) continue;
+    
+    const column = columns[key];
+    
     // Check if it's a bound column - if so, throw error
     if (isBoundColumn(column)) {
       throw new Error(
@@ -404,13 +496,13 @@ export function unboundTable<
     
     // Store the original builder/data for property access
     // Type assertion is safe because we've already checked it's not a bound column
-    columnBuilders[key] = column as UnboundColumnBuilder | UnboundColumnData;
+    (columnBuilders as any)[key] = column;
     
-    if (column instanceof UnboundColumnBuilder) {
+    if (column instanceof UColumn) {
       columnData[key] = column.getData();
     } else {
       // Must be UnboundColumnData at this point
-      columnData[key] = column as UnboundColumnData;
+      columnData[key] = column as ColData;
     }
   }
 
@@ -422,36 +514,19 @@ export function unboundTable<
     constraints,
   };
   
-  // Bind to PostgreSQL to get the inference types (lazily, only when accessed)
-  // This allows us to get the correct TypeScript types while deferring the actual binding
-  let boundTableForInference: Table | null = null;
-  const getBoundTableForInference = () => {
-    if (!boundTableForInference) {
-      boundTableForInference = bindTable(baseTable as UnboundTable, getPgDialectForInference());
-    }
-    return boundTableForInference;
-  };
-  
   // Create table object with columns exposed as properties
-  const table = {
+  // The types are computed at the type level using ComputeSelectType and ComputeInsertType
+  // We use the original columns parameter directly to preserve literal types
+  // Even if some columns have complex types, we preserve the literal object structure
+  const result: UTable<TColumns> = {
     ...baseTable,
     // Expose columns as properties for use in references (e.g., usersTable.name)
-    ...columnBuilders,
-    // Add $inferSelect and $inferInsert as getters that bind to PostgreSQL for inference
-    // The types are inferred from the bound table
-    get $inferSelect() {
-      return (getBoundTableForInference() as any).$inferSelect;
-    },
-    get $inferInsert() {
-      return (getBoundTableForInference() as any).$inferInsert;
-    },
-  } as UnboundTableWithColumns<TColumns> & {
-    // TypeScript will infer the correct types from the bound table
-    $inferSelect: ReturnType<typeof getBoundTableForInference>['$inferSelect'];
-    $inferInsert: ReturnType<typeof getBoundTableForInference>['$inferInsert'];
-  };
+    // Use the original columns parameter to preserve specific types
+    // TypeScript will preserve the literal object type even with mixed column types
+    ...columns,
+  } as UTable<TColumns>;
   
-  return table;
+  return result;
 }
 
 /**
@@ -569,24 +644,50 @@ export function isUnboundTable(value: any): value is UnboundTable {
 // Unbound Dialect Implementation
 // ============================================================================
 
+// Helper type to extract enum type from VarcharConfig
+// This extracts the enum array type and converts it to a union type
+type ExtractEnumType<T> = T extends { enum: infer E }
+    ? E extends readonly string[]
+        ? E[number]  // Extract union type from readonly tuple
+        : E extends string[]
+            ? E[number]  // Extract union type from mutable array
+            : string  // Has enum property but not a string array, default to string
+    : string;  // No enum property, default to string
+
+// Helper function for varchar that handles enum types
+// Extracts enum type from the config parameter
+// Note: TypeScript widens array literals to string[] unless 'as const' is used
+// For literal enum types (e.g., ['male', 'female']), use 'as const' to preserve the literal type
+function unboundVarchar<
+    const TConfig extends VarcharConfig | undefined = undefined
+>(
+    name: string, 
+    opts?: TConfig
+): UColumn<ExtractEnumType<TConfig> | null> {
+    // TypeScript will infer the correct type from the return type annotation
+    // The actual runtime value doesn't matter for type inference
+    // Columns are nullable by default, so we include | null
+    return new UColumn('varchar', name, opts) as any;
+}
+
 const unboundColumnBuilders: DialectColumnBuilders = {
-    text: (name: string, opts?: TextOptions) => new UnboundColumnBuilder('text', name, opts) as any,
-    varchar: (name: string, opts?: VarcharConfig) => new UnboundColumnBuilder('varchar', name, opts) as any,
-    json: (name: string, opts?: JsonOptions) => new UnboundColumnBuilder('json', name, opts) as any,
-    jsonb: (name: string, opts?: JsonOptions) => new UnboundColumnBuilder('jsonb', name, opts) as any,
-    integer: (name: string, opts?: IntegerOptions) => new UnboundColumnBuilder('integer', name, opts) as any,
-    real: (name: string, opts?: RealOptions) => new UnboundColumnBuilder('real', name, opts) as any,
-    doublePrecision: (name: string, opts?: RealOptions) => new UnboundColumnBuilder('doublePrecision', name, opts) as any,
-    bigint: (name: string, opts?: BigintOptions) => new UnboundColumnBuilder('bigint', name, opts) as any,
-    smallint: (name: string, opts?: SmallintOptions) => new UnboundColumnBuilder('smallint', name, opts) as any,
-    pkserial: (name: string) => new UnboundColumnBuilder('pkserial', name) as any,
-    blob: (name: string, opts?: BlobOptions) => new UnboundColumnBuilder('blob', name, opts) as any,
-    numeric: (name: string, opts?: NumericConfig) => new UnboundColumnBuilder('numeric', name, opts) as any,
-    bool: (name: string, opts?: BooleanOptions) => new UnboundColumnBuilder('bool', name, opts) as any,
-    boolean: (name: string, opts?: BooleanOptions) => new UnboundColumnBuilder('boolean', name, opts) as any,
-    date: (name: string, opts?: DateOptions) => new UnboundColumnBuilder('date', name, opts) as any,
-    time: (name: string, opts?: TimeOptions) => new UnboundColumnBuilder('time', name, opts) as any,
-    timestamp: (name: string, opts?: TimestampOptions) => new UnboundColumnBuilder('timestamp', name, opts) as any,
+    text: (name: string, opts?: TextOptions) => new UColumn<string | null>('text', name, opts) as any,
+    varchar: unboundVarchar as any,
+    json: (name: string, opts?: JsonOptions) => new UColumn<any | null>('json', name, opts) as any,
+    jsonb: (name: string, opts?: JsonOptions) => new UColumn<any | null>('jsonb', name, opts) as any,
+    integer: (name: string, opts?: IntegerOptions) => new UColumn<number | null>('integer', name, opts) as any,
+    real: (name: string, opts?: RealOptions) => new UColumn<number | null>('real', name, opts) as any,
+    doublePrecision: (name: string, opts?: RealOptions) => new UColumn<number | null>('doublePrecision', name, opts) as any,
+    bigint: (name: string, opts?: BigintOptions) => new UColumn<bigint | null>('bigint', name, opts) as any,
+    smallint: (name: string, opts?: SmallintOptions) => new UColumn<number | null>('smallint', name, opts) as any,
+    pkserial: (name: string) => new UColumn<number | null>('pkserial', name) as any,
+    blob: (name: string, opts?: BlobOptions) => new UColumn<Uint8Array | null>('blob', name, opts) as any,
+    numeric: (name: string, opts?: NumericConfig) => new UColumn<string | null>('numeric', name, opts) as any,
+    bool: (name: string, opts?: BooleanOptions) => new UColumn<boolean | null>('bool', name, opts) as any,
+    boolean: (name: string, opts?: BooleanOptions) => new UColumn<boolean | null>('boolean', name, opts) as any,
+    date: (name: string, opts?: DateOptions) => new UColumn<Date | null>('date', name, opts) as any,
+    time: (name: string, opts?: TimeOptions) => new UColumn<string | null>('time', name, opts) as any,
+    timestamp: (name: string, opts?: TimestampOptions) => new UColumn<Date | null>('timestamp', name, opts) as any,
 };
 
 
@@ -635,27 +736,45 @@ const unboundDialect: SQLDialect = {
 export default unboundDialect;
 
 // Export all column builders with proper types
-// These ensure that method chaining preserves UnboundColumnBuilder type
-export const text: (name: string, opts?: TextOptions) => UnboundColumnBuilder = unboundColumnBuilders.text as any;
-export const varchar: (name: string, opts?: VarcharConfig) => UnboundColumnBuilder = unboundColumnBuilders.varchar as any;
-export const json: (name: string, opts?: JsonOptions) => UnboundColumnBuilder = unboundColumnBuilders.json as any;
-export const jsonb: (name: string, opts?: JsonOptions) => UnboundColumnBuilder = unboundColumnBuilders.jsonb as any;
-export const integer: (name: string, opts?: IntegerOptions) => UnboundColumnBuilder = unboundColumnBuilders.integer as any;
-export const real: (name: string, opts?: RealOptions) => UnboundColumnBuilder = unboundColumnBuilders.real as any;
-export const doublePrecision: (name: string, opts?: RealOptions) => UnboundColumnBuilder = unboundColumnBuilders.doublePrecision as any;
-export const bigint: (name: string, opts?: BigintOptions) => UnboundColumnBuilder = unboundColumnBuilders.bigint as any;
-export const smallint: (name: string, opts?: SmallintOptions) => UnboundColumnBuilder = unboundColumnBuilders.smallint as any;
-export const pkserial: (name: string) => UnboundColumnBuilder = unboundColumnBuilders.pkserial as any;
-export const blob: (name: string, opts?: BlobOptions) => UnboundColumnBuilder = unboundColumnBuilders.blob as any;
-export const numeric: (name: string, opts?: NumericConfig) => UnboundColumnBuilder = unboundColumnBuilders.numeric as any;
-export const bool: (name: string, opts?: BooleanOptions) => UnboundColumnBuilder = unboundColumnBuilders.bool as any;
-export const boolean: (name: string, opts?: BooleanOptions) => UnboundColumnBuilder = unboundColumnBuilders.boolean as any;
-export const timestamp: (name: string, opts?: TimestampOptions) => UnboundColumnBuilder = unboundColumnBuilders.timestamp as any;
-export const time: (name: string, opts?: TimeOptions) => UnboundColumnBuilder = unboundColumnBuilders.time as any;
-export const date: (name: string, opts?: DateOptions) => UnboundColumnBuilder = unboundColumnBuilders.date as any;
+// These ensure that method chaining preserves UnboundColumnBuilder type with the correct TypeScript type
+export const text: (name: string, opts?: TextOptions) => UColumn<string | null> = unboundColumnBuilders.text as any;
+// Export varchar function that extracts enum type from config
+// Using const modifier to preserve literal types in the config
+export function varchar<
+    const TConfig extends VarcharConfig | undefined = undefined
+>(
+    name: string, 
+    opts?: TConfig
+): UColumn<ExtractEnumType<TConfig> | null> {
+    return unboundVarchar(name, opts);
+}
+export const json: (name: string, opts?: JsonOptions) => UColumn<any | null> = unboundColumnBuilders.json as any;
+export const jsonb: (name: string, opts?: JsonOptions) => UColumn<any | null> = unboundColumnBuilders.jsonb as any;
+export const integer: (name: string, opts?: IntegerOptions) => UColumn<number | null> = unboundColumnBuilders.integer as any;
+export const real: (name: string, opts?: RealOptions) => UColumn<number | null> = unboundColumnBuilders.real as any;
+export const doublePrecision: (name: string, opts?: RealOptions) => UColumn<number | null> = unboundColumnBuilders.doublePrecision as any;
+export const bigint: (name: string, opts?: BigintOptions) => UColumn<bigint | null> = unboundColumnBuilders.bigint as any;
+export const smallint: (name: string, opts?: SmallintOptions) => UColumn<number | null> = unboundColumnBuilders.smallint as any;
+export const pkserial: (name: string) => UColumn<number | null> = unboundColumnBuilders.pkserial as any;
+export const blob: (name: string, opts?: BlobOptions) => UColumn<Uint8Array | null> = unboundColumnBuilders.blob as any;
+export const numeric: (name: string, opts?: NumericConfig) => UColumn<string | null> = unboundColumnBuilders.numeric as any;
+export const bool: (name: string, opts?: BooleanOptions) => UColumn<boolean | null> = unboundColumnBuilders.bool as any;
+export const boolean: (name: string, opts?: BooleanOptions) => UColumn<boolean | null> = unboundColumnBuilders.boolean as any;
+export const timestamp: (name: string, opts?: TimestampOptions) => UColumn<Date | null> = unboundColumnBuilders.timestamp as any;
+export const time: (name: string, opts?: TimeOptions) => UColumn<string | null> = unboundColumnBuilders.time as any;
+export const date: (name: string, opts?: DateOptions) => UColumn<Date | null> = unboundColumnBuilders.date as any;
 
-// Export table builder
-export const table = unboundTable;
+// Export table builder with const modifier to preserve literal types
+// Using UColumn<any, any> in the constraint allows complex types while preserving literal structure
+export function table<
+  const TColumns extends Record<string, UColumn<any, any> | ColData>
+>(
+  name: string,
+  columns: TColumns,
+  constraints?: (table: Table) => any[]
+): UTable<TColumns> {
+  return unboundTable(name, columns, constraints);
+}
 
 // Export constraint builders (not implemented for unbound, but exported for API consistency)
 // Note: These will throw errors if used - they're exported for type compatibility

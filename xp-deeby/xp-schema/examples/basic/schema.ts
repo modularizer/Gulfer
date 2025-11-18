@@ -1,4 +1,5 @@
-import {xpschema, createOrRetrieveRegistryEntry, table, text, varchar, timestamp, generateUUID} from '..';
+import {xpschema, createOrRetrieveRegistryEntry, table, text, varchar, timestamp, generateUUID} from '../../index';
+
 
 // Step 1: Define custom column builders
 const uuid = (name: string) => varchar(name, {length: 16}).default(generateUUID);
@@ -7,12 +8,17 @@ const uuid = (name: string) => varchar(name, {length: 16}).default(generateUUID)
 // Step 2: Define Schema
 const usersTable = table('users', {
     id: uuid('id').primaryKey(),
-    name: text('name').primaryKey(),
-    birthday: timestamp('birthday'),
-    gender: varchar('gender', {enum: ['male', 'female']}),
+    name: text('name'),
+    birthday: timestamp('birthday').notNull(),
+    gender: varchar('gender', {enum: ['male', 'female'] as const}),
     bio: text('bio'),
     headline: varchar('headline', {length: 20})
 });
+
+type UserInsert = typeof usersTable.$inferInsert;
+type UserSelect = typeof usersTable.$inferSelect;
+// type UserGenderInsert = typeof usersTable.gender.$inferInsert;
+// type UserGenderSelect = typeof usersTable.gender.$inferSelect;
 
 const postsTable = table('posts', {
     author: text('name').notNull().references(() => usersTable.name),
@@ -21,11 +27,10 @@ const postsTable = table('posts', {
 })
 
 // Step 3: Define Schema
-const schema = xpschema({
+export const schema = xpschema({
     users: usersTable,
     posts: postsTable
 });
-
 // // Step 4: Define the params to connect to a database
 // const connInfo = await createOrRetrieveRegistryEntry({
 //     name: 'my-db',

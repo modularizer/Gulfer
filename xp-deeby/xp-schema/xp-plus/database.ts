@@ -4,7 +4,7 @@
  * Abstract base class that provides common implementations for all adapters.
  * Subclasses must implement abstract methods, and can use the concrete methods.
  */
-import {and, count, eq, isNull, sql} from 'drizzle-orm';
+import {and, count, eq, isNull, notInArray, sql} from 'drizzle-orm';
 import type { SQL, Table } from 'drizzle-orm';
 
 
@@ -321,6 +321,38 @@ export class XPDatabaseConnectionPlus extends XPDatabaseConnection {
 
     deleteDatabase(entry: DbConnectionInfo): Promise<void> {
         return this.db.deleteDatabase(entry);
+    }
+
+    /**
+     * Delete entities that are not in the provided list
+     * Useful for syncing arrays of children
+     * 
+     * @param table - Table to delete from
+     * @param parentIdColumn - Column reference for the parent ID
+     * @param parentId - Parent ID to filter by
+     * @param keepIds - Array of child IDs to keep (all others will be deleted)
+     */
+    async deleteMissingChildren<T extends DrizzleTable>(
+        table: T | any,
+        parentIdColumn: any,
+        parentId: string,
+        keepIds: string[]
+    ): Promise<void> {
+        if (keepIds.length === 0) {
+            // Delete all children if none are provided
+            await this.delete(table).where(eq(parentIdColumn, parentId));
+            return;
+        }
+        
+        // Delete children not in the keep list
+        await this.delete(table)
+            .where(
+                //@ts-ignore
+                and(
+                    eq(parentIdColumn, parentId),
+                    notInArray(table.id, keepIds)
+                )
+            );
     }
 
 }

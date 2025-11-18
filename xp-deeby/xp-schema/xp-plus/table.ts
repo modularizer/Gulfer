@@ -1,5 +1,5 @@
 import {Condition, ResolvedCondition, UnresolvedCondition, XPDatabaseConnectionPlus} from "./database";
-import {SQL, type Table, getTableName} from "drizzle-orm";
+import {SQL, type Table, getTableName, eq, and, notInArray} from "drizzle-orm";
 import {QueryResult, SelectQueryBuilder} from "../xp-sql/drivers/types";
 import {UpsertResult} from "../../utils";
 
@@ -100,6 +100,35 @@ export class XPDatabaseTablePlus<TTable extends Table = Table> {
      */
     async getRowCount(): Promise<number> {
         return this.count();
+    }
+
+    /**
+     * Delete entities that are not in the provided list
+     * Useful for syncing arrays of children
+     * 
+     * @param parentIdColumn - Column reference for the parent ID
+     * @param parentId - Parent ID to filter by
+     * @param keepIds - Array of child IDs to keep (all others will be deleted)
+     */
+    async deleteMissingChildren(
+        parentIdColumn: any,
+        parentId: string,
+        keepIds: string[]
+    ): Promise<void> {
+        if (keepIds.length === 0) {
+            // Delete all children if none are provided
+            await this.delete(eq(parentIdColumn, parentId));
+            return;
+        }
+        
+        // Delete children not in the keep list
+        await this.delete(
+            //@ts-ignore
+            and(
+                eq(parentIdColumn, parentId),
+                notInArray(this.table.id, keepIds)
+            )
+        );
     }
 }
 

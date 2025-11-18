@@ -19,10 +19,9 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import {getAdapter, getRegistryEntries, AdapterType, PostgresConnectionConfig} from '../adapters';
-import { PostgresAdapter } from '../adapters/implementations/postgres/database';
+import {connect, getRegistryEntries, getRegistryEntry, saveRegistryEntry, createOrRetrieveRegistryEntry} from '../xp-schema';
+import type { PostgresConnectionInfo } from '../xp-schema/xp-sql/drivers/implementations/postgres';
 import * as DocumentPicker from 'expo-document-picker';
-import {makeDatabaseByName} from "../adapters/factory/database";
 
 export type NavigateCallback = (dbName: string | null, tableName: string | null, searchParams: Record<string, string>) => void;
 
@@ -122,13 +121,13 @@ export default function DatabaseBrowserLayout({
     const [showPostgresForm, setShowPostgresForm] = useState(false);
     const [showCreatePglite, setShowCreatePglite] = useState(false);
     const [newPgliteName, setNewPgliteName] = useState('');
-    const [postgresConfig, setPostgresConfig] = useState<PostgresConnectionConfig>({
+    const [postgresConfig, setPostgresConfig] = useState<Omit<PostgresConnectionInfo, 'name' | 'driverName' | 'dialectName'>>({
         host: '',
         port: 5432,
         database: '',
         user: '',
         password: '',
-        ssl: 'prefer',
+        ssl: false,
     });
     const [postgresConnectionName, setPostgresConnectionName] = useState('');
     const [connecting, setConnecting] = useState(false);
@@ -190,36 +189,25 @@ export default function DatabaseBrowserLayout({
             }
 
             // Connect to database
-            const adapter = await getAdapter(entry.adapterType as AdapterType);
-            await adapter.openFromRegistry(entry);
+            const db = await connect(entry);
 
             // Check if this is a PostgreSQL database
-            // Note: We can determine this from the adapter type in the registry entry
-            const isPostgresDb = entry.adapterType === AdapterType.POSTGRES;
+            // Note: We can determine this from the driver name in the registry entry
+            const isPostgresDb = entry.driverName === 'postgres';
             setIsPostgres(isPostgresDb);
 
             // Get table names
-            const tableNames = await adapter.getTableNames();
+            const tableNames = await db.getTableNames();
 
-            // Get view names if supported
+            // Get view names if supported (PostgreSQL dialect)
+            // Note: View support is not yet implemented in xp-schema dialect interface
             let viewNames: string[] = [];
-            if (adapter.getViewNames) {
-                try {
-                    viewNames = await adapter.getViewNames();
-                } catch (err) {
-                    console.error(`[DatabaseBrowserLayout] Error loading view names:`, err);
-                }
-            }
+            // TODO: Implement view name retrieval when dialect interface supports it
 
             // Get materialized view names if supported (PostgreSQL only)
+            // Note: Materialized view support is not yet implemented in xp-schema dialect interface
             let matViewNames: string[] = [];
-            if (isPostgresDb && adapter.getMaterializedViewNames) {
-                try {
-                    matViewNames = await adapter.getMaterializedViewNames();
-                } catch (err) {
-                    console.error(`[DatabaseBrowserLayout] Error loading materialized view names:`, err);
-                }
-            }
+            // TODO: Implement materialized view name retrieval when dialect interface supports it
 
             // Get row counts for all tables
             const counts: Record<string, number> = {};
@@ -227,7 +215,7 @@ export default function DatabaseBrowserLayout({
             await Promise.all(
                 tableNames.map(async (tableName) => {
                     try {
-                        const count = await adapter.getRowCount(tableName);
+                        const count = await db.getRowCount(tableName);
                         counts[tableName] = count;
                     } catch (err) {
                         console.error(`[DatabaseBrowserLayout] Error counting rows for ${tableName}:`, err);
@@ -265,9 +253,8 @@ export default function DatabaseBrowserLayout({
                         const entries = await getRegistryEntries();
                         const entry = entries.find(e => e.name === dbName);
                         if (entry) {
-                            const adapter = await getAdapter(entry.adapterType as AdapterType);
-                            await adapter.openFromRegistry(entry);
-                            const metadata = await adapter.getMetadata();
+                            const db = await connect(entry);
+                            const metadata = await db.getMetadata();
                             counts[dbName] = metadata.tableCount;
                         }
                     } catch (err) {
@@ -320,16 +307,19 @@ export default function DatabaseBrowserLayout({
         setConnectionError(null);
 
         try {
-            const adapter = await getAdapter(AdapterType.POSTGRES) as PostgresAdapter;
-            const entry = await adapter.getRegistryEntry(postgresConnectionName, postgresConfig);
-            
-            // Register the entry
-            const { registerDatabaseEntry } = await import('../adapters');
-            await registerDatabaseEntry(entry);
+            // Create connection info
+            const entry: PostgresConnectionInfo = {
+                name: postgresConnectionName,
+                driverName: 'postgres',
+                dialectName: 'pg',
+                ...postgresConfig,
+            };
             
             // Test the connection
-            await adapter.openFromRegistry(entry);
-            // Adapter is now connected, can use adapter methods directly
+            const db = await connect(entry);
+            
+            // Register the entry
+            await saveRegistryEntry(entry);
             
             // Reload databases and navigate
             await loadDatabases();
@@ -350,7 +340,16 @@ export default function DatabaseBrowserLayout({
         }
 
         try {
-            await makeDatabaseByName(name, AdapterType.PGLITE);
+            // Create PGLite connection info
+            const entry = await createOrRetrieveRegistryEntry({
+                name: name,
+                driverName: 'pglite',
+                dialectName: 'pg',
+            });
+            
+            // Test the connection
+            await connect(entry);
+            
             await loadDatabases();
             setShowCreatePglite(false);
             setNewPgliteName('');
