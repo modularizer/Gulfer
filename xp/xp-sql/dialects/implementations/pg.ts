@@ -27,7 +27,7 @@ import {
     VarcharConfig,
     NumericConfig,
 } from "../types";
-import {DrizzleDatabaseConnection} from "../../drivers/types";
+import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {sql} from "drizzle-orm";
 import {customType} from "drizzle-orm/sqlite-core";
 
@@ -44,20 +44,20 @@ export const bytea = customType<{
 
 
 // Wrap Drizzle builders to match our typed interface
-const pgText = (name: string, opts?: TextOptions) => drizzleText(name, opts as any);
-const pgVarchar = (name: string, opts?: VarcharConfig) => drizzleVarchar(name, opts as any);
-const pgInteger = (name: string, opts?: IntegerOptions) => drizzleInteger(name, opts as any);
-const pgReal = (name: string, opts?: RealOptions) => drizzleReal(name, opts as any);
-const pgDoublePrecision = (name: string, opts?: RealOptions) => drizzleDoublePrecision(name, opts as any);
-const pgBigint = (name: string, opts?: BigintOptions) => drizzleBigint(name, opts as any);
-const pgSmallint = (name: string, opts?: SmallintOptions) => drizzleSmallint(name, opts as any);
-const pgNumeric = (name: string, opts?: NumericConfig) => drizzleNumeric(name, opts as any);
-const pgBool = (name: string, opts?: BooleanOptions) => drizzleBool(name, opts as any);
-const pgTimestamp = (name: string, opts?: TimestampOptions) => drizzleTimestamp(name, opts as any);
-const pgTime = (name: string, opts?: TimeOptions) => drizzleTime(name, opts as any);
-const pgDate = (name: string, opts?: DateOptions) => drizzleDate(name, opts as any);
-const pgJson = (name: string, opts?: JsonOptions) => drizzleJson(name, opts as any);
-const pgJsonb = (name: string, opts?: JsonOptions) => drizzleJsonb(name, opts as any);
+const pgText = (name: string, opts?: TextOptions) => drizzleText(name);
+const pgVarchar = (name: string, opts?: VarcharConfig) => drizzleVarchar(name, opts);
+const pgInteger = (name: string, opts?: IntegerOptions) => drizzleInteger(name);
+const pgReal = (name: string, opts?: RealOptions) => drizzleReal(name);
+const pgDoublePrecision = (name: string, opts?: RealOptions) => drizzleDoublePrecision(name);
+const pgBigint = (name: string, opts?: BigintOptions) => drizzleBigint(name, opts);
+const pgSmallint = (name: string, opts?: SmallintOptions) => drizzleSmallint(name);
+const pgNumeric = (name: string, opts?: NumericConfig) => drizzleNumeric(name, opts);
+const pgBool = (name: string, opts?: BooleanOptions) => drizzleBool(name);
+const pgTimestamp = (name: string, opts?: TimestampOptions) => drizzleTimestamp(name, opts);
+const pgTime = (name: string, opts?: TimeOptions) => drizzleTime(name, opts);
+const pgDate = (name: string, opts?: DateOptions) => drizzleDate(name, opts);
+const pgJson = (name: string, opts?: JsonOptions) => drizzleJson(name);
+const pgJsonb = (name: string, opts?: JsonOptions) => drizzleJsonb(name);
 const pgBlob = (name: string, opts?: BlobOptions) => bytea(name);
 
 const pgColumnBuilders: DialectColumnBuilders = {
@@ -93,7 +93,7 @@ const pgDialect: SQLDialect = {
 
     ...pgBuilders,
 
-    getTableNames: async (db: DrizzleDatabaseConnection, schemaName: string = 'public'): Promise<string[]>  => {
+    getTableNames: async (db: DrizzleDatabaseConnectionDriver, schemaName: string = 'public'): Promise<string[]>  => {
         return (await db.execute(sql`
                     SELECT table_name 
                     FROM information_schema.tables 
@@ -104,7 +104,7 @@ const pgDialect: SQLDialect = {
     },
 
     getSchemaNames: async (
-        db: DrizzleDatabaseConnection,
+        db: DrizzleDatabaseConnectionDriver,
         options?: { excludeBuiltins?: boolean }
     ): Promise<string[]> => {
         const staticBuiltin = [
@@ -130,7 +130,7 @@ const pgDialect: SQLDialect = {
             .map((row: any) => row.schema_name)
             .filter(name => !(options?.excludeBuiltins && isBuiltin(name)));
     },
-    getTableColumns: async (db: DrizzleDatabaseConnection, tableName: string, schemaName: string = 'public'): Promise<{
+    getTableColumns: async (db: DrizzleDatabaseConnectionDriver, tableName: string, schemaName: string = 'public'): Promise<{
         name: string;
         dataType: string;
         isNullable: boolean;

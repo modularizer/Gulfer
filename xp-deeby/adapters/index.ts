@@ -3,7 +3,7 @@ export {
   bindSchema
 } from './factory/builders';
 export {getAdapter, getCurrentAdapterType, getDatabaseByName} from './factory/database'
-export { Database } from './abstract/database';
-export { registerDatabaseEntry, getRegistryEntries, saveRegistryEntries } from './factory/registry-storage';
+export { Database } from '../../xp/xp-sql-tools/database';
+export { registerDatabaseEntry, getRegistryEntries, saveRegistryEntries } from '../../xp/registry-storage';
 
 

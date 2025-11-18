@@ -6,7 +6,7 @@
 
 import {sql} from 'drizzle-orm';
 import {AdapterType} from '../types';
-import {Database, DrizAndClient, DrizzleDatabase} from '../../abstract/database';
+import {Database, DrizAndClient, DrizzleDatabase} from '../../../../xp/xp-sql-tools/database';
 import {AdapterCapabilities} from "../../abstract/capabilities";
 import {adapterName, capabilities, RegistryEntry} from "./capabilities";
 

@@ -14,10 +14,11 @@ import {
     QueryResult,
     SelectQueryBuilder,
     UpdateQueryBuilder
-} from "./types";
-import {AdapterCapabilities, RegistryEntry, AdapterType} from "./capabilities";
-import {Table} from "./builders";
+} from "../../xp-deeby/adapters/abstract/types";
+import {AdapterCapabilities, RegistryEntry, AdapterType} from "../../xp-deeby/adapters/abstract/capabilities";
+import {Table} from "../../xp-deeby/adapters/abstract/builders";
 import {DatabaseTable} from "./database-table";
+import {XPDatabaseConnection} from "../xp-sql/connection";
 
 export type DrizAndClient = {db: DrizzleDatabase, client: any};
 export type CreateDB = (config: RegistryEntry) => Promise<DrizAndClient>;
@@ -46,7 +47,7 @@ export const UpsertAction = 'upsert-action';
  * Abstract base class for all database adapters
  * Implements DrizzleDatabase interface by passthrough to this.db
  */
-export abstract class Database implements DrizzleDatabase {
+export abstract class Database extends XPDatabaseConnection {
 
     buildCondition(table: any, condition?: Condition, value?: Record<string, any>): SQL {
         if (!condition) {

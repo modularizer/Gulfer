@@ -1,4 +1,4 @@
-import {initializeStorage} from "../../kv";
+import {initializeStorage} from "../../../xp/kv";
 import {detectPlatform, PlatformName} from "../../platform";
 
 

@@ -18,7 +18,7 @@ import {
     BooleanOptions,
     JsonOptions,
 } from "../types";
-import {DrizzleDatabaseConnection} from "../../drivers/types";
+import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {sql} from "drizzle-orm";
 
 
@@ -142,21 +142,21 @@ export const dateTextMDY = customType<{
 
 
 // Wrap Drizzle builders to match our typed interface
-const sqliteText = (name: string, opts?: TextOptions) => drizzleText(name, opts as any);
-const sqliteVarchar = (name: string, opts?: VarcharConfig) => drizzleText(name, opts as any);
-const sqliteInteger = (name: string, opts?: IntegerOptions) => drizzleInteger(name, opts as any);
-const sqliteReal = (name: string, opts?: RealOptions) => drizzleReal(name, opts as any);
-const sqliteDoublePrecision = (name: string, opts?: RealOptions) => drizzleReal(name, opts as any);
+const sqliteText = (name: string, opts?: TextOptions) => drizzleText(name);
+const sqliteVarchar = (name: string, opts?: VarcharConfig) => drizzleText(name, opts);
+const sqliteInteger = (name: string, opts?: IntegerOptions) => drizzleInteger(name, opts);
+const sqliteReal = (name: string, opts?: RealOptions) => drizzleReal(name);
+const sqliteDoublePrecision = (name: string, opts?: RealOptions) => drizzleReal(name);
 const sqliteBigint = (name: string, opts?: BigintOptions) => drizzleBlob(name, {mode: "bigint", ...opts} as any);
-const sqliteSmallint = (name: string, opts?: SmallintOptions) => drizzleInteger(name, opts as any);
-const sqliteNumeric = (name: string, opts?: NumericConfig) => sqliteNumericImpl(name, opts as any);
+const sqliteSmallint = (name: string, opts?: SmallintOptions) => drizzleInteger(name, opts);
+const sqliteNumeric = (name: string, opts?: NumericConfig) => sqliteNumericImpl(name, opts);
 const sqliteBool = (name: string, opts?: BooleanOptions) => drizzleInteger(name, {mode: "boolean", ...opts} as any);
 const sqliteTimestamp = (name: string, opts?: TimestampOptions) => drizzleInteger(name, {mode: "timestamp", ...opts} as any);
 const sqliteTime = (name: string, opts?: TimeOptions) => timeText24h(name);
 const sqliteDate = (name: string, opts?: DateOptions) => dateTextMDY(name);
 const sqliteJson = (name: string, opts?: JsonOptions) => drizzleText(name, {mode: 'json', ...opts} as any);
 const sqliteJsonb = (name: string, opts?: JsonOptions) => drizzleText(name, {mode: 'json', ...opts} as any);
-const sqliteBlob = (name: string, opts?: BlobOptions) => drizzleBlob(name, opts as any);
+const sqliteBlob = (name: string, opts?: BlobOptions) => drizzleBlob(name, opts);
 
 const sqliteColumnBuilders: DialectColumnBuilders = {
     text: sqliteText,
@@ -191,7 +191,7 @@ const sqliteDialect: SQLDialect = {
     ...sqliteBuilders,
 
     getTableNames: async (
-        db: DrizzleDatabaseConnection,
+        db: DrizzleDatabaseConnectionDriver,
         schemaName: string = 'public'
     ): Promise<string[]> => {
         if (schemaName !== 'public') {
@@ -209,13 +209,13 @@ const sqliteDialect: SQLDialect = {
 
 
     getSchemaNames: async (
-        db: DrizzleDatabaseConnection,
+        db: DrizzleDatabaseConnectionDriver,
         options?: { excludeBuiltins?: boolean }
     ): Promise<string[]> => {
         return ["public"]
     },
     getTableColumns: async (
-        db: DrizzleDatabaseConnection,
+        db: DrizzleDatabaseConnectionDriver,
         tableName: string,
         schemaName: string = "public", // ignored in SQLite, but kept for signature compatibility
     ): Promise<

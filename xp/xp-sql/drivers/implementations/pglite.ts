@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
-import {connectFn, DbConnectionInfo, DrizzleDatabaseConnection} from "../types";
+import {connectFn, DbConnectionInfo, DrizzleDatabaseConnectionDriver, XPDriverImpl} from "../types";
 import { drizzle } from "drizzle-orm/pglite";
+import {XPDriverName} from "../options";
 
 
 export interface PgliteConnectionInfo extends DbConnectionInfo {
@@ -38,8 +39,12 @@ const connectToPglite: connectFn<PgliteConnectionInfo> = async ({name}: PgliteCo
             };
         });
     }
-    return db as DrizzleDatabaseConnection<PgliteConnectionInfo>;
+    return db as DrizzleDatabaseConnectionDriver<PgliteConnectionInfo>;
 }
 
-
+export const pgliteDriver: XPDriverImpl = {
+    dialectName: 'pg',
+    driverName: 'pglite',
+    connect: connectToPglite,
+}
 export default connectToPglite;

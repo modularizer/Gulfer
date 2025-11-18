@@ -26,13 +26,10 @@ import {
     notImplementedForDialect,
     Table,
 } from "../types";
-import {DrizzleDatabaseConnection} from "../../drivers/types";
+import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {errors} from "@ts-morph/common";
 import NotImplementedError = errors.NotImplementedError;
-import type { PostgresConnectionInfo } from '../../drivers/implementations/postgres';
-import type { PgliteConnectionInfo } from '../../drivers/implementations/pglite';
-import type { SqliteMobileConnectionInfo } from '../../drivers/implementations/sqlite-mobile';
-import { XPDriver } from '../../drivers/options';
+import {getDialectFromDriverName, XPDriverName} from '../../drivers/options';
 
 // ============================================================================
 // Unbound Column
@@ -397,9 +394,7 @@ export function bindTable(
 
   // Create the table using the dialect's table builder
   const tableBuilder = dialect.table;
-  const boundTable = tableBuilder(unboundTable.name, boundColumns, unboundTable.constraints);
-
-  return boundTable;
+  return tableBuilder(unboundTable.name, boundColumns, unboundTable.constraints);
 }
 
 /**
@@ -409,355 +404,8 @@ export function isUnboundTable(value: any): value is UnboundTable {
   return value && typeof value === 'object' && value.__unbound === true && value.name !== undefined;
 }
 
-/**
- * Bind an unbound column builder to a dialect
- * Convenience function that extracts data from UnboundColumnBuilder
- */
-export function bindColumnBuilder(
-  column: UnboundColumnBuilder,
-  dialect: SQLDialect
-): ColumnBuilder {
-  return bindColumn(column.getData(), dialect);
-}
 
-/**
- * Bind an unbound table to a dialect by driver
- * Convenience function that gets the dialect from driver
- */
-export async function bindTableToDriver(
-  table: UnboundTable,
-  driver: XPDriver
-): Promise<Table> {
-  // Map driver to dialect name
-  const dialectName = driver === XPDriver.SQLITE_MOBILE ? 'sqlite' : 'pg';
-  const dialect = await getDialectFromName(dialectName);
-  return bindTable(table, dialect);
-}
 
-/**
- * Bind an unbound column to a dialect by driver
- * Convenience function that gets the dialect from driver
- * Also accepts already bound columns - if dialect matches, returns as-is
- */
-export async function bindColumnToDriver(
-  column: UnboundColumnBuilder | UnboundColumnData | ColumnBuilder,
-  driver: XPDriver
-): Promise<ColumnBuilder> {
-  // Map driver to dialect name
-  const dialectName = driver === XPDriver.SQLITE_MOBILE ? 'sqlite' : 'pg';
-  const dialect = await getDialectFromName(dialectName);
-  
-  // If already a ColumnBuilder, bindColumn will handle it
-  if (isBoundColumn(column)) {
-    return bindColumn(column, dialect);
-  }
-  
-  // Otherwise, extract data and bind
-  const data = column instanceof UnboundColumnBuilder ? column.getData() : column;
-  return bindColumn(data, dialect);
-}
-
-// ============================================================================
-// Schema Builder
-// ============================================================================
-
-/**
- * Schema object containing tables
- * Can contain either unbound tables or bound tables
- */
-export interface Schema<Tables extends Record<string, UnboundTable | Table> = Record<string, UnboundTable | Table>> {
-  /**
-   * All tables in the schema
-   */
-  tables: Tables;
-  
-  /**
-   * Bind all tables in the schema to a dialect
-   * Returns a new schema with bound tables
-   */
-  bind(dialect: SQLDialect): Schema<Record<keyof Tables, Table>>;
-  
-  /**
-   * Bind all tables in the schema to a dialect by driver
-   * Returns a new schema with bound tables
-   */
-  bindToDriver(driver: XPDriver): Promise<Schema<Record<keyof Tables, Table>>>;
-  
-  /**
-   * Check if all tables in the schema are bound
-   */
-  isBound(): boolean;
-}
-
-/**
- * Create a schema from a record of tables
- * 
- * @param tables - Record of table name to table object (unbound or bound)
- * @returns Schema object that groups the tables together
- * 
- * @example
- * ```typescript
- * // Create schema with unbound tables
- * const mySchema = schema({
- *   users: table('users', { id: uuidPK('id'), name: text('name') }),
- *   posts: table('posts', { id: uuidPK('id'), title: text('title') }),
- * });
- * 
- * // Use unbound schema
- * const db = createDatabaseWrapper(dbConnection, dialect);
- * await db.select().from(mySchema.tables.users);
- * 
- * // Or bind all tables to a dialect
- * const boundSchema = mySchema.bind(dialect);
- * const pgUsers = boundSchema.tables.users; // Now a PostgreSQL table
- * ```
- */
-export function schema<Tables extends Record<string, UnboundTable | Table>>(
-  tables: Tables
-): Schema<Tables> {
-  // Check if all tables are bound
-  const checkIfBound = (): boolean => {
-    return Object.values(tables).every(
-      (table) => !isUnboundTable(table)
-    );
-  };
-
-  return {
-    tables,
-    
-    /**
-     * Bind all tables to a dialect
-     */
-    bind(dialect: SQLDialect): Schema<Record<keyof Tables, Table>> {
-      const boundTables = {} as Record<keyof Tables, Table>;
-      
-      for (const [key, table] of Object.entries(tables)) {
-        if (isUnboundTable(table)) {
-          boundTables[key as keyof Tables] = bindTable(table, dialect) as Table;
-        } else {
-          // Already bound, use as-is
-          boundTables[key as keyof Tables] = table as Table;
-        }
-      }
-      
-      return schema(boundTables);
-    },
-    
-    /**
-     * Bind all tables to a dialect by driver
-     */
-    async bindToDriver(
-      driver: XPDriver
-    ): Promise<Schema<Record<keyof Tables, Table>>> {
-      // Map driver to dialect name
-      const dialectName = driver === XPDriver.SQLITE_MOBILE ? 'sqlite' : 'pg';
-      const dialect = await getDialectFromName(dialectName);
-      return this.bind(dialect);
-    },
-    
-    /**
-     * Check if all tables are bound
-     */
-    isBound(): boolean {
-      return checkIfBound();
-    },
-  };
-}
-
-// ============================================================================
-// Database Builder
-// ============================================================================
-
-/**
- * Union type of all connection info types
- */
-export type ConnectionInfo = PostgresConnectionInfo | PgliteConnectionInfo | SqliteMobileConnectionInfo;
-
-/**
- * Detect driver from connection info
- */
-function detectDriverFromConnectionInfo(connInfo: ConnectionInfo): XPDriver {
-  // Check for PGlite (has 'name' property and no 'host' or 'connectionString')
-  if ('name' in connInfo && !('host' in connInfo) && !('connectionString' in connInfo)) {
-    // Could be PGlite or SQLite - check if it's SQLite by looking for enableForeignKeys
-    if ('enableForeignKeys' in connInfo) {
-      return XPDriver.SQLITE_MOBILE;
-    }
-    // Otherwise assume PGlite (name-only connection)
-    return XPDriver.PGLITE;
-  }
-
-  // Check for PostgreSQL (has 'host' or 'connectionString')
-  if ('host' in connInfo || 'connectionString' in connInfo) {
-    return XPDriver.POSTGRES;
-  }
-
-  // Check for SQLite Mobile (has 'name' and 'enableForeignKeys')
-  if ('name' in connInfo && 'enableForeignKeys' in connInfo) {
-    return XPDriver.SQLITE_MOBILE;
-  }
-
-  throw new Error(`Cannot determine driver from connection info: ${JSON.stringify(connInfo)}`);
-}
-
-/**
- * Get the connect function for a connection info type
- */
-async function getConnectFunction<T extends ConnectionInfo>(connInfo: T) {
-  const driver = detectDriverFromConnectionInfo(connInfo);
-
-  switch (driver) {
-    case XPDriver.PGLITE: {
-      const { default: connectToPglite } = await import('../../drivers/implementations/pglite');
-      return connectToPglite as unknown as (info: T) => Promise<DrizzleDatabaseConnection<T>>;
-    }
-    case XPDriver.POSTGRES: {
-      const { default: connectToPostgres } = await import('../../drivers/implementations/postgres');
-      return connectToPostgres as unknown as (info: T) => Promise<DrizzleDatabaseConnection<T>>;
-    }
-    case XPDriver.SQLITE_MOBILE: {
-      const { default: connectToSqliteMobile } = await import('../../drivers/implementations/sqlite-mobile');
-      return connectToSqliteMobile as unknown as (info: T) => Promise<DrizzleDatabaseConnection<T>>;
-    }
-    default:
-      throw new Error(`No connect function available for driver: ${driver}`);
-  }
-}
-
-/**
- * Get SQL dialect instance from dialect name
- */
-async function getDialectFromName(dialectName: string): Promise<SQLDialect> {
-  switch (dialectName) {
-    case 'pg': {
-      const { default: pgDialect } = await import('./pg');
-      return pgDialect;
-    }
-    case 'sqlite': {
-      const { default: sqliteDialect } = await import('./sqlite');
-      return sqliteDialect;
-    }
-    default:
-      throw new Error(`Unknown dialect name: ${dialectName}`);
-  }
-}
-
-/**
- * Database object containing schemas
- * Can contain either unbound schemas or bound schemas
- */
-export interface Database<Schemas extends Record<string, Schema<any>> = Record<string, Schema<any>>> {
-  /**
-   * All schemas in the database
-   */
-  schemas: Schemas;
-  
-  /**
-   * Bind all schemas in the database to a dialect
-   * Returns a new database with bound schemas
-   */
-  bind(dialect: SQLDialect): Database<Record<keyof Schemas, Schema<Record<string, Table>>>>;
-  
-  /**
-   * Connect to a database using connection info
-   * Automatically detects the dialect and driver from connection info
-   * Returns a database connection with bound schemas
-   */
-  connect<T extends ConnectionInfo>(connectionInfo: T): Promise<{
-    db: DrizzleDatabaseConnection<T>;
-    schemas: Record<keyof Schemas, Schema<Record<string, Table>>>;
-    dialect: SQLDialect;
-  }>;
-}
-
-/**
- * Create a database from a record of schemas
- * 
- * @param schemas - Record of schema name to schema object (unbound or bound)
- * @returns Database object that groups the schemas together
- * 
- * @example
- * ```typescript
- * // Create database with unbound schemas
- * const myDb = database({
- *   public: schema({
- *     users: table('users', { id: uuidPK('id'), name: text('name') }),
- *   }),
- * });
- * 
- * // Connect to database
- * const { db: connection, schemas } = await myDb.connect({
- *   name: 'my-db', // PGlite
- * });
- * 
- * // Or bind all schemas to a dialect
- * const dialect = getDialectForDriver(XPDriver.POSTGRES);
- * const boundDb = myDb.bind(dialect);
- * ```
- */
-export function database<Schemas extends Record<string, Schema<any>>>(
-  schemas: Schemas
-): Database<Schemas> {
-  return {
-    schemas,
-    
-    /**
-     * Bind all schemas to a dialect
-     */
-    bind(dialect: SQLDialect): Database<Record<keyof Schemas, Schema<Record<string, Table>>>> {
-      const boundSchemas = {} as Record<keyof Schemas, Schema<Record<string, Table>>>;
-      
-      for (const [key, schema] of Object.entries(schemas)) {
-        boundSchemas[key as keyof Schemas] = schema.bind(dialect) as Schema<Record<string, Table>>;
-      }
-      
-      return database(boundSchemas);
-    },
-    
-    /**
-     * Connect to a database using connection info
-     */
-    async connect<T extends ConnectionInfo>(
-      connectionInfo: T
-    ): Promise<{
-      db: DrizzleDatabaseConnection<T>;
-      schemas: Record<keyof Schemas, Schema<Record<string, Table>>>;
-      dialect: SQLDialect;
-    }> {
-      // Validate SQLite can only have one schema
-      const driver = detectDriverFromConnectionInfo(connectionInfo);
-      if (driver === XPDriver.SQLITE_MOBILE) {
-        const schemaCount = Object.keys(schemas).length;
-        if (schemaCount > 1) {
-          throw new Error(
-            `SQLite does not support multiple schemas. Found ${schemaCount} schemas: ${Object.keys(schemas).join(', ')}`
-          );
-        }
-      }
-
-      // Get the connect function
-      const connectFn = await getConnectFunction(connectionInfo);
-      
-      // Connect to the database
-      const db = await connectFn(connectionInfo);
-      
-      // Get the dialect from the connection's dialectName
-      const dialect = await getDialectFromName(db.dialectName);
-      
-      // Bind all schemas to the dialect
-      const boundSchemas = {} as Record<keyof Schemas, Schema<Record<string, Table>>>;
-      for (const [key, schema] of Object.entries(schemas)) {
-        boundSchemas[key as keyof Schemas] = schema.bind(dialect) as Schema<Record<string, Table>>;
-      }
-      
-      return {
-        db,
-        schemas: boundSchemas,
-        dialect,
-      };
-    },
-  };
-}
 
 // ============================================================================
 // Unbound Dialect Implementation
@@ -797,19 +445,19 @@ const unboundDialect: SQLDialect = {
     dialectName,
     ...unboundBuilders,
 
-    getTableNames: async (db: DrizzleDatabaseConnection, schemaName: string = 'public'): Promise<string[]> => {
+    getTableNames: async (db: DrizzleDatabaseConnectionDriver, schemaName: string = 'public'): Promise<string[]> => {
         throw new NotImplementedError("getTableNames not implemented for unbound dialect");
     },
 
     getSchemaNames: async (
-        db: DrizzleDatabaseConnection,
+        db: DrizzleDatabaseConnectionDriver,
         options?: { excludeBuiltins?: boolean }
     ): Promise<string[]> => {
         throw new NotImplementedError("getSchemaNames not implemented for unbound dialect");
     },
 
     getTableColumns: async (
-        db: DrizzleDatabaseConnection,
+        db: DrizzleDatabaseConnectionDriver,
         tableName: string,
         schemaName: string = 'public'
     ): Promise<{

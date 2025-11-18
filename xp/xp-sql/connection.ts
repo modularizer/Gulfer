@@ -7,10 +7,20 @@
  */
 
 import type { SQL } from 'drizzle-orm';
-import type { DrizzleDatabaseConnection, DrizzleTable, QueryResult } from './drivers/types';
+import type {DbConnectionInfo, DrizzleDatabaseConnectionDriver, DrizzleTable, QueryResult} from './drivers/types';
 import type { SQLDialect } from './dialects/types';
-import { isUnboundTable, bindTable, UnboundTable } from './dialects/implementations/unbound';
+import {isUnboundTable, bindTable, UnboundTable} from './dialects/implementations/unbound';
 import type { Table } from './dialects/types';
+import {connectToDriver} from "./drivers/options";
+import {getDialectFromName} from "./dialects/options";
+
+
+export async function connect(connInfo: DbConnectionInfo): Promise<XPDatabaseConnection> {
+    const driver = await connectToDriver(connInfo);
+    const dialectName = driver.dialectName;
+    const dialect = await getDialectFromName(dialectName);
+    return new XPDatabaseConnection(driver, dialect);
+}
 
 /**
  * Database wrapper that knows its dialect and binds unbound tables
@@ -19,7 +29,7 @@ export class XPDatabaseConnection {
   private tableCache = new Map<UnboundTable, Table>();
 
   constructor(
-    public db: DrizzleDatabaseConnection,
+    public db: DrizzleDatabaseConnectionDriver,
     public dialect: SQLDialect
   ) {}
 
@@ -120,11 +130,11 @@ export class XPDatabaseConnection {
    * The transaction handler receives a database wrapper with the same dialect
    */
   transaction<T = unknown>(
-    handler: (tx: DatabaseWithDialect) => Promise<T>
+    handler: (tx: XPDatabaseConnection) => Promise<T>
   ): Promise<T> {
     return this.db.transaction(async (tx) => {
       // Create a wrapper for the transaction database
-      const txWrapper = new DatabaseWithDialect(tx as any, this.dialect);
+      const txWrapper = new XPDatabaseConnection(tx as any, this.dialect);
       return handler(txWrapper);
     });
   }
@@ -136,5 +146,8 @@ export class XPDatabaseConnection {
     return this.db.close();
   }
 }
+
+
+
 
 

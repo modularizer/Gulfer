@@ -1,12 +1,12 @@
 import {Condition, Database, ResolvedCondition, UnresolvedCondition, UpsertResult} from "./database";
-import {Table} from "./builders";
+import {Table} from "../../xp-deeby/adapters/abstract/builders";
 import {
     DrizzleDatabase,
     QueryResult,
     SelectQueryBuilder,
-} from "./types";
+} from "../../xp-deeby/adapters/abstract/types";
 import {SQL, getTableName} from "drizzle-orm";
-import {AdapterCapabilities} from "./capabilities";
+import {AdapterCapabilities} from "../../xp-deeby/adapters/abstract/capabilities";
 
 
 export class DatabaseTable {

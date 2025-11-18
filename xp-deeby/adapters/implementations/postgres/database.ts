@@ -6,7 +6,7 @@
  */
 
 import {AdapterType} from '../types';
-import {Database, DrizAndClient} from '../../abstract/database';
+import {Database, DrizAndClient} from '../../../../xp/xp-sql-tools/database';
 import { sql } from 'drizzle-orm';
 import {AdapterCapabilities} from "../../abstract/capabilities";
 import {adapterName, capabilities, PostgresConnectionConfig, RegistryEntry} from "./capabilities";

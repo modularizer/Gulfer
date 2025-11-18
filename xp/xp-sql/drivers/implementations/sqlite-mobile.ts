@@ -3,9 +3,9 @@ import * as SQLite from "expo-sqlite";
 import * as FileSystem from "expo-file-system";
 import { drizzle } from "drizzle-orm/expo-sqlite";
 import {
-    DrizzleDatabaseConnection,
+    DrizzleDatabaseConnectionDriver,
     connectFn,
-    DbConnectionInfo,
+    DbConnectionInfo, XPDriverImpl,
 } from "../types";
 import {SQL} from "drizzle-orm";
 
@@ -65,8 +65,12 @@ const connectToSqliteMobile: connectFn<SqliteMobileConnectionInfo> = async (
         }
     };
 
-    return db as DrizzleDatabaseConnection<SqliteMobileConnectionInfo>;
+    return db as DrizzleDatabaseConnectionDriver<SqliteMobileConnectionInfo>;
 };
-
+export const sqliteDriver: XPDriverImpl = {
+    dialectName: 'sqlite',
+    driverName: 'sqlite-mobile',
+    connect: connectToSqliteMobile,
+}
 
 export default connectToSqliteMobile;

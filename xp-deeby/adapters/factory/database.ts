@@ -6,8 +6,7 @@
  */
 
 import {AdapterType, defaultAdapterByHostPlatform,} from "../implementations/types";
-import {Database} from "../abstract/database";
-import {getRegistryEntries, registerDatabaseEntry} from "./registry-storage";
+import {Database} from "../../../xp/xp-sql-tools/database";
 import {bindSchema} from "./builders";
 import {detectPlatform} from "../../platform";
 import {RegistryEntry} from "../abstract/capabilities";
@@ -69,11 +68,7 @@ export async function getAdapter(type?: AdapterType): Promise<Database> {
 }
 
 
-export async function getRegistryEntry(name: string) {
-    // Look up the name in the registry
-    const registryEntries = await getRegistryEntries();
-    return registryEntries.find(e => e.name === name);
-}
+
 
 export async function makeRegistryEntry(name: string, adapterType?: AdapterType): Promise<RegistryEntry> {
     const adapter = await getAdapter(adapterType); // Auto-selects based on platform

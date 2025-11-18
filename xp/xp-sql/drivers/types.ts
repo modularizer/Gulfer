@@ -192,14 +192,16 @@ export interface DbConnectionInfo {
      * The SQL dialect name (e.g., 'pg', 'sqlite')
      * Optional in connection info input, but always present in the returned connection
      */
-    dialectName?: string;
+    name: string;
+    dialectName: string;
+    driverName: string;
 }
 
 /**
  * Cross-driver Drizzle "db" interface
  * (sqlite, pg, pglite, mysql, etc.)
  */
-export type DrizzleDatabaseConnection<T extends DbConnectionInfo = DbConnectionInfo> = {
+export type DrizzleDatabaseConnectionDriver<T extends DbConnectionInfo = DbConnectionInfo> = {
     connInfo: T;
     raw: any;
 
@@ -255,7 +257,7 @@ export type DrizzleDatabaseConnection<T extends DbConnectionInfo = DbConnectionI
      * with a db-like object inside the handler.
      */
     transaction<T = unknown>(
-        handler: (tx: DrizzleDatabaseConnection) => Promise<T>
+        handler: (tx: DrizzleDatabaseConnectionDriver) => Promise<T>
     ): Promise<T>;
 
     close(): Promise<void>;
@@ -269,6 +271,16 @@ export type DrizzleDatabaseConnection<T extends DbConnectionInfo = DbConnectionI
  * Generic "connect" helper type – you can implement
  * per driver (sqlite, pg, pglite, etc.)
  */
-export type connect<
+export type connectFn<
     T extends DbConnectionInfo = DbConnectionInfo
-> = (config: T) => Promise<DrizzleDatabaseConnection<T>>;
+> = (config: T) => Promise<DrizzleDatabaseConnectionDriver<T>>;
+
+
+
+export interface XPDriverImpl {
+    driverName: string;
+    dialectName: string;
+    connect: <T extends DbConnectionInfo = DbConnectionInfo>(config: T) => Promise<DrizzleDatabaseConnectionDriver<T>>
+}
+
+

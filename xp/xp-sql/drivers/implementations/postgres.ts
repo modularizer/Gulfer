@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import {
     connectFn,
     DbConnectionInfo,
-    DrizzleDatabaseConnection,
+    DrizzleDatabaseConnectionDriver, XPDriverImpl,
 } from "../types";
 import {sql} from "drizzle-orm";
 
@@ -100,7 +100,11 @@ export const connectToPostgres: connectFn<PostgresConnectionInfo> = async (
         await this.execute(`DROP DATABASE IF EXISTS "${conn.database}";`);
     }
 
-    return db as DrizzleDatabaseConnection<PostgresConnectionInfo>;
+    return db as DrizzleDatabaseConnectionDriver<PostgresConnectionInfo>;
 };
-
+export const postgresDriver: XPDriverImpl = {
+    dialectName: 'pg',
+    driverName: 'postgres',
+    connect: connectToPostgres,
+}
 export default connectToPostgres;

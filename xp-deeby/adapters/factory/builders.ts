@@ -40,8 +40,8 @@ import {detectPlatform} from "../../platform";
 import * as pglite from "../implementations/pglite/builders";
 import * as postgres from "../implementations/postgres/builders";
 import * as sqliteMobile from "../implementations/sqlite-mobile/builders";
-import {Database} from "../abstract/database";
-import {DatabaseTable} from "../abstract/database-table";
+import {Database} from "../../../xp/xp-sql-tools/database";
+import {DatabaseTable} from "../../../xp/xp-sql-tools/database-table";
 
 
 

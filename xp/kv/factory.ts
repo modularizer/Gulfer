@@ -5,7 +5,7 @@
  */
 
 import type { KeyValueStorage } from './types';
-import {detectPlatform, PlatformName} from "../platform";
+import {detectPlatform, PlatformName} from "../../xp-deeby/platform";
 
 let currentStorage: KeyValueStorage | null = null;
 let storageInitializationPromise: Promise<KeyValueStorage> | null = null;

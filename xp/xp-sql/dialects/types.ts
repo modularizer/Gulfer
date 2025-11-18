@@ -1,7 +1,6 @@
 import {errors} from "@ts-morph/common";
 import NotImplementedError = errors.NotImplementedError;
-import {DrizzleDatabaseConnection} from "../drivers/types";
-import {number} from "zod";
+import {DrizzleDatabaseConnectionDriver} from "../drivers/types";
 import type {ColumnBuilder} from "drizzle-orm";
 
 
@@ -13,8 +12,6 @@ export interface Constraint extends ColumnLevelEntity {}
 
 export interface TableLevelEntity {}
 export interface Table extends TableLevelEntity {}
-export interface View extends TableLevelEntity{}
-export interface MaterializedView extends TableLevelEntity{}
 
 export type Columns = Record<string, ColumnBuilder>;
 
@@ -51,14 +48,13 @@ export type CheckConstraintBuilderFn<T extends ConstraintOpts = ConstraintOpts> 
  */
 export interface BaseColumnOptions {
     /** Mode for type conversion (e.g., 'json', 'boolean', 'timestamp', 'number', 'string') */
-    mode?: 'json' | 'boolean' | 'timestamp' | 'number' | 'string';
+    mode?: 'buffer' | 'bigint' | 'date' | 'time' | 'json' | 'boolean' | 'timestamp' | 'number' | 'string';
 }
 
 /**
  * Text column options
  */
 export interface TextOptions extends BaseColumnOptions {
-    mode?: 'json' | 'string';
 }
 
 /**
@@ -73,21 +69,20 @@ export interface VarcharConfig<TEnum extends readonly string[] | string[] | unde
  * Integer column options
  */
 export interface IntegerOptions extends BaseColumnOptions {
-    mode?: 'boolean' | 'timestamp' | 'number' | 'string';
+    mode: 'boolean' | 'timestamp' | 'number';
 }
 
 /**
  * Real (floating point) column options
  */
 export interface RealOptions extends BaseColumnOptions {
-    mode?: 'number' | 'string';
 }
 
 /**
  * Timestamp column options
  */
 export interface TimestampOptions extends BaseColumnOptions {
-    mode?: 'timestamp' | 'string' | 'date';
+    mode: 'timestamp' | 'string' | 'date';
     withTimezone?: boolean;
 }
 
@@ -95,7 +90,7 @@ export interface TimestampOptions extends BaseColumnOptions {
  * Date column options
  */
 export interface DateOptions extends BaseColumnOptions {
-    mode?: 'date' | 'string';
+    mode: 'date' | 'string';
 }
 
 /**
@@ -110,7 +105,7 @@ export interface TimeOptions extends BaseColumnOptions {
  * Blob column options
  */
 export interface BlobOptions extends BaseColumnOptions {
-    mode?: 'bigint' | 'buffer' | 'string';
+    mode: 'buffer' | 'json' | 'bigint';
 }
 
 /**
@@ -134,14 +129,14 @@ export type NumericConfig<T extends 'string' | 'number' | 'bigint' = 'string' | 
  * Bigint column options
  */
 export interface BigintOptions extends BaseColumnOptions {
-    mode?: 'bigint' | 'string' | 'number';
+    mode: 'bigint' | 'string' | 'number';
 }
 
 /**
  * Smallint column options
  */
 export interface SmallintOptions extends BaseColumnOptions {
-    mode?: 'boolean' | 'number' | 'string';
+    mode: 'boolean' | 'number';
 }
 
 /**
@@ -155,7 +150,6 @@ export interface BooleanOptions extends BaseColumnOptions {
  * JSON/JSONB column options
  */
 export interface JsonOptions extends BaseColumnOptions {
-    mode?: 'json';
 }
 
 
@@ -205,10 +199,10 @@ export interface SQLDialect extends DialectBuilders{
     dialectName: string;
 
 
-    getTableNames: (db: DrizzleDatabaseConnection, schemaName?: string) => Promise<string[]>;
-    getSchemaNames: (db: DrizzleDatabaseConnection, options?: { excludeBuiltins?: boolean }) => Promise<string[]>;
+    getTableNames: (db: DrizzleDatabaseConnectionDriver, schemaName?: string) => Promise<string[]>;
+    getSchemaNames: (db: DrizzleDatabaseConnectionDriver, options?: { excludeBuiltins?: boolean }) => Promise<string[]>;
     getTableColumns: (
-        db: DrizzleDatabaseConnection,
+        db: DrizzleDatabaseConnectionDriver,
         tableName: string,
         schemaName?: string
     ) => Promise<

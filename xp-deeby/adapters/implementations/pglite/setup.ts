@@ -6,7 +6,7 @@
 
 import {PgDialect} from "drizzle-orm/pg-core/dialect";
 import {RegistryEntry} from "./capabilities";
-import {CreateDB} from "../../abstract/database";
+import {CreateDB} from "../../../../xp/xp-sql-tools/database";
 import {DrizzleDatabase} from "../../abstract/types";
 import {PgDatabase, PgPreparedQuery, PgSession} from "drizzle-orm/pg-core";
 

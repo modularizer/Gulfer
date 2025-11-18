@@ -18,7 +18,7 @@
 
 // PGlite uses import.meta which Metro doesn't support
 // Babel plugin will transform import.meta to work with Metro
-import {Database, DrizAndClient} from '../../abstract/database';
+import {Database, DrizAndClient} from '../../../../xp/xp-sql-tools/database';
 import {initializePglite} from "./setup";
 import {AdapterCapabilities} from "../../abstract/capabilities";
 import {adapterName, capabilities, RegistryEntry} from "./capabilities";
