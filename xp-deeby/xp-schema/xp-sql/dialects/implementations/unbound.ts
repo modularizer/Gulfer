@@ -358,6 +358,27 @@ export type UnboundTableWithColumns<TColumns extends Record<string, UnboundColum
 /**
  * Create an unbound table
  * Columns are exposed as properties on the returned table object for use in references
+ * 
+ * @example
+ * ```typescript
+ * import { table, text, uuid } from './unbound';
+ * 
+ * const usersTable = table('users', {
+ *   id: uuid('id').primaryKey(),  // ✅ Unbound column builder
+ *   name: text('name'),            // ✅ Unbound column builder
+ * });
+ * ```
+ * 
+ * **Important:** Only accepts unbound columns (UnboundColumnBuilder or UnboundColumnData).
+ * Bound Drizzle ColumnBuilder instances will cause a TypeScript error.
+ * 
+ * If you're getting a type error about ColumnBuilder, make sure you're importing
+ * column builders from the unbound module, not from drizzle-orm directly:
+ * 
+ * ❌ Wrong: `import { text } from 'drizzle-orm/pg-core'`
+ * ✅ Correct: `import { text } from './unbound'`
+ * 
+ * @throws Error at runtime if any column is a bound Drizzle ColumnBuilder.
  */
 export function unboundTable<
   TColumns extends Record<string, UnboundColumnBuilder | UnboundColumnData>
@@ -382,7 +403,8 @@ export function unboundTable<
     }
     
     // Store the original builder/data for property access
-    columnBuilders[key] = column;
+    // Type assertion is safe because we've already checked it's not a bound column
+    columnBuilders[key] = column as UnboundColumnBuilder | UnboundColumnData;
     
     if (column instanceof UnboundColumnBuilder) {
       columnData[key] = column.getData();
@@ -612,24 +634,25 @@ const unboundDialect: SQLDialect = {
 // Export the dialect and all builders
 export default unboundDialect;
 
-// Export all column builders
-export const text = unboundColumnBuilders.text;
-export const varchar = unboundColumnBuilders.varchar;
-export const json = unboundColumnBuilders.json;
-export const jsonb = unboundColumnBuilders.jsonb;
-export const integer = unboundColumnBuilders.integer;
-export const real = unboundColumnBuilders.real;
-export const doublePrecision = unboundColumnBuilders.doublePrecision;
-export const bigint = unboundColumnBuilders.bigint;
-export const smallint = unboundColumnBuilders.smallint;
-export const pkserial = unboundColumnBuilders.pkserial;
-export const blob = unboundColumnBuilders.blob;
-export const numeric = unboundColumnBuilders.numeric;
-export const bool = unboundColumnBuilders.bool;
-export const boolean = unboundColumnBuilders.boolean;
-export const timestamp = unboundColumnBuilders.timestamp;
-export const time = unboundColumnBuilders.time;
-export const date = unboundColumnBuilders.date;
+// Export all column builders with proper types
+// These ensure that method chaining preserves UnboundColumnBuilder type
+export const text: (name: string, opts?: TextOptions) => UnboundColumnBuilder = unboundColumnBuilders.text as any;
+export const varchar: (name: string, opts?: VarcharConfig) => UnboundColumnBuilder = unboundColumnBuilders.varchar as any;
+export const json: (name: string, opts?: JsonOptions) => UnboundColumnBuilder = unboundColumnBuilders.json as any;
+export const jsonb: (name: string, opts?: JsonOptions) => UnboundColumnBuilder = unboundColumnBuilders.jsonb as any;
+export const integer: (name: string, opts?: IntegerOptions) => UnboundColumnBuilder = unboundColumnBuilders.integer as any;
+export const real: (name: string, opts?: RealOptions) => UnboundColumnBuilder = unboundColumnBuilders.real as any;
+export const doublePrecision: (name: string, opts?: RealOptions) => UnboundColumnBuilder = unboundColumnBuilders.doublePrecision as any;
+export const bigint: (name: string, opts?: BigintOptions) => UnboundColumnBuilder = unboundColumnBuilders.bigint as any;
+export const smallint: (name: string, opts?: SmallintOptions) => UnboundColumnBuilder = unboundColumnBuilders.smallint as any;
+export const pkserial: (name: string) => UnboundColumnBuilder = unboundColumnBuilders.pkserial as any;
+export const blob: (name: string, opts?: BlobOptions) => UnboundColumnBuilder = unboundColumnBuilders.blob as any;
+export const numeric: (name: string, opts?: NumericConfig) => UnboundColumnBuilder = unboundColumnBuilders.numeric as any;
+export const bool: (name: string, opts?: BooleanOptions) => UnboundColumnBuilder = unboundColumnBuilders.bool as any;
+export const boolean: (name: string, opts?: BooleanOptions) => UnboundColumnBuilder = unboundColumnBuilders.boolean as any;
+export const timestamp: (name: string, opts?: TimestampOptions) => UnboundColumnBuilder = unboundColumnBuilders.timestamp as any;
+export const time: (name: string, opts?: TimeOptions) => UnboundColumnBuilder = unboundColumnBuilders.time as any;
+export const date: (name: string, opts?: DateOptions) => UnboundColumnBuilder = unboundColumnBuilders.date as any;
 
 // Export table builder
 export const table = unboundTable;
