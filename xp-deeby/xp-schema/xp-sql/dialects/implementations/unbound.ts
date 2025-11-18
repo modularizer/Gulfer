@@ -585,7 +585,7 @@ type HasDefault<T> = T extends UColumn<any, infer TFlags>
  * The type already includes null if the column is nullable
  */
 type ComputeSelectType<TColumns extends Record<string, UColumn | ColData>> = {
-  readonly [K in keyof TColumns]: ExtractColumnType<TColumns[K]>;
+  [K in keyof Writable<TColumns>]: ExtractColumnType<TColumns[K]>;
 };
 
 /**
@@ -605,9 +605,9 @@ type IsOptionalInInsert<T> =
  * - Non-nullable columns without defaults are required
  */
 type ComputeInsertType<TColumns extends Record<string, UColumn | ColData>> = {
-  readonly [K in keyof TColumns as IsOptionalInInsert<TColumns[K]> extends true ? never : K]: ExtractColumnType<TColumns[K]>;
+  [K in keyof Writable<TColumns> as IsOptionalInInsert<TColumns[K]> extends true ? never : K]: ExtractColumnType<TColumns[K]>;
 } & {
-  readonly [K in keyof TColumns as IsOptionalInInsert<TColumns[K]> extends true ? K : never]?: ExtractColumnType<TColumns[K]> | undefined;
+  [K in keyof Writable<TColumns> as IsOptionalInInsert<TColumns[K]> extends true ? K : never]?: ExtractColumnType<TColumns[K]> | undefined;
 };
 
 /**
@@ -663,16 +663,25 @@ type GetPrimaryKeyColumn<TColumns extends Record<string, UColumn<any, any> | Col
     : undefined;
 
 /**
+ * Helper type to remove readonly modifiers from object properties
+ */
+type Writable<T> = {
+  -readonly [P in keyof T]: T[P];
+};
+
+/**
  * Unbound table with columns exposed as properties and type inference
  * This intersection type allows columns to be accessed as properties (e.g., table.name)
  * and provides $inferSelect and $inferInsert type-level properties
  * 
  * The $inferSelect and $inferInsert types are computed from the column types
  * Use `typeof table.$inferSelect` to access the type.
+ * 
+ * Note: Uses Writable<TColumns> internally to remove readonly modifiers from column properties
  */
 export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>> =
-  UnboundTable<TColumns> & {
-    readonly [K in keyof TColumns]: SimplifyUColumn<TColumns[K]>;
+  UnboundTable<Writable<TColumns>> & {
+    [K in keyof Writable<TColumns>]: SimplifyUColumn<TColumns[K]>;
   } & {
     /**
      * Infer the select type from this table
@@ -735,7 +744,7 @@ export function unboundTable<
   name: string,
   columns: TColumns,
   constraints?: (table: Table) => any[]
-): UTable<TColumns> {
+): UTable<Writable<TColumns>> {
   // Convert UnboundColumnBuilder instances to data
   // Use Record<string, ColData> for runtime storage (doesn't affect type inference)
     const columnData: Partial<Record<keyof TColumns, ColData>> = {};
@@ -806,7 +815,8 @@ export function unboundTable<
   // The types are computed at the type level using ComputeSelectType and ComputeInsertType
   // We use the original columns parameter directly to preserve literal types
   // Even if some columns have complex types, we preserve the literal object structure
-  const result: UTable<TColumns> = {
+  // Writable<TColumns> removes readonly modifiers from the column properties
+  const result = {
     ...baseTable,
     // Expose columns as properties for use in references (e.g., usersTable.name)
     // Use the original columns parameter to preserve specific types
@@ -814,10 +824,10 @@ export function unboundTable<
     ...columns,
     // Add $primaryKey getter that returns the primary key column
     // Type assertion is needed because runtime type doesn't match type-level inference
-    get $primaryKey(): GetPrimaryKeyColumn<TColumns> {
-      return primaryKeyColumn as GetPrimaryKeyColumn<TColumns>;
+    get $primaryKey(): GetPrimaryKeyColumn<Writable<TColumns>> {
+      return primaryKeyColumn as GetPrimaryKeyColumn<Writable<TColumns>>;
     },
-  } as UTable<TColumns>;
+  } as UTable<Writable<TColumns>>;
   
   return result;
 }
@@ -1065,7 +1075,7 @@ export function table<
   name: string,
   columns: TColumns,
   constraints?: (table: Table) => any[]
-): UTable<TColumns> {
+): UTable<Writable<TColumns>> {
   return unboundTable(name, columns, constraints);
 }
 

@@ -17,10 +17,6 @@ const usersTable = table('users', {
 
 type UserInsert = typeof usersTable.$inferInsert;
 type UserSelect = typeof usersTable.$inferSelect;
-type UserGenderInsert = typeof usersTable.gender.$inferInsert;
-type UserGenderSelect = typeof usersTable.gender.$inferSelect;
-const pkColumn = usersTable.$primaryKey;
-type PkType = typeof usersTable.$primaryKey.$inferSelect;
 
 const postsTable = table('posts', {
     author: text('name').notNull().references(() => usersTable.gender),
