@@ -773,7 +773,7 @@ type PrimaryKeyType<TColumns extends Record<string, UColumn<any, any> | ColData>
  * Note: We define UTable as a separate type that's structurally compatible with UTable
  * but with constraints accepting UTable<any> for schema compatibility.
  */
-export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>> = {
+export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData> = any> = {
   readonly __unbound: true;
   readonly __name: string;
   readonly columns: Record<string, ColData>;
