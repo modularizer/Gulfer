@@ -14,7 +14,7 @@ async function main() {
   const examplesDir = __dirname;
   const schemaFile = path.join(examplesDir, 'schema.ts');
     // Generate types for the entire schema
-     await tryGenerateTypes({
+     const r = await tryGenerateTypes({
       sourceFile: schemaFile,
       exportName: 'schema',
       outputPath: path.join(examplesDir, 'generated-schema-types.ts'),
@@ -28,6 +28,7 @@ async function main() {
 
 `
     });
+     if (!r){process.exit(1)}
 }
 
 // Run if executed directly

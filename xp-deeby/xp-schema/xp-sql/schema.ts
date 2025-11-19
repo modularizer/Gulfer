@@ -8,19 +8,18 @@
  */
 
 import type { SQLDialect} from './dialects/types';
-import type { UnboundTable, } from './dialects/implementations/unbound';
+import type { UTable} from './dialects/implementations/unbound';
 import { bindTable } from './dialects/implementations/unbound';
 import {connect, XPDatabaseConnection} from "./connection";
 import {DbConnectionInfo} from "./drivers/types";
 import {Table} from "drizzle-orm";
-import {getDialectFromName, XPDialect} from "./dialects";
-import {XPDatabaseConnectionPlus} from "../xp-plus";
+import {getDialectFromName} from "./dialects";
 
 /**
  * Schema with tables exposed as properties
  * This type allows tables to be accessed as properties (e.g., schema.users, schema.posts)
  */
-export type SchemaWithTables<Tables extends Record<string, UnboundTable | Table>> = 
+export type SchemaWithTables<Tables extends Record<string, UTable<any> | Table>> =
   Schema<Tables> & {
     readonly [K in keyof Tables]: Tables[K];
   };
@@ -28,7 +27,7 @@ export type SchemaWithTables<Tables extends Record<string, UnboundTable | Table>
 /**
  * Schema object that holds tables as properties
  */
-export class Schema<Tables extends Record<string, UnboundTable | Table> = Record<string, UnboundTable | Table>> {
+export class Schema<Tables extends Record<string, UTable<any> | Table> = Record<string, UTable<any> | Table>> {
   [key: string]: any; // Allow table access via index signature
   
   constructor(public tables: Tables) {
@@ -99,7 +98,7 @@ export class Schema<Tables extends Record<string, UnboundTable | Table> = Record
  * 
  * ```
  */
-export function xpschema<Tables extends Record<string, UnboundTable | Table>>(
+export function xpschema<Tables extends Record<string, UTable<any> | Table>>(
   tables: Tables
 ): SchemaWithTables<Tables> {
   return new Schema(tables) as SchemaWithTables<Tables>;

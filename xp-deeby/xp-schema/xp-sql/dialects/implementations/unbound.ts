@@ -547,25 +547,107 @@ export function bindColumn(
 }
 
 // ============================================================================
+// Unbound Index and Constraint
+// ============================================================================
+
+/**
+ * Unbound index definition
+ * Stores index name and column references, but not yet bound to a dialect
+ */
+export interface UIndexData {
+  readonly __unbound: true;
+  readonly __type: 'index';
+  readonly name: string;
+  readonly columns: Array<UColumn<any, any> | ColData | ColumnBuilder | (() => UColumn<any, any> | ColData | ColumnBuilder)>;
+}
+
+/**
+ * Unbound unique constraint definition
+ * Stores constraint name and column references, but not yet bound to a dialect
+ */
+export interface UUniqueData {
+  readonly __unbound: true;
+  readonly __type: 'unique';
+  readonly name: string;
+  readonly columns: Array<UColumn<any, any> | ColData | ColumnBuilder | (() => UColumn<any, any> | ColData | ColumnBuilder)>;
+}
+
+/**
+ * Unbound index builder
+ * Mimics Drizzle's index API but stores column references instead of applying them
+ */
+export class UIndex {
+  private data: UIndexData;
+
+  constructor(name: string) {
+    this.data = {
+      __unbound: true,
+      __type: 'index',
+      name,
+      columns: [],
+    };
+  }
+
+  /**
+   * Add columns to this index
+   * Usage: index('user_name').on(table.name, table.email)
+   */
+  on(...columns: Array<UColumn<any, any> | ColData | ColumnBuilder | (() => UColumn<any, any> | ColData | ColumnBuilder)>): UIndex {
+    this.data = {
+      ...this.data,
+      columns: [...this.data.columns, ...columns],
+    };
+    return this;
+  }
+
+  /**
+   * Get the underlying data
+   */
+  getData(): UIndexData {
+    return this.data;
+  }
+}
+
+/**
+ * Unbound unique constraint builder
+ * Mimics Drizzle's unique API but stores column references instead of applying them
+ */
+export class UUnique {
+  private data: UUniqueData;
+
+  constructor(name: string) {
+    this.data = {
+      __unbound: true,
+      __type: 'unique',
+      name,
+      columns: [],
+    };
+  }
+
+  /**
+   * Add columns to this unique constraint
+   * Usage: unique('user_email').on(table.email)
+   */
+  on(...columns: Array<UColumn<any, any> | ColData | ColumnBuilder | (() => UColumn<any, any> | ColData | ColumnBuilder)>): UUnique {
+    this.data = {
+      ...this.data,
+      columns: [...this.data.columns, ...columns],
+    };
+    return this;
+  }
+
+  /**
+   * Get the underlying data
+   */
+  getData(): UUniqueData {
+    return this.data;
+  }
+}
+
+// ============================================================================
 // Unbound Table
 // ============================================================================
 
-
-/**
- * Unbound table definition
- * Stores table name and column definitions, but not yet bound to a dialect
- * Includes $inferSelect and $inferInsert properties that leverage Drizzle's type inference
- * by binding to PostgreSQL as the default dialect for type computation
- * 
- * Columns are exposed as properties on the table object (e.g., table.name, table.id)
- * for use in references and type inference.
- */
-export interface UnboundTable<TColumns extends Record<string, UColumn<any, any> | ColData> = Record<string, UColumn<any, any> | ColData>> {
-  readonly __unbound: true;
-  readonly __name: string;
-  readonly columns: Record<string, ColData>;
-  readonly constraints?: (table: Table) => any[];
-}
 
 /**
  * Helper type to extract the TypeScript type from a UColumn
@@ -665,46 +747,77 @@ type GetPrimaryKeyColumn<TColumns extends Record<string, UColumn<any, any> | Col
     : undefined;
 
 /**
+ * Type for $primaryKey that ensures UTable<SpecificColumns> is assignable to UTable<any>
+ * Since UColumn is invariant, we need to include both the specific type from GetPrimaryKeyColumn
+ * and a general UColumn type. For UTable<any>, we accept any UColumn instance.
+ * 
+ * The key insight: when TColumns is specific, GetPrimaryKeyColumn<TColumns> returns the specific type.
+ * When TColumns is any, we need to accept any UColumn type, so we use UColumn<any, any>.
+ * But since UColumn is invariant, we also need to ensure the specific type is preserved.
+ */
+type PrimaryKeyType<TColumns extends Record<string, UColumn<any, any> | ColData>> = 
+  // Include the specific primary key column type if detected
+  GetPrimaryKeyColumn<TColumns> |
+  // Also include general column types to allow assignment compatibility
+  // This ensures UTable<SpecificColumns> can be assigned to UTable<any>
+  UColumn<any, any> | ColData;
+
+/**
  * Unbound table with columns exposed as properties and type inference
  * This intersection type allows columns to be accessed as properties (e.g., table.name)
  * and provides $inferSelect and $inferInsert type-level properties
  * 
  * The $inferSelect and $inferInsert types are computed from the column types
  * Use `typeof table.$inferSelect` to access the type.
+ * 
+ * Note: We define UTable as a separate type that's structurally compatible with UTable
+ * but with constraints accepting UTable<any> for schema compatibility.
  */
-export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>> =
-  UnboundTable<TColumns> & {
-    [K in keyof TColumns]: SimplifyUColumn<TColumns[K]>;
-  } & {
-    /**
-     * Infer the select type from this table
-     * Computed from the column TypeScript types
-     * Usage: type User = typeof usersTable.$inferSelect;
-     * 
-     * Note: Use `typeof` to access this as a type: `typeof usersTable.$inferSelect`
-     */
-    readonly $inferSelect: ComputeSelectType<TColumns>;
-    
-    /**
-     * Infer the insert type from this table
-     * Columns with defaults are optional, nullable columns are optional
-     * Usage: type UserInsert = typeof usersTable.$inferInsert;
-     * 
-     * Note: Use `typeof` to access this as a type: `typeof usersTable.$inferInsert`
-     */
-    readonly $inferInsert: ComputeInsertType<TColumns>;
-    
-    /**
-     * Get the primary key column from this table
-     * Returns the column that has .primaryKey() modifier, or undefined if none exists
-     * Usage: const pkColumn = usersTable.$primaryKey;
-     *        type PkType = typeof usersTable.$primaryKey.$inferSelect;
-     * 
-     * Note: This is strongly typed - returns the specific column type if detected at type level,
-     * or undefined if not detected (runtime will still return the correct column if it exists)
-     */
-    readonly $primaryKey: GetPrimaryKeyColumn<TColumns>;
-  };
+export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>> = {
+  readonly __unbound: true;
+  readonly __name: string;
+  readonly columns: Record<string, ColData>;
+  /**
+   * Constraints callback - accepts UTable<any> for schema compatibility
+   * At runtime, the actual table passed will be UTable<TColumns> with full type information
+   */
+  readonly constraints?: (table: UTable<any>) => Array<UIndex | UUnique | any>;
+} & {
+  [K in keyof TColumns]: SimplifyUColumn<TColumns[K]>;
+} & {
+  /**
+   * Infer the select type from this table
+   * Computed from the column TypeScript types
+   * Usage: type User = typeof usersTable.$inferSelect;
+   * 
+   * Note: Use `typeof` to access this as a type: `typeof usersTable.$inferSelect`
+   */
+  readonly $inferSelect: ComputeSelectType<TColumns>;
+  
+  /**
+   * Infer the insert type from this table
+   * Columns with defaults are optional, nullable columns are optional
+   * Usage: type UserInsert = typeof usersTable.$inferInsert;
+   * 
+   * Note: Use `typeof` to access this as a type: `typeof usersTable.$inferInsert`
+   */
+  readonly $inferInsert: ComputeInsertType<TColumns>;
+  
+  /**
+   * Get the primary key column from this table
+   * Returns the column that has .primaryKey() modifier, or undefined if none exists
+   * Usage: const pkColumn = usersTable.$primaryKey;
+   *        type PkType = typeof usersTable.$primaryKey.$inferSelect;
+   * 
+   * Note: This is strongly typed - returns the specific column type if detected at type level,
+   * or undefined if not detected (runtime will still return the correct column if it exists)
+   * 
+   * The union always includes UColumn<any, any> | ColData to ensure UTable<SpecificColumns>
+   * is assignable to UTable<any>. For specific tables, GetPrimaryKeyColumn provides the
+   * specific type, and the union allows broader compatibility.
+   */
+  readonly $primaryKey?: PrimaryKeyType<TColumns>;
+};
 
 /**
  * Create an unbound table
@@ -736,7 +849,7 @@ export function unboundTable<
 >(
   name: string,
   columns: TColumns,
-  constraints?: (table: Table) => any[]
+  constraints?: (table: UTable<any>) => Array<UIndex | UUnique | any>
 ): UTable<TColumns> {
   // Convert UnboundColumnBuilder instances to data
   // Use Record<string, ColData> for runtime storage (doesn't affect type inference)
@@ -774,11 +887,18 @@ export function unboundTable<
   }
 
   // Create the base table object
+  // Wrap constraints callback to ensure it accepts UTable<any> for schema compatibility
+  // At runtime, the actual table passed will be UTable<TColumns> with full type information
+  const wrappedConstraints = constraints ? ((table: UTable<any>) => {
+    // Call the original constraints callback - at runtime, table is UTable<TColumns>
+    return constraints(table);
+  }) : undefined;
+
   const baseTable = {
     __unbound: true,
     __name: name,
     columns: columnData,
-    constraints,
+    constraints: wrappedConstraints,
   };
   
   // Find the primary key column (if any) at runtime
@@ -875,15 +995,190 @@ function getDialectFromBoundTable(table: Table): string | null {
 }
 
 /**
+ * Check if a value is an unbound index
+ */
+function isUnboundIndex(value: any): value is UIndex {
+  if (!value || typeof value !== 'object') return false;
+  if (value instanceof UIndex) return true;
+  // Check if it has the index data structure
+  const data = value.getData ? value.getData() : value;
+  return data && data.__unbound === true && data.__type === 'index';
+}
+
+/**
+ * Check if a value is an unbound unique constraint
+ */
+function isUnboundUnique(value: any): value is UUnique {
+  if (!value || typeof value !== 'object') return false;
+  if (value instanceof UUnique) return true;
+  // Check if it has the unique data structure
+  const data = value.getData ? value.getData() : value;
+  return data && data.__unbound === true && data.__type === 'unique';
+}
+
+/**
+ * Resolve a column reference (could be UColumn, ColData, ColumnBuilder, or a function)
+ * Returns a bound ColumnBuilder
+ */
+function resolveColumnReference(
+  columnRef: UColumn<any, any> | ColData | ColumnBuilder | (() => UColumn<any, any> | ColData | ColumnBuilder),
+  dialect: SQLDialect
+): ColumnBuilder {
+  // If it's a function, call it first
+  if (typeof columnRef === 'function') {
+    columnRef = columnRef();
+  }
+  
+  // If it's already a bound ColumnBuilder, return as-is
+  if (isBoundColumn(columnRef)) {
+    return columnRef;
+  }
+  
+  // If it's a UColumn, convert to ColData first
+  if (columnRef instanceof UColumn) {
+    columnRef = columnRef.getData();
+  }
+  
+  // Otherwise, bind it (should be ColData at this point)
+  return bindColumn(columnRef, dialect);
+}
+
+/**
+ * Get the column name from a column reference
+ */
+function getColumnName(columnRef: UColumn<any, any> | ColData | ColumnBuilder | (() => UColumn<any, any> | ColData | ColumnBuilder)): string {
+  // If it's a function, call it first
+  if (typeof columnRef === 'function') {
+    columnRef = columnRef();
+  }
+  
+  // If it's a UColumn, get the name from its data
+  if (columnRef instanceof UColumn) {
+    return columnRef.getData().name;
+  }
+  
+  // If it's ColData, get the name directly
+  if (columnRef && typeof columnRef === 'object' && '__unbound' in columnRef && 'name' in columnRef) {
+    return (columnRef as ColData).name;
+  }
+  
+  // If it's a ColumnBuilder, try to get the name from its config
+  if (columnRef && typeof columnRef === 'object' && 'config' in columnRef) {
+    const config = (columnRef as any).config;
+    if (config && typeof config === 'object' && 'name' in config) {
+      return config.name;
+    }
+  }
+  
+  // Fallback: try to get name from _ property (Drizzle internal structure)
+  if (columnRef && typeof columnRef === 'object' && '_' in columnRef) {
+    const internal = (columnRef as any)._;
+    if (internal && typeof internal === 'object' && 'name' in internal) {
+      return internal.name;
+    }
+  }
+  
+  throw new Error('Cannot determine column name from column reference');
+}
+
+/**
+ * Bind an unbound index to a dialect using column instances from a table
+ */
+function bindIndexWithColumns(index: UIndex, tableColumns: Record<string, any>, dialect: SQLDialect): any {
+  const indexData = index.getData();
+  const indexBuilder = dialect.index;
+  
+  // Get column names from the unbound column references
+  const columnNames = indexData.columns.map(col => getColumnName(col));
+  
+  // Look up the actual Column instances from the table columns
+  const boundColumns = columnNames.map(name => {
+    if (!(name in tableColumns)) {
+      // Try to find the column by iterating through all columns
+      // Sometimes column names might be stored differently
+      const foundColumn = Object.values(tableColumns).find((col: any) => {
+        const colName = col?.name || col?.config?.name || col?._?.name;
+        return colName === name;
+      });
+      if (foundColumn) {
+        return foundColumn;
+      }
+      throw new Error(`Column "${name}" not found in table columns. Available columns: ${Object.keys(tableColumns).join(', ')}`);
+    }
+    return tableColumns[name];
+  }).filter(col => col != null); // Filter out any null/undefined columns
+  
+  // Validate that we have at least one column
+  if (boundColumns.length === 0) {
+    throw new Error(`Index "${indexData.name}" has no valid columns`);
+  }
+  
+  // Create the bound index using the dialect's index builder
+  // Drizzle's index().on() pattern: index(name).on(col1, col2, ...)
+  // The index builder returns an object with an .on() method (even though TypeScript types don't show it)
+  // Pass an empty object for options when no options are provided (Drizzle expects an object, not undefined)
+  const boundIndex = indexBuilder(indexData.name, {} as any) as any;
+  if (typeof boundIndex.on === 'function') {
+    return boundIndex.on(...boundColumns);
+  }
+  // Fallback: if .on() doesn't exist, return the index as-is (shouldn't happen with Drizzle)
+  return boundIndex;
+}
+
+/**
+ * Bind an unbound unique constraint to a dialect using column instances from a table
+ */
+function bindUniqueWithColumns(unique: UUnique, tableColumns: Record<string, any>, dialect: SQLDialect): any {
+  const uniqueData = unique.getData();
+  const uniqueBuilder = dialect.unique;
+  
+  // Get column names from the unbound column references
+  const columnNames = uniqueData.columns.map(col => getColumnName(col));
+  
+  // Look up the actual Column instances from the table columns
+  const boundColumns = columnNames.map(name => {
+    if (!(name in tableColumns)) {
+      // Try to find the column by iterating through all columns
+      // Sometimes column names might be stored differently
+      const foundColumn = Object.values(tableColumns).find((col: any) => {
+        const colName = col?.name || col?.config?.name || col?._?.name;
+        return colName === name;
+      });
+      if (foundColumn) {
+        return foundColumn;
+      }
+      throw new Error(`Column "${name}" not found in table columns. Available columns: ${Object.keys(tableColumns).join(', ')}`);
+    }
+    return tableColumns[name];
+  }).filter(col => col != null); // Filter out any null/undefined columns
+  
+  // Validate that we have at least one column
+  if (boundColumns.length === 0) {
+    throw new Error(`Unique constraint "${uniqueData.name}" has no valid columns`);
+  }
+  
+  // Create the bound unique constraint using the dialect's unique builder
+  // Drizzle's unique().on() pattern: unique(name).on(col1, col2, ...)
+  // The unique builder returns an object with an .on() method (even though TypeScript types don't show it)
+  // Pass an empty object for options when no options are provided (Drizzle expects an object, not undefined)
+  const boundUnique = uniqueBuilder(uniqueData.name, {} as any) as any;
+  if (typeof boundUnique.on === 'function') {
+    return boundUnique.on(...boundColumns);
+  }
+  // Fallback: if .on() doesn't exist, return the unique as-is (shouldn't happen with Drizzle)
+  return boundUnique;
+}
+
+/**
  * Bind an unbound table to a dialect
  * Also accepts already bound tables - if dialect matches, returns as-is
  */
 export function bindTable(
-  table: UnboundTable | Table,
+  table: UTable<any> | Table,
   dialect: SQLDialect
 ): Table {
   // Check if already bound
-  if (!isUnboundTable(table)) {
+  if (!isUTable(table)) {
     const boundTable = table as Table;
     
     // Try to determine the dialect
@@ -912,23 +1207,81 @@ export function bindTable(
   }
 
   // Not bound - proceed with binding
-  const unboundTable = table as UnboundTable;
+  const unboundTable = table as UTable<any>;
   
   // Bind all columns
   const boundColumns: Record<string, ColumnBuilder> = {};
   for (const [key, column] of Object.entries(unboundTable.columns)) {
-    boundColumns[key] = bindColumn(column, dialect);
+    boundColumns[key] = bindColumn(column as ColData, dialect);
   }
 
   // Create the table using the dialect's table builder
+  // If there are constraints, we need to resolve them using the bound table's columns
   const tableBuilder = dialect.table;
-  return tableBuilder(unboundTable.__name, boundColumns, unboundTable.constraints);
+  
+  if (unboundTable.constraints) {
+    // Create a constraints callback that receives the bound table from Drizzle
+    // Drizzle calls this callback with the fully initialized table, so columns will be available
+    const constraintsCallback = (boundTable: Table) => {
+      // Access columns from the bound table (which Drizzle provides fully initialized)
+      let tableColumns: Record<string, any> = {};
+      
+      // Try multiple ways to access columns
+      if ((boundTable as any).columns && typeof (boundTable as any).columns === 'object') {
+        tableColumns = (boundTable as any).columns;
+      } else {
+        // Try accessing columns as properties on the table object
+        for (const key of Object.keys(boundColumns)) {
+          const column = (boundTable as any)[key];
+          if (column && typeof column === 'object' && (column.name || column.config || column._)) {
+            tableColumns[key] = column;
+          }
+        }
+      }
+      
+      // Create a mapping from column name to Column instance
+      const tableColumnsByName: Record<string, any> = {};
+      for (const [key, column] of Object.entries(tableColumns)) {
+        if (column) {
+          // Get the column name from the column instance
+          const colName = (column as any).name || (column as any).config?.name || (column as any)._?.name || key;
+          tableColumnsByName[colName] = column;
+          // Also store by key in case the key matches the name
+          if (key === colName) {
+            tableColumnsByName[key] = column;
+          }
+        }
+      }
+      
+      // Also add columns by their property keys
+      Object.assign(tableColumnsByName, tableColumns);
+      
+      // Call the original constraints callback with the unbound table to get constraint definitions
+      const constraintsResult = unboundTable.constraints!(table as any);
+      
+      // Convert unbound indexes/constraints to bound ones using the table's columns
+      return constraintsResult.map((constraint: any) => {
+        if (isUnboundIndex(constraint)) {
+          return bindIndexWithColumns(constraint, tableColumnsByName, dialect);
+        } else if (isUnboundUnique(constraint)) {
+          return bindUniqueWithColumns(constraint, tableColumnsByName, dialect);
+        } else {
+          // Already bound constraint, return as-is
+          return constraint;
+        }
+      });
+    };
+    
+    return tableBuilder(unboundTable.__name, boundColumns, constraintsCallback);
+  } else {
+    return tableBuilder(unboundTable.__name, boundColumns);
+  }
 }
 
 /**
  * Check if a value is an unbound table
  */
-export function isUnboundTable(value: any): value is UnboundTable {
+export function isUTable(value: any): value is UTable<any> {
   return value && typeof value === 'object' && value.__unbound === true && value.__name !== undefined;
 }
 
@@ -986,11 +1339,21 @@ const unboundColumnBuilders: DialectColumnBuilders = {
 };
 
 
+// Unbound index builder function
+const unboundIndex = (name: string): UIndex => {
+  return new UIndex(name);
+};
+
+// Unbound unique constraint builder function
+const unboundUnique = (name: string): UUnique => {
+  return new UUnique(name);
+};
+
 const unboundBuilders: DialectBuilders = {
     table: unboundTable as any,
     ...unboundColumnBuilders,
-    unique: notImplementedForDialect("unique constraint", "unbound"),
-    index: notImplementedForDialect("index", "unbound"),
+    unique: unboundUnique as any,
+    index: unboundIndex as any,
     check: notImplementedForDialect("check constraint", "unbound"),
 };
 
@@ -1066,13 +1429,12 @@ export function table<
 >(
   name: string,
   columns: TColumns,
-  constraints?: (table: Table) => any[]
+  constraints?: (table: UTable<any>) => Array<UIndex | UUnique | any>
 ): UTable<TColumns> {
   return unboundTable(name, columns, constraints);
 }
 
-// Export constraint builders (not implemented for unbound, but exported for API consistency)
-// Note: These will throw errors if used - they're exported for type compatibility
-export const unique = unboundBuilders.unique;
-export const index = unboundBuilders.index;
+// Export constraint builders
+export const unique = unboundUnique;
+export const index = unboundIndex;
 export const check = unboundBuilders.check;

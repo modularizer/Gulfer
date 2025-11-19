@@ -44,10 +44,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Project, TypeFormatFlags, SourceFile, TypeChecker, VariableDeclaration, ExportDeclaration } from 'ts-morph';
-import { XPSchemaPlusWithTables } from '../xp-plus/schema';
-import { UTable } from '../xp-sql/dialects/implementations/unbound';
-import { Table } from 'drizzle-orm';
+import { Project, TypeFormatFlags, TypeChecker, VariableDeclaration,  } from 'ts-morph';
+
 
 /**
  * Options for type generation
@@ -545,6 +543,6 @@ export async function tryGenerateTypes(options: GenerateTypesOptions) {
         if (error instanceof Error) {
             console.error(error.stack);
         }
-        process.exit(1);
+
     }
 }

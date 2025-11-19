@@ -1,4 +1,4 @@
-import {xpschema, createOrRetrieveRegistryEntry, table, text, varchar, timestamp, generateUUID} from '../../index';
+import {xpschema, createOrRetrieveRegistryEntry, table, text, varchar, timestamp, index, generateUUID} from '../../index';
 
 
 // Step 1: Define custom column builders
@@ -13,12 +13,15 @@ const usersTable = table('users', {
     gender: varchar('gender', {enum: ['male', 'female'] as const}),
     bio: text('bio'),
     headline: varchar('headline', {length: 20})
-});
+}, (table) => [
+    index('user_name').on(table.name)
+]);
 
 type UserInsert = typeof usersTable.$inferInsert;
 type UserSelect = typeof usersTable.$inferSelect;
 
 const postsTable = table('posts', {
+    id: uuid('id').primaryKey(),
     author: text('name').notNull().references(() => usersTable.gender),
     postedAt: timestamp('posted_at').defaultNow(),
     content: varchar('content', {length: 2000}),

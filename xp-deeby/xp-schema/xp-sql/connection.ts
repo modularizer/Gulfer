@@ -9,7 +9,7 @@
 import type {SQL, Table} from 'drizzle-orm';
 import type {DbConnectionInfo, DrizzleDatabaseConnectionDriver, DrizzleTable, QueryResult} from './drivers/types';
 import type { SQLDialect } from './dialects/types';
-import {isUnboundTable, bindTable, UnboundTable} from './dialects/implementations/unbound';
+import {isUTable, bindTable, UTable} from './dialects/implementations/unbound';
 import {connectToDriver} from "./drivers/options";
 import {getDialectFromName} from "./dialects/options";
 
@@ -25,7 +25,7 @@ export async function connect(connInfo: DbConnectionInfo): Promise<XPDatabaseCon
  * Database wrapper that knows its dialect and binds unbound tables
  */
 export class XPDatabaseConnection {
-  private tableCache = new Map<UnboundTable, Table>();
+  private tableCache = new Map<UTable, Table>();
 
   constructor(
     public db: DrizzleDatabaseConnectionDriver,
@@ -43,10 +43,10 @@ export class XPDatabaseConnection {
    * Bind an unbound table to this database's dialect
    * Caches the result so subsequent uses are fast
    */
-  _bindTable<T extends UnboundTable | Table>(table: T): Table {
+  _bindTable<T extends UTable | Table>(table: T): Table {
     // If already bound, bindTable will return it as-is (or throw if dialect mismatch)
     // We only cache unbound tables
-    if (isUnboundTable(table)) {
+    if (isUTable(table)) {
       // Check cache
       if (this.tableCache.has(table)) {
         return this.tableCache.get(table)!;
@@ -81,7 +81,7 @@ export class XPDatabaseConnection {
     
     // Wrap the from() method to bind unbound tables
     const originalFrom = selectBuilder.from.bind(selectBuilder);
-    selectBuilder.from = <TTable extends DrizzleTable | UnboundTable>(
+    selectBuilder.from = <TTable extends DrizzleTable | UTable>(
       table: TTable
     ) => {
       const boundTable = this._bindTable(table as any);
@@ -95,7 +95,7 @@ export class XPDatabaseConnection {
    * Start an INSERT query
    * Automatically binds unbound tables when used
    */
-  insert<TTable extends DrizzleTable | UnboundTable, TRow extends Record<string, any> = Record<string, any>>(
+  insert<TTable extends DrizzleTable | UTable, TRow extends Record<string, any> = Record<string, any>>(
     table: TTable
   ) {
     const boundTable = this._bindTable(table as any);
@@ -106,7 +106,7 @@ export class XPDatabaseConnection {
    * Start an UPDATE query
    * Automatically binds unbound tables when used
    */
-  update<TTable extends DrizzleTable | UnboundTable, TRow extends Record<string, any> = Record<string, any>>(
+  update<TTable extends DrizzleTable | UTable, TRow extends Record<string, any> = Record<string, any>>(
     table: TTable
   ) {
     const boundTable = this._bindTable(table as any);
@@ -117,7 +117,7 @@ export class XPDatabaseConnection {
    * Start a DELETE query
    * Automatically binds unbound tables when used
    */
-  delete<TTable extends DrizzleTable | UnboundTable>(
+  delete<TTable extends DrizzleTable | UTable>(
     table: TTable
   ) {
     const boundTable = this._bindTable(table as any);
