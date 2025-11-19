@@ -1,17 +1,19 @@
--- Migration: 0001_initial
--- Hash: 4870f7d0280f0bf3
--- Generated: 2025-11-19T20:38:50.972Z
--- Dialect: pg
+-- Create Script (Latest Schema)
+-- Schema Hash: 25782487680cab88...
+-- Generated: 2025-11-19T20:39:32.686Z
+-- Dialect: sqlite
+-- Migration: 0003_migration
 --
 
 CREATE TABLE "users" (
-	"id" VARCHAR(16) NOT NULL,
+	"id" TEXT NOT NULL,
 	"name" TEXT,
-	"birthday" TIMESTAMP NOT NULL,
+	"birthday" INTEGER NOT NULL,
 	"gender" TEXT,
 	CHECK ("gender" IN ('male','female')),
 	"bio" TEXT,
-	"headline" VARCHAR(30),
+	"headline" TEXT,
+	"metadata" TEXT,
 	PRIMARY KEY ("id"),
 	UNIQUE ("name")
 );
@@ -19,10 +21,10 @@ CREATE TABLE "users" (
 CREATE INDEX IF NOT EXISTS "user_name" ON "users" ("name");
 
 CREATE TABLE "posts" (
-	"id" VARCHAR(16) NOT NULL,
+	"id" TEXT NOT NULL,
 	"author" TEXT NOT NULL,
-	"posted_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	"content" VARCHAR(2000),
+	"posted_at" INTEGER DEFAULT (strftime('%s','now')),
+	"content" TEXT,
 	PRIMARY KEY ("id"),
 	FOREIGN KEY ("author") REFERENCES "users" ("name")
 );

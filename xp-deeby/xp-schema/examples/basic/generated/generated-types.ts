@@ -3,7 +3,7 @@
  * 
  * This file is auto-generated. Do not edit manually.
  * 
- * Generated at: 2025-11-19T20:02:15.736Z
+ * Generated at: 2025-11-19T20:39:32.625Z
  */
 
 /**
@@ -16,6 +16,7 @@ export type UsersTableRecord = {
   gender: "male" | "female" | null;
   bio: string | null;
   headline: string | null;
+  metadata: any;
 };
 
 /**
@@ -27,6 +28,7 @@ export type UsersTableInsert = {
   gender?: "male" | "female" | null;
   bio?: string | null;
   headline?: string | null;
+  metadata?: any;
   birthday: Date;
 };
 

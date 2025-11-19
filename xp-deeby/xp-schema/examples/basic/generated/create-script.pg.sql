@@ -2,18 +2,19 @@
 -- 
 -- This file is auto-generated. Do not edit manually.
 -- 
--- Generated at: 2025-11-19T20:02:15.788Z
+-- Generated at: 2025-11-19T20:39:32.675Z
 -- Dialect: pg
 --
 
 CREATE TABLE IF NOT EXISTS "users" (
-	"id" VARCHAR(16),
+	"id" VARCHAR(16) NOT NULL,
 	"name" TEXT,
 	"birthday" TIMESTAMP NOT NULL,
 	"gender" TEXT,
 	CHECK ("gender" IN ('male','female')),
 	"bio" TEXT,
-	"headline" VARCHAR(23),
+	"headline" VARCHAR(40),
+	"metadata" JSONB,
 	PRIMARY KEY ("id"),
 	UNIQUE ("name")
 );
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 CREATE INDEX IF NOT EXISTS "user_name" ON "users" ("name");
 
 CREATE TABLE IF NOT EXISTS "posts" (
-	"id" VARCHAR(16),
+	"id" VARCHAR(16) NOT NULL,
 	"author" TEXT NOT NULL,
 	"posted_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	"content" VARCHAR(2000),

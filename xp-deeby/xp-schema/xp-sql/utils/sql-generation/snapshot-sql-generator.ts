@@ -369,7 +369,8 @@ export function generateCreateScriptFromSnapshot(
 export function generateMigrationFromSnapshotDiff(
   diff: SchemaDiff,
   newSnapshot: SchemaSnapshot,
-  dialect: 'sqlite' | 'pg'
+  dialect: 'sqlite' | 'pg',
+  oldSnapshot?: SchemaSnapshot
 ): string {
   const statements: string[] = [];
   
@@ -408,59 +409,201 @@ export function generateMigrationFromSnapshotDiff(
       }
     }
     
-    // Handle modified columns - SQLite doesn't support MODIFY COLUMN, so we need to recreate
+    // Handle modified columns
     if (dialect === 'sqlite') {
-      // SQLite requires recreating the table for column modifications
-      // This is complex, so for now we'll just log a warning
+      // SQLite has very limited ALTER TABLE support - column modifications require table recreation
       if (tableDiff.modifiedColumns.length > 0) {
-        statements.push(`-- WARNING: SQLite does not support ALTER COLUMN. Manual migration required for: ${tableDiff.modifiedColumns.map(c => c.columnName).join(', ')}`);
+        // SQLite table recreation pattern:
+        // 1. Create new table with updated schema
+        // 2. Copy data from old table (only matching columns)
+        // 3. Drop old table
+        // 4. Rename new table to original name
+        // 5. Recreate indexes
+        // 6. Recreate foreign keys (SQLite doesn't support FK constraints, but we document them)
+        
+        const tempTableName = `${tableName}_new`;
+        
+        // Step 1: Create new table with updated schema
+        // Pass newSnapshot for FK validation
+        const newTableSQL = generateCreateTableFromSnapshot(tempTableName, tableMetadata, dialect, { ifNotExists: false }, newSnapshot);
+        statements.push(newTableSQL);
+        
+        // Step 2: Copy data from old table to new table
+        // Get all column names that exist in both old and new schemas
+        const oldTableMeta = oldSnapshot?.tables?.[tableName];
+        const columnsToCopy: string[] = [];
+        
+        if (oldTableMeta) {
+          // Find columns that exist in both old and new schemas
+          for (const colName of Object.keys(tableMetadata.columns)) {
+            if (oldTableMeta.columns[colName]) {
+              columnsToCopy.push(colName);
+            }
+          }
+        } else {
+          // If we don't have old snapshot, copy all columns that aren't being modified
+          // This is a fallback - ideally we'd have the old snapshot
+          for (const colName of Object.keys(tableMetadata.columns)) {
+            if (!tableDiff.modifiedColumns.some(mc => mc.columnName === colName)) {
+              columnsToCopy.push(colName);
+            }
+          }
+        }
+        
+        if (columnsToCopy.length > 0) {
+          const columnList = columnsToCopy.map(c => `"${c}"`).join(', ');
+          statements.push(`INSERT INTO "${tempTableName}" (${columnList}) SELECT ${columnList} FROM "${tableName}";`);
+        } else {
+          // No columns to copy - table might be empty or all columns are new
+          statements.push(`-- No data to copy: all columns are new or modified`);
+        }
+        
+        // Step 3: Drop old table
+        statements.push(`DROP TABLE "${tableName}";`);
+        
+        // Step 4: Rename new table to original name
+        statements.push(`ALTER TABLE "${tempTableName}" RENAME TO "${tableName}";`);
+        
+        // Step 5: Recreate indexes (they were dropped with the old table)
+        if (tableMetadata.indexes && Array.isArray(tableMetadata.indexes) && tableMetadata.indexes.length > 0) {
+          for (const idx of tableMetadata.indexes) {
+            if (idx.name && idx.columns && idx.columns.length > 0) {
+              const indexColumns = idx.columns.map(name => `"${name}"`).join(', ');
+              const uniqueClause = idx.unique ? 'UNIQUE ' : '';
+              statements.push(`CREATE ${uniqueClause}INDEX IF NOT EXISTS "${idx.name}" ON "${tableName}" (${indexColumns});`);
+            }
+          }
+        }
+        
+        // Note: SQLite doesn't enforce foreign key constraints at the schema level
+        // They're defined but not enforced unless PRAGMA foreign_keys is enabled
+        // We document them in the CREATE TABLE but don't need to recreate them separately
       }
     } else {
       // PostgreSQL supports ALTER COLUMN
       for (const modifiedCol of tableDiff.modifiedColumns) {
         const col = tableMetadata.columns[modifiedCol.columnName];
-        if (col) {
-          // Generate ALTER COLUMN statements for each change
-          for (const change of modifiedCol.changes) {
-            if (change.includes('type:')) {
+        if (!col) {
+          throw new Error(
+            `Cannot generate migration for modified column "${modifiedCol.columnName}" in table "${tableName}": ` +
+            `Column not found in table metadata.`
+          );
+        }
+        
+        // Track which changes we've handled (by the actual change string)
+        const handledChangeStrings = new Set<string>();
+        // Also track change types for validation
+        const handledChangeTypes = new Set<string>();
+        
+        // Generate ALTER COLUMN statements for each change
+        for (const change of modifiedCol.changes) {
+          if (change.includes('type:') || change.includes('length:')) {
+            // Type changes (including length changes) require ALTER COLUMN TYPE
+            // Only generate one ALTER COLUMN TYPE statement per column, even if multiple type-related changes
+            if (!handledChangeTypes.has('type')) {
               statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" TYPE ${col.type};`);
+              handledChangeTypes.add('type');
             }
-            if (change.includes('nullable:')) {
-              if (col.nullable) {
-                statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" DROP NOT NULL;`);
-              } else {
-                statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET NOT NULL;`);
-              }
+            handledChangeStrings.add(change);
+            handledChangeTypes.add('length');
+          } else if (change.includes('precision:') || change.includes('scale:')) {
+            // Precision/scale changes also require ALTER COLUMN TYPE
+            // Only generate one ALTER COLUMN TYPE statement per column
+            if (!handledChangeTypes.has('type')) {
+              statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" TYPE ${col.type};`);
+              handledChangeTypes.add('type');
             }
-            if (change.includes('defaultValue:')) {
-              if (col.hasDefault && col.defaultValue !== undefined) {
-                // Add DEFAULT
-                const defaultValue = col.defaultValue;
-                if (defaultValue && typeof defaultValue === 'object' && defaultValue.type === 'sql') {
-                  // SQL expression
-                  if (defaultValue.queryChunks && Array.isArray(defaultValue.queryChunks)) {
-                    const sqlParts = defaultValue.queryChunks.map((chunk: any) => {
-                      if (chunk.value) {
-                        return Array.isArray(chunk.value) ? chunk.value.join(' ') : chunk.value;
-                      }
-                      return '';
-                    }).filter((s: string) => s).join(' ');
-                    if (sqlParts) {
-                      statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET DEFAULT ${sqlParts};`);
+            handledChangeStrings.add(change);
+            handledChangeTypes.add('precision');
+            handledChangeTypes.add('scale');
+          } else if (change.includes('enumValues:')) {
+            // Enum value changes require ALTER COLUMN TYPE (with CHECK constraint update)
+            if (!handledChangeTypes.has('type')) {
+              statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" TYPE ${col.type};`);
+              handledChangeTypes.add('type');
+            }
+            // Also need to update CHECK constraint if enum values changed
+            if (col.enumValues && Array.isArray(col.enumValues) && col.enumValues.length > 0) {
+              const enumStr = col.enumValues.map((v: any) => `'${String(v).replace(/'/g, "''")}'`).join(',');
+              statements.push(`ALTER TABLE "${tableName}" DROP CONSTRAINT IF EXISTS "${tableName}_${col.name}_check";`);
+              statements.push(`ALTER TABLE "${tableName}" ADD CONSTRAINT "${tableName}_${col.name}_check" CHECK ("${col.name}" IN (${enumStr}));`);
+            }
+            handledChangeStrings.add(change);
+            handledChangeTypes.add('enumValues');
+          } else if (change.includes('nullable:')) {
+            if (col.nullable) {
+              statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" DROP NOT NULL;`);
+            } else {
+              statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET NOT NULL;`);
+            }
+            handledChangeStrings.add(change);
+            handledChangeTypes.add('nullable');
+          } else if (change.includes('defaultValue:') || change.includes('hasDefault:')) {
+            if (col.hasDefault && col.defaultValue !== undefined) {
+              // Add DEFAULT
+              const defaultValue = col.defaultValue;
+              if (defaultValue && typeof defaultValue === 'object' && defaultValue.type === 'sql') {
+                // SQL expression
+                if (defaultValue.queryChunks && Array.isArray(defaultValue.queryChunks)) {
+                  const sqlParts = defaultValue.queryChunks.map((chunk: any) => {
+                    if (chunk.value) {
+                      return Array.isArray(chunk.value) ? chunk.value.join(' ') : chunk.value;
                     }
+                    return '';
+                  }).filter((s: string) => s).join(' ');
+                  if (sqlParts) {
+                    statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET DEFAULT ${sqlParts};`);
+                  } else {
+                    throw new Error(
+                      `Cannot generate migration for default value change in column "${col.name}" of table "${tableName}": ` +
+                      `SQL expression has no valid query chunks.`
+                    );
                   }
-                } else if (typeof defaultValue === 'string') {
-                  statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET DEFAULT '${defaultValue.replace(/'/g, "''")}';`);
-                } else if (typeof defaultValue === 'number' || typeof defaultValue === 'boolean') {
-                  statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET DEFAULT ${defaultValue};`);
-                } else if (defaultValue === null) {
-                  statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET DEFAULT NULL;`);
+                } else {
+                  throw new Error(
+                    `Cannot generate migration for default value change in column "${col.name}" of table "${tableName}": ` +
+                    `SQL expression default value is missing queryChunks.`
+                  );
                 }
+              } else if (typeof defaultValue === 'string') {
+                statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET DEFAULT '${defaultValue.replace(/'/g, "''")}';`);
+              } else if (typeof defaultValue === 'number' || typeof defaultValue === 'boolean') {
+                statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET DEFAULT ${defaultValue};`);
+              } else if (defaultValue === null) {
+                statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" SET DEFAULT NULL;`);
               } else {
-                statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" DROP DEFAULT;`);
+                throw new Error(
+                  `Cannot generate migration for default value change in column "${col.name}" of table "${tableName}": ` +
+                  `Unsupported default value type: ${typeof defaultValue}. Value: ${JSON.stringify(defaultValue)}`
+                );
               }
+            } else {
+              statements.push(`ALTER TABLE "${tableName}" ALTER COLUMN "${col.name}" DROP DEFAULT;`);
             }
+            handledChangeStrings.add(change);
+            handledChangeTypes.add('defaultValue');
+            handledChangeTypes.add('hasDefault');
+          } else {
+            // Unknown change type - throw error
+            throw new Error(
+              `Cannot generate migration for change in column "${modifiedCol.columnName}" of table "${tableName}": ` +
+              `Unsupported change type: "${change}". ` +
+              `All changes must be handled. If this is a new change type, it must be implemented in the migration generator.`
+            );
           }
+        }
+        
+        // Verify all changes were handled
+        // Simply check if each change string was added to handledChangeStrings
+        const unhandledChanges = modifiedCol.changes.filter(change => !handledChangeStrings.has(change));
+        
+        if (unhandledChanges.length > 0) {
+          throw new Error(
+            `Failed to handle all changes for column "${modifiedCol.columnName}" in table "${tableName}". ` +
+            `Unhandled changes: ${unhandledChanges.join(', ')}. ` +
+            `All changes: ${modifiedCol.changes.join(', ')}. ` +
+            `Handled changes: ${Array.from(handledChangeStrings).join(', ')}.`
+          );
         }
       }
     }
@@ -518,6 +661,35 @@ export function generateMigrationFromSnapshotDiff(
         statements.push(`CREATE ${uniqueClause}INDEX "${idx.name}" ON "${tableName}" (${indexColumns});`);
       }
     }
+  }
+  
+  // Verify that all detected changes resulted in SQL statements
+  // Count expected statements based on diff
+  let expectedStatements = 0;
+  expectedStatements += diff.addedTables.length;
+  expectedStatements += diff.removedTables.length;
+  
+  for (const tableDiff of diff.modifiedTables) {
+    expectedStatements += tableDiff.addedColumns.length;
+    expectedStatements += tableDiff.removedColumns.length;
+    expectedStatements += tableDiff.modifiedColumns.length;
+    expectedStatements += tableDiff.addedForeignKeys.length;
+    expectedStatements += tableDiff.removedForeignKeys.length;
+    expectedStatements += tableDiff.addedUniqueConstraints.length;
+    expectedStatements += tableDiff.removedUniqueConstraints.length;
+    expectedStatements += tableDiff.addedIndexes.length;
+    expectedStatements += tableDiff.removedIndexes.length;
+  }
+  
+  // If we have changes but no statements, that's an error
+  if (expectedStatements > 0 && statements.length === 0) {
+    throw new Error(
+      `Migration generation failed: Detected ${expectedStatements} change(s) but generated 0 SQL statements. ` +
+      `This indicates a bug in the migration generator. ` +
+      `Diff summary: +${diff.addedTables.length} tables, -${diff.removedTables.length} tables, ` +
+      `${diff.modifiedTables.length} modified tables. ` +
+      `All changes MUST result in migration SQL or throw an error.`
+    );
   }
   
   return statements.join('\n');

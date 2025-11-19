@@ -161,11 +161,28 @@ function loadExistingMigrations(migrationsPath: string): MigrationFile[] {
 // SchemaSnapshot is imported from snapshot-sql-generator
 
 /**
- * Get the path to the snapshot file for a dialect
+ * Get the path to the latest snapshot file for a dialect (used for migration generation)
+ * Stored directly in the dialect directory as snapshot.json
  */
 function getSnapshotPath(migrationsDir: string, dialect: string): string {
   const path = require('path');
-  return path.join(migrationsDir, dialect, 'meta', 'snapshot.json');
+  return path.join(migrationsDir, dialect, 'snapshot.json');
+}
+
+/**
+ * Get the path to the create script (overwritten each migration)
+ */
+function getCreateScriptPath(migrationsDir: string, dialect: string): string {
+  const path = require('path');
+  return path.join(migrationsDir, dialect, 'create.sql');
+}
+
+/**
+ * Get the path to a versioned schema diff JSON for a specific migration
+ */
+function getVersionedDiffPath(migrationsDir: string, dialect: string, migrationName: string): string {
+  const path = require('path');
+  return path.join(migrationsDir, dialect, `${migrationName}.diff.json`);
 }
 
 /**
@@ -285,8 +302,9 @@ function saveSnapshot(
     schemaHash: hash,
   } as SchemaSnapshot;
   
+  // Save the latest snapshot (overwrites each time - used for migration generation)
   fs.writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2));
-  console.log(`💾 Saved snapshot for ${dialect} to ${snapshotPath} (hash: ${hash.substring(0, 16)}...)`);
+  console.log(`💾 Saved latest snapshot for ${dialect} to ${snapshotPath} (hash: ${hash.substring(0, 16)}...)`);
 }
 
 /**
@@ -515,9 +533,9 @@ export async function generateMigrations(
     }
     
     // Load existing migrations for this dialect
-    const existingMigrations = existingMigrationsPath
-      ? loadExistingMigrations(path.resolve(existingMigrationsPath, dialectName))
-      : [];
+    // Always load from the directory where we're writing migrations (resolvedMigrationsDir)
+    // This ensures we see all existing migrations, including ones created in previous runs
+    const existingMigrations = loadExistingMigrations(dialectDir);
     
     let migrationSQL = '';
     let diff: SchemaDiff | undefined;
@@ -578,6 +596,16 @@ export async function generateMigrations(
       }
     }
     
+    // Calculate current schema hash after metadata extraction
+    // This allows us to skip migration generation if schema hasn't actually changed
+    const crypto = require('crypto');
+    const sortedTableNames = Object.keys(currentMetadata).sort();
+    const sortedTables: Record<string, TableMetadata> = {};
+    for (const tableName of sortedTableNames) {
+      sortedTables[tableName] = currentMetadata[tableName];
+    }
+    const currentSchemaHash = crypto.createHash('sha256').update(JSON.stringify(sortedTables)).digest('hex');
+    
     if (isInitial) {
       // No snapshot exists - this is the first migration
       // Generate initial migration - full CREATE TABLE statements
@@ -599,13 +627,7 @@ export async function generateMigrations(
       }
     } else {
       // Snapshot exists - generate incremental migration from snapshot
-      for (const [tableName, table] of Object.entries(boundTables)) {
-        try {
-          currentMetadata[tableName] = extractTableMetadata(table, dialectName as 'sqlite' | 'pg');
-        } catch (error) {
-          console.warn(`Could not extract metadata for table ${tableName}:`, error);
-        }
-      }
+      // currentMetadata is already extracted above, no need to re-extract
       
       console.log(`📊 Current schema has ${Object.keys(currentMetadata).length} tables: ${Object.keys(currentMetadata).join(', ')}`);
       console.log(`📊 Snapshot has ${Object.keys(lastSnapshot.tables).length} tables: ${Object.keys(lastSnapshot.tables).join(', ')}`);
@@ -687,8 +709,13 @@ export async function generateMigrations(
       };
       result.diff = diff;
       
-      // Only generate migration if there are changes
-      if (addedTables.length > 0 || removedTables.length > 0 || modifiedTables.length > 0) {
+      // Check if schema hash has changed (more reliable than diff for detecting actual changes)
+      if (lastSnapshot && lastSnapshot.schemaHash === currentSchemaHash) {
+        // Schema hash hasn't changed - no actual changes
+        console.log(`ℹ️  No changes detected for ${dialectName} (schema hash unchanged: ${currentSchemaHash.substring(0, 16)}...)`);
+        migrationSQL = '';
+        diff = undefined;
+      } else if (addedTables.length > 0 || removedTables.length > 0 || modifiedTables.length > 0) {
         console.log(`📝 Generating incremental migration for ${dialectName}: +${addedTables.length} tables, -${removedTables.length} tables, ${modifiedTables.length} modified`);
         
         // Create current snapshot for migration generation
@@ -697,10 +724,11 @@ export async function generateMigrations(
           timestamp: Date.now(),
           migrationName: 'current',
           tables: currentMetadata,
+          schemaHash: currentSchemaHash,
         };
         
         // Generate migration SQL from snapshot comparison
-        migrationSQL = generateMigrationFromSnapshotDiff(diff, currentSnapshot, dialectName as 'sqlite' | 'pg');
+        migrationSQL = generateMigrationFromSnapshotDiff(diff, currentSnapshot, dialectName as 'sqlite' | 'pg', lastSnapshot);
         console.log(`   Generated ${migrationSQL.length} characters of SQL`);
       } else {
         // No changes detected
@@ -710,8 +738,31 @@ export async function generateMigrations(
     }
     
     // Generate migration name
+    // Parse the highest migration number from existing migrations
+    // If initial migration exists (0001_initial), first incremental migration should be 0002
+    let nextMigrationNumber = 1;
+    if (existingMigrations.length > 0) {
+      const migrationNumbers = existingMigrations
+        .map(m => {
+          const match = m.name.match(/^(\d+)_/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter(n => n > 0);
+      if (migrationNumbers.length > 0) {
+        const maxNumber = Math.max(...migrationNumbers);
+        nextMigrationNumber = maxNumber + 1;
+      } else {
+        // No numbered migrations found, but migrations exist - start at 0002 if initial exists
+        const hasInitial = existingMigrations.some(m => m.name.includes('initial'));
+        nextMigrationNumber = hasInitial ? 2 : 1;
+      }
+    } else {
+      // No existing migrations - this will be the first one
+      // If it's initial, use 0001; if incremental, use 0002 (in case initial was deleted)
+      nextMigrationNumber = isInitial ? 1 : 2;
+    }
     const timestamp = Date.now();
-    const name = migrationName || `${String(existingMigrations.length + 1).padStart(4, '0')}_${isInitial ? 'initial' : 'migration'}`;
+    const name = migrationName || `${String(nextMigrationNumber).padStart(4, '0')}_${isInitial ? 'initial' : 'migration'}`;
     
     // Generate hash
     const hash = crypto.createHash('sha256').update(migrationSQL).digest('hex').substring(0, 16);
@@ -739,6 +790,42 @@ export async function generateMigrations(
         hash,
       });
       
+      // Save/create the latest create script (overwrites each time)
+      const currentSnapshot: SchemaSnapshot = {
+        version: 1,
+        timestamp: Date.now(),
+        migrationName: name,
+        tables: currentMetadata,
+        schemaHash: currentSchemaHash,
+      };
+      const createScript = generateCreateScriptFromSnapshot(currentSnapshot, dialectName as 'sqlite' | 'pg', { ifNotExists: false });
+      const createScriptPath = getCreateScriptPath(resolvedMigrationsDir, dialectName);
+      const createScriptHeader = `-- Create Script (Latest Schema)
+-- Schema Hash: ${currentSchemaHash.substring(0, 16)}...
+-- Generated: ${new Date().toISOString()}
+-- Dialect: ${dialectName}
+-- Migration: ${name}
+--
+
+`;
+      fs.writeFileSync(createScriptPath, createScriptHeader + createScript);
+      console.log(`💾 Saved latest create script for ${dialectName} to ${createScriptPath}`);
+      
+      // Save schema diff JSON for this migration (only for incremental migrations)
+      if (!isInitial && diff) {
+        const diffPath = getVersionedDiffPath(resolvedMigrationsDir, dialectName, name);
+        const diffJson = {
+          migrationName: name,
+          schemaHash: currentSchemaHash,
+          previousSchemaHash: lastSnapshot?.schemaHash,
+          timestamp: Date.now(),
+          diff: diff,
+        };
+        fs.writeFileSync(diffPath, JSON.stringify(diffJson, null, 2));
+        console.log(`💾 Saved schema diff for ${dialectName} to ${diffPath}`);
+      }
+      // For initial migration: no diff needed (no previous state)
+      
       // Save snapshot after generating migration (always save, even for initial)
       // Pass the already-extracted metadata to avoid duplicate extraction
       saveSnapshot(resolvedMigrationsDir, dialectName, name, boundTables, currentMetadata);
@@ -757,6 +844,28 @@ export async function generateMigrations(
         path: migrationFilePath,
         hash,
       });
+      
+      // Save/create the latest create script (overwrites each time)
+      const initialSnapshot: SchemaSnapshot = {
+        version: 1,
+        timestamp: Date.now(),
+        migrationName: name,
+        tables: currentMetadata,
+        schemaHash: currentSchemaHash,
+      };
+      const createScript = generateCreateScriptFromSnapshot(initialSnapshot, dialectName as 'sqlite' | 'pg', { ifNotExists: false });
+      const createScriptPath = getCreateScriptPath(resolvedMigrationsDir, dialectName);
+      const createScriptHeader = `-- Create Script (Latest Schema)
+-- Schema Hash: ${currentSchemaHash.substring(0, 16)}...
+-- Generated: ${new Date().toISOString()}
+-- Dialect: ${dialectName}
+-- Migration: ${name}
+--
+
+`;
+      fs.writeFileSync(createScriptPath, createScriptHeader + createScript);
+      console.log(`💾 Saved latest create script for ${dialectName} to ${createScriptPath}`);
+      
       // Pass the already-extracted metadata to avoid duplicate extraction
       saveSnapshot(resolvedMigrationsDir, dialectName, name, boundTables, currentMetadata);
       console.log(`✅ Generated initial migration file: ${migrationFilePath}`);

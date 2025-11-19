@@ -1,4 +1,4 @@
-import {xpschema, createOrRetrieveRegistryEntry, table, text, varchar, timestamp, index, generateUUID} from '../../index';
+import {xpschema, createOrRetrieveRegistryEntry, table, text, varchar, timestamp, index, jsonb, generateUUID} from '../../index';
 
 
 // Step 1: Define custom column builders
@@ -12,7 +12,8 @@ const usersTable = table('users', {
     birthday: timestamp('birthday').notNull(),
     gender: varchar('gender', {enum: ['male', 'female'] as const}),
     bio: text('bio'),
-    headline: varchar('headline', {length: 23})
+    headline: varchar('headline', {length: 40}),
+    metadata: jsonb('metadata'),
 }, (table) => [
     index('user_name').on(table.name)
 ]);

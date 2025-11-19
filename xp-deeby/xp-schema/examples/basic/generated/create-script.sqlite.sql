@@ -2,18 +2,19 @@
 -- 
 -- This file is auto-generated. Do not edit manually.
 -- 
--- Generated at: 2025-11-19T20:02:15.794Z
+-- Generated at: 2025-11-19T20:39:32.680Z
 -- Dialect: sqlite
 --
 
 CREATE TABLE IF NOT EXISTS "users" (
-	"id" TEXT,
+	"id" TEXT NOT NULL,
 	"name" TEXT,
 	"birthday" INTEGER NOT NULL,
 	"gender" TEXT,
 	CHECK ("gender" IN ('male','female')),
 	"bio" TEXT,
 	"headline" TEXT,
+	"metadata" TEXT,
 	PRIMARY KEY ("id"),
 	UNIQUE ("name")
 );
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 CREATE INDEX IF NOT EXISTS "user_name" ON "users" ("name");
 
 CREATE TABLE IF NOT EXISTS "posts" (
-	"id" TEXT,
+	"id" TEXT NOT NULL,
 	"author" TEXT NOT NULL,
 	"posted_at" INTEGER DEFAULT (strftime('%s','now')),
 	"content" TEXT,

@@ -1,11 +1,11 @@
 -- Migration: 0001_initial
--- Hash: eb7f0c402fd0e5f4
--- Generated: 2025-11-19T20:02:15.801Z
+-- Hash: a973bf073e3a94dd
+-- Generated: 2025-11-19T20:38:50.969Z
 -- Dialect: sqlite
 --
 
 CREATE TABLE "users" (
-	"id" TEXT,
+	"id" TEXT NOT NULL,
 	"name" TEXT,
 	"birthday" INTEGER NOT NULL,
 	"gender" TEXT,
@@ -19,7 +19,7 @@ CREATE TABLE "users" (
 CREATE INDEX IF NOT EXISTS "user_name" ON "users" ("name");
 
 CREATE TABLE "posts" (
-	"id" TEXT,
+	"id" TEXT NOT NULL,
 	"author" TEXT NOT NULL,
 	"posted_at" INTEGER DEFAULT (strftime('%s','now')),
 	"content" TEXT,

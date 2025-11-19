@@ -1,7 +1,8 @@
--- Migration: 0001_initial
--- Hash: 4870f7d0280f0bf3
--- Generated: 2025-11-19T20:38:50.972Z
+-- Create Script (Latest Schema)
+-- Schema Hash: 225591bd0c4499a3...
+-- Generated: 2025-11-19T20:39:32.690Z
 -- Dialect: pg
+-- Migration: 0003_migration
 --
 
 CREATE TABLE "users" (
@@ -11,7 +12,8 @@ CREATE TABLE "users" (
 	"gender" TEXT,
 	CHECK ("gender" IN ('male','female')),
 	"bio" TEXT,
-	"headline" VARCHAR(30),
+	"headline" VARCHAR(40),
+	"metadata" JSONB,
 	PRIMARY KEY ("id"),
 	UNIQUE ("name")
 );

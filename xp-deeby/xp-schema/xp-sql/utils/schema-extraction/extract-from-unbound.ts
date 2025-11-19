@@ -32,7 +32,9 @@ function extractColumnMetadataFromUnbound(
   }
   
   // Extract basic column info from ColData
-  const nullable = !colData.modifiers?.some((m: any) => m.method === 'notNull');
+  // Check if column is a primary key - primary keys are always NOT NULL
+  const isPrimaryKey = colData.modifiers?.some((m: any) => m.method === 'primaryKey') || false;
+  const nullable = isPrimaryKey ? false : !colData.modifiers?.some((m: any) => m.method === 'notNull');
   const hasDefaultModifier = colData.modifiers?.some((m: any) => m.method === 'default' || m.method === 'defaultNow') || false;
   
   // Extract default value if present - store raw data, no interpretation

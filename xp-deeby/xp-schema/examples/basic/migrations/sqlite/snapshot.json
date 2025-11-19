@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "timestamp": 1763582535807,
-  "migrationName": "0001_initial",
+  "timestamp": 1763584772687,
+  "migrationName": "0003_migration",
   "tables": {
     "posts": {
       "name": "posts",
       "columns": {
         "id": {
           "name": "id",
-          "type": "VARCHAR(16)",
+          "type": "TEXT",
           "length": 16,
-          "nullable": true,
+          "nullable": false,
           "hasDefault": false
         },
         "author": {
@@ -21,7 +21,7 @@
         },
         "posted_at": {
           "name": "posted_at",
-          "type": "TIMESTAMP",
+          "type": "INTEGER",
           "nullable": true,
           "hasDefault": true,
           "defaultValue": {
@@ -29,7 +29,7 @@
             "queryChunks": [
               {
                 "value": [
-                  "CURRENT_TIMESTAMP"
+                  "(strftime('%s','now'))"
                 ]
               }
             ]
@@ -37,7 +37,7 @@
         },
         "content": {
           "name": "content",
-          "type": "VARCHAR(2000)",
+          "type": "TEXT",
           "length": 2000,
           "nullable": true,
           "hasDefault": false
@@ -65,9 +65,9 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "VARCHAR(16)",
+          "type": "TEXT",
           "length": 16,
-          "nullable": true,
+          "nullable": false,
           "hasDefault": false
         },
         "name": {
@@ -78,7 +78,7 @@
         },
         "birthday": {
           "name": "birthday",
-          "type": "TIMESTAMP",
+          "type": "INTEGER",
           "nullable": false,
           "hasDefault": false
         },
@@ -100,8 +100,14 @@
         },
         "headline": {
           "name": "headline",
-          "type": "VARCHAR(23)",
-          "length": 23,
+          "type": "TEXT",
+          "length": 40,
+          "nullable": true,
+          "hasDefault": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "TEXT",
           "nullable": true,
           "hasDefault": false
         }
@@ -128,5 +134,5 @@
       ]
     }
   },
-  "schemaHash": "b00bdbedce805dbe40aea6eea80f3ca99796bc443984e4744eef5fef8ba858ae"
+  "schemaHash": "25782487680cab8859fa37248e859e2a3d2f3ce18210aed0c9fc344d1c0bb3fd"
 }

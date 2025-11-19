@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "timestamp": 1763582535802,
-  "migrationName": "0001_initial",
+  "timestamp": 1763584772691,
+  "migrationName": "0003_migration",
   "tables": {
     "posts": {
       "name": "posts",
       "columns": {
         "id": {
           "name": "id",
-          "type": "TEXT",
+          "type": "VARCHAR(16)",
           "length": 16,
-          "nullable": true,
+          "nullable": false,
           "hasDefault": false
         },
         "author": {
@@ -21,7 +21,7 @@
         },
         "posted_at": {
           "name": "posted_at",
-          "type": "INTEGER",
+          "type": "TIMESTAMP",
           "nullable": true,
           "hasDefault": true,
           "defaultValue": {
@@ -29,7 +29,7 @@
             "queryChunks": [
               {
                 "value": [
-                  "(strftime('%s','now'))"
+                  "CURRENT_TIMESTAMP"
                 ]
               }
             ]
@@ -37,7 +37,7 @@
         },
         "content": {
           "name": "content",
-          "type": "TEXT",
+          "type": "VARCHAR(2000)",
           "length": 2000,
           "nullable": true,
           "hasDefault": false
@@ -65,9 +65,9 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "TEXT",
+          "type": "VARCHAR(16)",
           "length": 16,
-          "nullable": true,
+          "nullable": false,
           "hasDefault": false
         },
         "name": {
@@ -78,7 +78,7 @@
         },
         "birthday": {
           "name": "birthday",
-          "type": "INTEGER",
+          "type": "TIMESTAMP",
           "nullable": false,
           "hasDefault": false
         },
@@ -100,8 +100,14 @@
         },
         "headline": {
           "name": "headline",
-          "type": "TEXT",
-          "length": 23,
+          "type": "VARCHAR(40)",
+          "length": 40,
+          "nullable": true,
+          "hasDefault": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "JSONB",
           "nullable": true,
           "hasDefault": false
         }
@@ -128,5 +134,5 @@
       ]
     }
   },
-  "schemaHash": "c6104c01385128ec39830d6324cbf0984dd59fe168496db3d23ec758339aa826"
+  "schemaHash": "225591bd0c4499a3ff77b55631cb8b783dc5346deca91ee8bf598c6b553b2c54"
 }
