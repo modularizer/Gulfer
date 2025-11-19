@@ -7,18 +7,14 @@
  * Run with: npx tsx xp-deeby/xp-schema/examples/basic/generate-types-example.ts
  */
 
-import { generateTypes } from '../../utils/generate-types';
+import {generateTypes, tryGenerateTypes} from '../../utils/generate-types';
 import * as path from 'path';
 
 async function main() {
   const examplesDir = __dirname;
   const schemaFile = path.join(examplesDir, 'schema.ts');
-  
-  console.log('🔍 Generating types from schema...\n');
-  
-  try {
     // Generate types for the entire schema
-     await generateTypes({
+     await tryGenerateTypes({
       sourceFile: schemaFile,
       exportName: 'schema',
       outputPath: path.join(examplesDir, 'generated-schema-types.ts'),
@@ -32,14 +28,6 @@ async function main() {
 
 `
     });
-
-  } catch (error) {
-    console.error('❌ Error generating types:', error);
-    if (error instanceof Error) {
-      console.error(error.stack);
-    }
-    process.exit(1);
-  }
 }
 
 // Run if executed directly

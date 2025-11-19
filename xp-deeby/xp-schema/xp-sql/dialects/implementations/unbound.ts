@@ -585,7 +585,7 @@ type HasDefault<T> = T extends UColumn<any, infer TFlags>
  * The type already includes null if the column is nullable
  */
 type ComputeSelectType<TColumns extends Record<string, UColumn | ColData>> = {
-  [K in keyof Writable<TColumns>]: ExtractColumnType<TColumns[K]>;
+  [K in keyof TColumns]: ExtractColumnType<TColumns[K]>;
 };
 
 /**
@@ -603,12 +603,14 @@ type IsOptionalInInsert<T> =
  * - Columns with defaults are optional (can be undefined) - checked first
  * - Nullable columns are optional (can be null or undefined)
  * - Non-nullable columns without defaults are required
+ * Uses a single mapped type to merge required and optional fields into one cohesive type
+ * Uses Exclude to remove undefined from optional properties since ? already allows undefined
  */
 type ComputeInsertType<TColumns extends Record<string, UColumn | ColData>> = {
-  [K in keyof Writable<TColumns> as IsOptionalInInsert<TColumns[K]> extends true ? never : K]: ExtractColumnType<TColumns[K]>;
+  [K in keyof TColumns as IsOptionalInInsert<TColumns[K]> extends true ? K : never]?: Exclude<ExtractColumnType<TColumns[K]>, undefined>;
 } & {
-  [K in keyof Writable<TColumns> as IsOptionalInInsert<TColumns[K]> extends true ? K : never]?: ExtractColumnType<TColumns[K]> | undefined;
-};
+  [K in keyof TColumns as IsOptionalInInsert<TColumns[K]> extends true ? never : K]: ExtractColumnType<TColumns[K]>;
+} extends infer Merged ? { [K in keyof Merged]: Merged[K] } : never;
 
 /**
  * Helper type to check if a column has a primaryKey modifier
@@ -663,25 +665,16 @@ type GetPrimaryKeyColumn<TColumns extends Record<string, UColumn<any, any> | Col
     : undefined;
 
 /**
- * Helper type to remove readonly modifiers from object properties
- */
-type Writable<T> = {
-  -readonly [P in keyof T]: T[P];
-};
-
-/**
  * Unbound table with columns exposed as properties and type inference
  * This intersection type allows columns to be accessed as properties (e.g., table.name)
  * and provides $inferSelect and $inferInsert type-level properties
  * 
  * The $inferSelect and $inferInsert types are computed from the column types
  * Use `typeof table.$inferSelect` to access the type.
- * 
- * Note: Uses Writable<TColumns> internally to remove readonly modifiers from column properties
  */
 export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>> =
-  UnboundTable<Writable<TColumns>> & {
-    [K in keyof Writable<TColumns>]: SimplifyUColumn<TColumns[K]>;
+  UnboundTable<TColumns> & {
+    [K in keyof TColumns]: SimplifyUColumn<TColumns[K]>;
   } & {
     /**
      * Infer the select type from this table
@@ -739,12 +732,12 @@ export type UTable<TColumns extends Record<string, UColumn<any, any> | ColData>>
  * @throws Error at runtime if any column is a bound Drizzle ColumnBuilder.
  */
 export function unboundTable<
-  const TColumns extends Record<string, UColumn<any, any> | ColData>
+  TColumns extends Record<string, UColumn<any, any> | ColData> = Record<string, UColumn<any, any> | ColData>
 >(
   name: string,
   columns: TColumns,
   constraints?: (table: Table) => any[]
-): UTable<Writable<TColumns>> {
+): UTable<TColumns> {
   // Convert UnboundColumnBuilder instances to data
   // Use Record<string, ColData> for runtime storage (doesn't affect type inference)
     const columnData: Partial<Record<keyof TColumns, ColData>> = {};
@@ -815,7 +808,6 @@ export function unboundTable<
   // The types are computed at the type level using ComputeSelectType and ComputeInsertType
   // We use the original columns parameter directly to preserve literal types
   // Even if some columns have complex types, we preserve the literal object structure
-  // Writable<TColumns> removes readonly modifiers from the column properties
   const result = {
     ...baseTable,
     // Expose columns as properties for use in references (e.g., usersTable.name)
@@ -824,10 +816,10 @@ export function unboundTable<
     ...columns,
     // Add $primaryKey getter that returns the primary key column
     // Type assertion is needed because runtime type doesn't match type-level inference
-    get $primaryKey(): GetPrimaryKeyColumn<Writable<TColumns>> {
-      return primaryKeyColumn as GetPrimaryKeyColumn<Writable<TColumns>>;
+    get $primaryKey(): GetPrimaryKeyColumn<TColumns> {
+      return primaryKeyColumn as GetPrimaryKeyColumn<TColumns>;
     },
-  } as UTable<Writable<TColumns>>;
+  } as UTable<TColumns>;
   
   return result;
 }
@@ -1070,12 +1062,12 @@ export const date: (name: string, opts?: DateOptions) => UColumn<Date | null> = 
 // Export table builder with const modifier to preserve literal types
 // Using UColumn<any, any> in the constraint allows complex types while preserving literal structure
 export function table<
-  const TColumns extends Record<string, UColumn<any, any> | ColData>
+  TColumns extends Record<string, UColumn<any, any> | ColData> = Record<string, UColumn<any, any> | ColData>
 >(
   name: string,
   columns: TColumns,
   constraints?: (table: Table) => any[]
-): UTable<Writable<TColumns>> {
+): UTable<TColumns> {
   return unboundTable(name, columns, constraints);
 }
 

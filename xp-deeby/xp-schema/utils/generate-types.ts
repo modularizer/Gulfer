@@ -119,6 +119,13 @@ function formatTypeString(typeStr: string): string {
   // Clean up whitespace first
   let cleaned = typeStr.replace(/\s+/g, ' ').trim();
   
+  // Remove redundant | undefined from optional properties (prop?: T | undefined -> prop?: T)
+  // Handle both | undefined and undefined | patterns
+  cleaned = cleaned.replace(/\?:\s*([^;]+?)\s*\|\s*undefined(?=\s*[;}]|$)/g, '?: $1');
+  cleaned = cleaned.replace(/\?:\s*undefined\s*\|\s*([^;]+?)(?=\s*[;}]|$)/g, '?: $1');
+  // Also handle undefined in the middle: string | undefined | null
+  cleaned = cleaned.replace(/(\?:\s*[^;|]+?)\s*\|\s*undefined\s*\|\s*([^;|]+?)(?=\s*[;}]|$)/g, '$1 | $2');
+  
   // If it's an object type, format it nicely
   if (cleaned.startsWith('{') && cleaned.includes(':')) {
     // Remove the outer braces temporarily
@@ -132,6 +139,11 @@ function formatTypeString(typeStr: string): string {
     if (parts.length > 0) {
       const formatted = parts
         .map(part => {
+          // Remove | undefined from optional properties in each part
+          part = part.replace(/\?:\s*([^;]+?)\s*\|\s*undefined(?=\s*[;}]|$)/g, '?: $1');
+          part = part.replace(/\?:\s*undefined\s*\|\s*([^;]+?)(?=\s*[;}]|$)/g, '?: $1');
+          // Also handle undefined in the middle: string | undefined | null
+          part = part.replace(/(\?:\s*[^;|]+?)\s*\|\s*undefined\s*\|\s*([^;|]+?)(?=\s*[;}]|$)/g, '$1 | $2');
           // Add proper indentation and semicolon
           return '  ' + part + ';';
         })
@@ -167,8 +179,8 @@ function createTempTypeFile(
     // Single table
     const typeName = tableName.charAt(0).toUpperCase() + tableName.slice(1);
     const varName = exportName === 'default' ? 'schemaOrTable' : exportName;
-    content += `export type ${typeName}Select = typeof ${varName}.$inferSelect;\n`;
-    content += `export type ${typeName}Insert = typeof ${varName}.$inferInsert;\n`;
+    content += `export type ${typeName}TableRecord = typeof ${varName}.$inferSelect;\n`;
+    content += `export type ${typeName}TableInsert = typeof ${varName}.$inferInsert;\n`;
   } else {
     // Schema - extract all tables
     const varName = exportName === 'default' ? 'schemaOrTable' : exportName;
@@ -202,8 +214,8 @@ function extractTypes(
   if (tableName) {
     // Single table - extract from type aliases in temp file
     const typeName = tableName.charAt(0).toUpperCase() + tableName.slice(1);
-    const selectTypeAlias = tempSourceFile.getTypeAlias(`${typeName}Select`);
-    const insertTypeAlias = tempSourceFile.getTypeAlias(`${typeName}Insert`);
+    const selectTypeAlias = tempSourceFile.getTypeAlias(`${typeName}TableRecord`);
+    const insertTypeAlias = tempSourceFile.getTypeAlias(`${typeName}TableInsert`);
     
     const result: { select?: string; insert?: string } = {};
     
@@ -289,8 +301,8 @@ function extractTypes(
     
     for (const name of tableNames) {
       const typeName = name.charAt(0).toUpperCase() + name.slice(1);
-      tempContent += `export type ${typeName}Select = typeof ${varName}.${name}.$inferSelect;\n`;
-      tempContent += `export type ${typeName}Insert = typeof ${varName}.${name}.$inferInsert;\n\n`;
+      tempContent += `export type ${typeName}TableRecord = typeof ${varName}.${name}.$inferSelect;\n`;
+      tempContent += `export type ${typeName}TableInsert = typeof ${varName}.${name}.$inferInsert;\n\n`;
     }
     
     fs.writeFileSync(tempFilePath, tempContent);
@@ -302,8 +314,8 @@ function extractTypes(
     // Extract types from the updated temp file
     for (const name of tableNames) {
       const typeName = name.charAt(0).toUpperCase() + name.slice(1);
-      const selectTypeAlias = updatedTempFile.getTypeAlias(`${typeName}Select`);
-      const insertTypeAlias = updatedTempFile.getTypeAlias(`${typeName}Insert`);
+      const selectTypeAlias = updatedTempFile.getTypeAlias(`${typeName}TableRecord`);
+      const insertTypeAlias = updatedTempFile.getTypeAlias(`${typeName}TableInsert`);
       
       const result: { select?: string; insert?: string } = {};
       
@@ -437,14 +449,14 @@ export async function generateTypes(options: GenerateTypesOptions): Promise<Gene
         : `typeof import('${relativeSourcePath}').${exportName === 'default' ? 'default' : exportName}['$inferInsert']`;
       
       fileContent += `/**
- * ${typeName}Select - Select type for ${tableName} table
+ * ${typeName}TableRecord - Record type for ${tableName} table
  */
-export type ${typeName}Select = ${selectTypeDef};
+export type ${typeName}TableRecord = ${selectTypeDef};
 
 /**
- * ${typeName}Insert - Insert type for ${tableName} table
+ * ${typeName}TableInsert - Insert type for ${tableName} table
  */
-export type ${typeName}Insert = ${insertTypeDef};
+export type ${typeName}TableInsert = ${insertTypeDef};
 
 `;
     } else {
@@ -463,14 +475,14 @@ export type ${typeName}Insert = ${insertTypeDef};
             : `typeof import('${relativeSourcePath}').${exportName === 'default' ? 'default' : exportName}['tables']['${name}']['$inferInsert']`;
           
           fileContent += `/**
- * ${typeName}Select - Select type for ${name} table
+ * ${typeName}TableRecord - Record type for ${name} table
  */
-export type ${typeName}Select = ${selectTypeDef};
+export type ${typeName}TableRecord = ${selectTypeDef};
 
 /**
- * ${typeName}Insert - Insert type for ${name} table
+ * ${typeName}TableInsert - Insert type for ${name} table
  */
-export type ${typeName}Insert = ${insertTypeDef};
+export type ${typeName}TableInsert = ${insertTypeDef};
 
 `;
         }
@@ -515,3 +527,24 @@ export type ${typeName}Insert = ${insertTypeDef};
   }
 }
 
+
+
+
+export async function tryGenerateTypes(options: GenerateTypesOptions) {
+
+    console.log('🔍 Generating types from schema...');
+    console.log(`Using ${options.sourceFile} export ${options.exportName}` + (options.tableName?`table ${options.tableName}`:''));
+    console.log(`Will write to ${options.outputPath}`)
+
+    try {
+        // Generate types for the entire schema
+        return await generateTypes(options);
+
+    } catch (error) {
+        console.error('❌ Error generating types:', error);
+        if (error instanceof Error) {
+            console.error(error.stack);
+        }
+        process.exit(1);
+    }
+}

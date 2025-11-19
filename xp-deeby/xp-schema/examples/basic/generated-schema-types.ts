@@ -3,48 +3,48 @@
  * 
  * This file is auto-generated. Do not edit manually.
  * 
- * Generated at: 2025-11-18T23:40:39.553Z
+ * Generated at: 2025-11-19T00:12:44.663Z
  */
 
 /**
- * UsersSelect - Select type for users table
+ * UsersTableRecord - Record type for users table
  */
-export type UsersSelect = {
-  readonly id: string;
-  readonly name: string | null;
-  readonly birthday: Date;
-  readonly gender: "male" | "female" | null;
-  readonly bio: string | null;
-  readonly headline: string | null;
+export type UsersTableRecord = {
+  id: string;
+  name: string | null;
+  birthday: Date;
+  gender: "male" | "female" | null;
+  bio: string | null;
+  headline: string | null;
 };
 
 /**
- * UsersInsert - Insert type for users table
+ * UsersTableInsert - Insert type for users table
  */
-export type UsersInsert = {
-  readonly birthday: Date;
-  } & { readonly id?: string | undefined;
-  readonly name?: string | null | undefined;
-  readonly gender?: "male" | "female" | null | undefined;
-  readonly bio?: string | null | undefined;
-  readonly headline?: string | null | undefined;
+export type UsersTableInsert = {
+  id?: string;
+  name?: string | null;
+  gender?: "male" | "female" | null;
+  bio?: string | null;
+  headline?: string | null;
+  birthday: Date;
 };
 
 /**
- * PostsSelect - Select type for posts table
+ * PostsTableRecord - Record type for posts table
  */
-export type PostsSelect = {
-  readonly author: string;
-  readonly postedAt: Date | null;
-  readonly content: string | null;
+export type PostsTableRecord = {
+  author: string;
+  postedAt: Date | null;
+  content: string | null;
 };
 
 /**
- * PostsInsert - Insert type for posts table
+ * PostsTableInsert - Insert type for posts table
  */
-export type PostsInsert = {
-  readonly author: string;
-  } & { readonly postedAt?: Date | null | undefined;
-  readonly content?: string | null | undefined;
+export type PostsTableInsert = {
+  postedAt?: Date | null;
+  content?: string | null;
+  author: string;
 };
 
