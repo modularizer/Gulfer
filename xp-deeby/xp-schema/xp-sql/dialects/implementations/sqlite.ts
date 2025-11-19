@@ -1,4 +1,4 @@
-import {sqliteTable, text as drizzleText, integer as drizzleInteger, unique, real as drizzleReal, index, customType, blob as drizzleBlob} from 'drizzle-orm/sqlite-core';
+import {sqliteTable, type SQLiteTableWithColumns, text as drizzleText, integer as drizzleInteger, unique, real as drizzleReal, index, customType, blob as drizzleBlob} from 'drizzle-orm/sqlite-core';
 import {
     DialectBuilders,
     DialectColumnBuilders,
@@ -17,9 +17,15 @@ import {
     SmallintOptions,
     BooleanOptions,
     JsonOptions, ColumnInfo, DrizzleColumnInfo, ColumnBuilderFn,
+    TimestampColumnBuilderWithDefaultNow,
 } from "../types";
 import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {sql} from "drizzle-orm";
+import type {Table, ColumnBuilder} from "drizzle-orm";
+import {ColData} from "./unbound";
+
+// Type alias for extended column builder (used for type compatibility)
+type ExtendedColumnBuilder<TColData = any> = ColumnBuilder;
 
 
 
@@ -141,22 +147,151 @@ export const dateTextMDY = customType<{
 
 
 
-// Wrap Drizzle builders to match our typed interface
-const sqliteText = (name: string, opts?: TextOptions) => drizzleText(name);
-const sqliteVarchar = (name: string, opts?: VarcharConfig) => drizzleText(name, opts as any);
-const sqliteInteger = (name: string, opts?: IntegerOptions) => drizzleInteger(name, opts);
-const sqliteReal = (name: string, opts?: RealOptions) => drizzleReal(name);
-const sqliteDoublePrecision = (name: string, opts?: RealOptions) => drizzleReal(name);
-const sqliteBigint = (name: string, opts?: BigintOptions) => drizzleBlob(name, {mode: "bigint", ...opts} as any);
-const sqliteSmallint = (name: string, opts?: SmallintOptions) => drizzleInteger(name, opts);
-const sqliteNumeric = (name: string, opts?: NumericConfig) => sqliteNumericImpl(name, opts);
-const sqliteBool = (name: string, opts?: BooleanOptions) => drizzleInteger(name, {mode: "boolean", ...opts} as any);
-const sqliteTimestamp = (name: string, opts?: TimestampOptions) => drizzleInteger(name, {mode: "timestamp", ...opts} as any);
-const sqliteTime = (name: string, opts?: TimeOptions) => timeText24h(name);
-const sqliteDate = (name: string, opts?: DateOptions) => dateTextMDY(name);
-const sqliteJson = (name: string, opts?: JsonOptions) => drizzleText(name, {mode: 'json', ...opts} as any);
-const sqliteJsonb = (name: string, opts?: JsonOptions) => drizzleText(name, {mode: 'json', ...opts} as any);
-const sqliteBlob = (name: string, opts?: BlobOptions) => drizzleBlob(name, opts);
+/**
+ * Helper to extend a ColumnBuilder with our custom properties
+ * When using dialect builders directly (not through unbound), we don't have
+ * the original UColumn, so we create a minimal ColData for type inference
+ */
+function extendSqliteColumnBuilder<TType = any>(
+    builder: any,
+    typeName: string,
+    inferredType: TType
+): ExtendedColumnBuilder<ColData> {
+    const extended = builder as any;
+    
+    // Create a minimal ColData for type inference
+    // We can't fully infer types from Drizzle's ColumnBuilder, so we use a fallback
+    const colData: ColData = {
+        __unbound: true,
+        type: typeName,
+        name: '',
+        options: undefined,
+        modifiers: [],
+        nullable: true,
+    };
+    
+    // $inferSelect and $inferInsert are type-only, no runtime implementation needed
+    // $ref is undefined for direct dialect builders (no foreign key tracking)
+    
+    return extended as ExtendedColumnBuilder<ColData>;
+}
+
+// Wrap Drizzle builders to match our typed interface and return ExtendedColumnBuilder
+const sqliteText = (name: string, opts?: TextOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleText(name), 'text', null as string | null);
+const sqliteVarchar = (name: string, opts?: VarcharConfig): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleText(name, opts as any), 'varchar', null as string | null);
+const sqliteInteger = (name: string, opts?: IntegerOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleInteger(name, opts), 'integer', null as number | null);
+const sqliteReal = (name: string, opts?: RealOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleReal(name), 'real', null as number | null);
+const sqliteDoublePrecision = (name: string, opts?: RealOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleReal(name), 'doublePrecision', null as number | null);
+const sqliteBigint = (name: string, opts?: BigintOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleBlob(name, {mode: "bigint", ...opts} as any), 'bigint', null as bigint | null);
+const sqliteSmallint = (name: string, opts?: SmallintOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleInteger(name, opts), 'smallint', null as number | null);
+const sqliteNumeric = (name: string, opts?: NumericConfig): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(sqliteNumericImpl(name, opts), 'numeric', null as string | null);
+const sqliteBool = (name: string, opts?: BooleanOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleInteger(name, {mode: "boolean", ...opts} as any), 'bool', null as boolean | null);
+/**
+ * Extended SQLite timestamp builder with .defaultNow() method
+ * Creates a timestamp column and adds a .defaultNow() method that sets the default to the current Unix timestamp
+ * Also wraps methods that return new builders (.notNull(), .primaryKey(), .unique(), etc.) to preserve .defaultNow()
+ */
+const sqliteTimestamp = (name: string, opts?: TimestampOptions): TimestampColumnBuilderWithDefaultNow => {
+    const baseBuilder = drizzleInteger(name, {mode: "timestamp", ...opts} as any);
+    
+    // Helper function to add defaultNow and wrap builder methods to any builder
+    const addDefaultNow = (originalBuilder: any): TimestampColumnBuilderWithDefaultNow => {
+        // Store reference to the original builder's methods to avoid recursion
+        // We need to call these directly, not through 'this', to avoid calling our wrapped versions
+        const originalNotNull = originalBuilder.notNull?.bind(originalBuilder);
+        const originalPrimaryKey = originalBuilder.primaryKey?.bind(originalBuilder);
+        const originalUnique = originalBuilder.unique?.bind(originalBuilder);
+        const originalDefault = originalBuilder.default?.bind(originalBuilder);
+        const originalReferences = originalBuilder.references?.bind(originalBuilder);
+        const original$type = originalBuilder.$type?.bind(originalBuilder);
+        
+        // Wrap methods that return new builder instances to preserve .defaultNow()
+        const wrappedBuilder = Object.assign(originalBuilder, {
+            defaultNow(this: any): TimestampColumnBuilderWithDefaultNow {
+                // SQLite stores timestamps as Unix epoch (seconds since 1970-01-01)
+                // Use unixepoch('now') to get the current timestamp
+                // Call the original .default() method to avoid recursion
+                const builderWithDefault = originalDefault?.(sql`(unixepoch('now'))`);
+                if (!builderWithDefault) {
+                    throw new Error('default() method not available on builder');
+                }
+                // Ensure the returned builder also has .defaultNow() method
+                return addDefaultNow(builderWithDefault);
+            },
+            // Wrap .notNull() to preserve .defaultNow()
+            notNull(this: any): TimestampColumnBuilderWithDefaultNow {
+                const newBuilder = originalNotNull?.();
+                if (!newBuilder) {
+                    throw new Error('notNull() method not available on builder');
+                }
+                return addDefaultNow(newBuilder);
+            },
+            // Wrap .primaryKey() to preserve .defaultNow()
+            primaryKey(this: any, ...args: any[]): TimestampColumnBuilderWithDefaultNow {
+                const newBuilder = originalPrimaryKey?.(...args);
+                if (!newBuilder) {
+                    throw new Error('primaryKey() method not available on builder');
+                }
+                return addDefaultNow(newBuilder);
+            },
+            // Wrap .unique() to preserve .defaultNow()
+            unique(this: any, ...args: any[]): TimestampColumnBuilderWithDefaultNow {
+                const newBuilder = originalUnique?.(...args);
+                if (!newBuilder) {
+                    throw new Error('unique() method not available on builder');
+                }
+                return addDefaultNow(newBuilder);
+            },
+            // Wrap .default() to preserve .defaultNow()
+            default(this: any, ...args: any[]): TimestampColumnBuilderWithDefaultNow {
+                const newBuilder = originalDefault?.(...args);
+                if (!newBuilder) {
+                    throw new Error('default() method not available on builder');
+                }
+                return addDefaultNow(newBuilder);
+            },
+            // Wrap .references() to preserve .defaultNow()
+            references(this: any, ...args: any[]): TimestampColumnBuilderWithDefaultNow {
+                const newBuilder = originalReferences?.(...args);
+                if (!newBuilder) {
+                    throw new Error('references() method not available on builder');
+                }
+                return addDefaultNow(newBuilder);
+            },
+            // Wrap .$type() to preserve .defaultNow() (TypeScript-only method)
+            $type(this: any, ...args: any[]): TimestampColumnBuilderWithDefaultNow {
+                const newBuilder = original$type?.(...args);
+                if (!newBuilder) {
+                    throw new Error('$type() method not available on builder');
+                }
+                return addDefaultNow(newBuilder);
+            },
+        }) as TimestampColumnBuilderWithDefaultNow;
+        
+        return wrappedBuilder;
+    };
+    
+    return addDefaultNow(baseBuilder);
+};
+const sqliteTime = (name: string, opts?: TimeOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(timeText24h(name), 'time', null as Date | null);
+const sqliteDate = (name: string, opts?: DateOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(dateTextMDY(name), 'date', null as Date | null);
+const sqliteJson = (name: string, opts?: JsonOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleText(name, {mode: 'json', ...opts} as any), 'json', null as any | null);
+const sqliteJsonb = (name: string, opts?: JsonOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleText(name, {mode: 'json', ...opts} as any), 'jsonb', null as any | null);
+const sqliteBlob = (name: string, opts?: BlobOptions): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(drizzleBlob(name, opts), 'blob', null as Uint8Array | null);
 
 const sqliteColumnBuilders: DialectColumnBuilders = {
     text: sqliteText,
@@ -168,7 +303,8 @@ const sqliteColumnBuilders: DialectColumnBuilders = {
     doublePrecision: sqliteDoublePrecision,
     bigint: sqliteBigint,
     smallint: sqliteSmallint,
-    pkserial: (name: string) => integer(name).primaryKey({ autoIncrement: true }),
+    pkserial: (name: string): ExtendedColumnBuilder<ColData> => 
+        extendSqliteColumnBuilder(integer(name).primaryKey(), 'pkserial', null as number | null),
     blob: sqliteBlob,
     numeric: sqliteNumeric,
     bool: sqliteBool,
@@ -176,14 +312,103 @@ const sqliteColumnBuilders: DialectColumnBuilders = {
     timestamp: sqliteTimestamp,
     time: sqliteTime,
     date: sqliteDate,
-} as DialectColumnBuilders;
+} as unknown as DialectColumnBuilders;
 const dialectName = "sqlite";
 
+// Wrap sqliteTable to add $primaryKey property while preserving the original type
+function sqliteTableExtended<
+  TName extends string,
+  TColumns extends Record<string, any>
+>(
+    name: TName, 
+    columns: TColumns
+) {
+    const table = sqliteTable(name, columns);
+    
+    // Extract the primary key column type from the table's columns
+    type TableType = typeof table;
+    type TableColumns = TableType['columns'];
+    
+    // Helper type to check if a column is a primary key
+    // Drizzle stores primary key info in multiple places at runtime:
+    // - col.primary === true
+    // - col.config.primaryKey === true
+    // At the type level, Drizzle encodes this in the column's type structure
+    // We check multiple possible locations where primary key info might be encoded
+    type IsPrimaryKeyColumn<C> = 
+        // Most direct: check if primary is true
+        C extends { primary: true } ? true
+        // Check config.primaryKey
+        : C extends { config: infer Config } 
+            ? Config extends { primaryKey: true } ? true : false
+        // Check data.primaryKey (some Drizzle versions use this)
+        : C extends { data: infer Data }
+            ? Data extends { primaryKey: true } ? true : false
+        // Check internal _ property
+        : C extends { _: infer Internal }
+            ? Internal extends { primary: true } | { isPrimaryKey: true } ? true : false
+        // Check direct isPrimaryKey
+        : C extends { isPrimaryKey: true } ? true
+        : false;
+    
+    // Find the primary key column by iterating through all columns
+    type FindPrimaryKeyColumn<TColumns> = TColumns extends Record<string, infer C>
+        ? {
+            [K in keyof TColumns]: IsPrimaryKeyColumn<TColumns[K]> extends true ? TColumns[K] : never;
+        }[keyof TColumns]
+        : never;
+    
+    type PrimaryKeyColumnType = FindPrimaryKeyColumn<TableColumns>;
+    
+    // Find the primary key column from the table's columns
+    // Drizzle exposes columns directly on the table object (e.g., table.id, table.name)
+    
+    // Add $primaryKey getter that returns the actual primary key column
+    // Search at runtime to ensure we get the current value
+    Object.defineProperty(table, '$primaryKey', {
+        get(): PrimaryKeyColumnType extends never ? undefined : PrimaryKeyColumnType {
+            const tableAny = this as any;
+            
+            // Check columns exposed directly on the table (table.id, table.name, etc.)
+            // Drizzle exposes columns as properties on the table object
+            for (const key in tableAny) {
+                // Skip known non-column properties
+                if (key === 'columns' || key === '_' || key === 'enableRLS' || key.startsWith('$')) continue;
+                
+                const col = tableAny[key];
+                // Check if it's a column object with primary key
+                // Drizzle sets col.primary = true for primary key columns
+                if (col && typeof col === 'object' && (col as any).primary === true) {
+                    return col as PrimaryKeyColumnType extends never ? undefined : PrimaryKeyColumnType;
+                }
+            }
+            
+            // Fallback: also check table.columns if it exists
+            if (tableAny.columns && typeof tableAny.columns === 'object') {
+                for (const [key, column] of Object.entries(tableAny.columns)) {
+                    const col = column as any;
+                    if (col && typeof col === 'object' && col.primary === true) {
+                        return col as PrimaryKeyColumnType extends never ? undefined : PrimaryKeyColumnType;
+                    }
+                }
+            }
+            
+            return undefined as PrimaryKeyColumnType extends never ? undefined : PrimaryKeyColumnType;
+        },
+        enumerable: false,
+        configurable: true,
+    });
+    
+    // Use intersection type to add $primaryKey while preserving the original type
+    return table as TableType & { 
+        /** Get the primary key column from this table */
+        readonly $primaryKey: PrimaryKeyColumnType extends never ? undefined : PrimaryKeyColumnType;
+    };
+}
+
 const sqliteBuilders: DialectBuilders = {
-
-    table: (name: string, columns: Record<string, any>, constraintBuilder) => sqliteTable(name, columns),
+    table: sqliteTableExtended,
     ...sqliteColumnBuilders,
-
     unique, index,
     check: notImplementedForDialect("check constraint", dialectName),
 }
@@ -309,7 +534,8 @@ export const real = sqliteReal;
 export const doublePrecision = sqliteDoublePrecision;
 export const bigint = sqliteBigint;
 export const smallint = sqliteSmallint;
-export const pkserial = (name: string) => integer(name).primaryKey({ autoIncrement: true });
+export const pkserial = (name: string): ExtendedColumnBuilder<ColData> => 
+    extendSqliteColumnBuilder(integer(name).primaryKey(), 'pkserial', null as number | null);
 export const blob = sqliteBlob;
 // Export numeric (using the implementation)
 export const numeric = sqliteNumeric;
@@ -320,7 +546,7 @@ export const time = sqliteTime;
 export const date = sqliteDate;
 
 // Export table builder
-export const table = sqliteTable;
+export const table = sqliteTableExtended;
 
 // Export constraint builders
 export { unique, index };
