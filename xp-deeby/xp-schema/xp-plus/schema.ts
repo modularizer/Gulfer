@@ -5,6 +5,9 @@ import {connect, XPDatabaseConnectionPlus} from "./database";
 import {UTable} from "../xp-sql/dialects";
 import {genTypesScript} from "../utils/generate-types";
 import {genCreateScript} from '../utils/generate-create-script';
+import {genMigrationsScript} from '../xp-sql/utils/migrations/migration-generator';
+import {getSchemaJson as getSchemaJsonUtil} from '../xp-sql/utils/schema-extraction/extract-schema-metadata';
+import type {SQLDialect} from '../xp-sql/dialects/types';
 
 /**
  * XPSchemaPlus with tables exposed as properties
@@ -20,12 +23,15 @@ export class XPSchemaPlus<Tables extends Record<string, Table | UTable<any>> = R
         super(tables);
     }
 
-    async gen({src, dst, types = true, creates = ['pg', 'sqlite']}: {src?: string, dst?: string, types?: boolean, creates?: string[] | boolean | undefined | null} = {}) {
+    async gen({src, dst, types = true, creates = ['pg', 'sqlite'], migrations}: {src?: string, dst?: string, types?: boolean, creates?: string[] | boolean | undefined | null, migrations?: string[] | boolean | undefined | null} = {}) {
         if (types){
             await this.genTypesScript(src, dst);
         }
         if (creates){
             await this.genCreateScript(src, dst, (creates === true)?undefined:creates);
+        }
+        if (migrations){
+            await this.genMigrationsScript(src, dst, (migrations === true)?undefined:migrations);
         }
     }
     async genTypesScript(anchor?: string, dst?: string) {
@@ -37,6 +43,22 @@ export class XPSchemaPlus<Tables extends Record<string, Table | UTable<any>> = R
         const a = anchor ?? this.anchor;
         if (!a){throw new Error('must provide filename')}
         return genCreateScript(a, dst, dialects);
+    }
+    async genMigrationsScript(anchor?: string, dst?: string, dialects?: string[]){
+        const a = anchor ?? this.anchor;
+        if (!a){throw new Error('must provide filename')}
+        return genMigrationsScript(a, dst, dialects);
+    }
+
+    /**
+     * Get schema JSON representation
+     * Returns a JSON-serializable representation of the schema metadata
+     * 
+     * @param dialect - Optional dialect to include dialect-specific type information
+     * @returns JSON-serializable schema metadata
+     */
+    async getSchemaJson(dialect?: SQLDialect): Promise<Record<string, any>> {
+        return getSchemaJsonUtil(this, dialect);
     }
 
     async connect(connectionInfo: DbConnectionInfo): Promise<XPDatabaseConnectionPlus> {

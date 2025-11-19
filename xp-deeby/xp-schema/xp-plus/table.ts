@@ -2,6 +2,7 @@ import {Condition, ResolvedCondition, UnresolvedCondition, XPDatabaseConnectionP
 import {SQL, type Table, getTableName, eq, and, notInArray} from "drizzle-orm";
 import {QueryResult, SelectQueryBuilder} from "../xp-sql/drivers/types";
 import {UpsertResult} from "../../utils";
+import {getTableJson} from "../xp-sql/utils/schema-extraction/extract-schema-metadata";
 
 export class XPDatabaseTablePlus<TTable extends Table = Table> {
     public readonly tableName: string;
@@ -17,6 +18,17 @@ export class XPDatabaseTablePlus<TTable extends Table = Table> {
         for (const [k, v] of Object.entries(this.table.columns)) {
             (this as any)[k] = v;
         }
+    }
+
+    /**
+     * Get table JSON representation
+     * Returns a JSON-serializable representation of this table's metadata
+     * 
+     * @returns JSON-serializable table metadata
+     */
+    getSchemaJson(): Record<string, any> {
+        const dialectName = this.database.dialect.name === 'postgresql' ? 'pg' : 'sqlite';
+        return getTableJson(this.table, dialectName);
     }
 
     createScript({ifNotExists = true}: {ifNotExists?: boolean} = {}): string {

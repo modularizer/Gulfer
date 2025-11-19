@@ -12,7 +12,7 @@ const usersTable = table('users', {
     birthday: timestamp('birthday').notNull(),
     gender: varchar('gender', {enum: ['male', 'female'] as const}),
     bio: text('bio'),
-    headline: varchar('headline', {length: 20})
+    headline: varchar('headline', {length: 23})
 }, (table) => [
     index('user_name').on(table.name)
 ]);

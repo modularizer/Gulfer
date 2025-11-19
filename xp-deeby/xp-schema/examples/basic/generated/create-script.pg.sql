@@ -2,7 +2,7 @@
 -- 
 -- This file is auto-generated. Do not edit manually.
 -- 
--- Generated at: 2025-11-19T17:43:28.658Z
+-- Generated at: 2025-11-19T19:11:17.622Z
 -- Dialect: pg
 --
 
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"birthday" TIMESTAMP NOT NULL,
 	"gender" VARCHAR,
 	"bio" TEXT,
-	"headline" VARCHAR(20)
+	"headline" VARCHAR(23)
 );
 
 CREATE INDEX IF NOT EXISTS "user_name" ON "users" ("name");

@@ -7,7 +7,7 @@
  * Run with: npx tsx xp-deeby/xp-schema/examples/migrations-example.ts
  */
 
-import { generateMigrations } from '../xp-sql/utils/migration-generator';
+import { generateMigrations } from '../xp-sql/utils/migrations/migration-generator';
 import { schema } from './basic/schema';
 import * as path from 'path';
 

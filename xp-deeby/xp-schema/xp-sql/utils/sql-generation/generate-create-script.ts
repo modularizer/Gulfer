@@ -6,13 +6,14 @@
  * No database connection is required.
  */
 
-import type { SQLDialect} from '../dialects/types';
-import type { UTable } from '../dialects/implementations/unbound';
-import type { Schema } from '../schema';
-import { bindTable, isUTable } from '../dialects/implementations/unbound';
-import { getDialectFromName } from '../dialects';
+import type { SQLDialect} from '../../dialects/types';
+import type { UnboundTable } from '../../dialects/implementations/unbound';
+import type { Schema } from '../../schema';
+import { bindTable, isUTable } from '../../dialects/implementations/unbound';
+import { getDialectFromName } from '../../dialects';
 import { Table, getTableName } from 'drizzle-orm';
 import { DialectSQLGenerator, SQLiteSQLGenerator, PostgreSQLSQLGenerator } from './dialect-sql-generator';
+import { generateCreateScriptFromSnapshot, type SchemaSnapshot } from './snapshot-sql-generator';
 
 /**
  * Get the appropriate SQL generator for a dialect
@@ -64,14 +65,14 @@ function determineDialect(boundTable: Table): 'pg' | 'sqlite' {
  * @returns CREATE TABLE SQL statement
  */
 export async function generateCreateScriptForTable(
-  table: Table | UTable,
+  table: Table | UnboundTable,
   dialect?: SQLDialect,
-  options: { ifNotExists?: boolean; originalUTable?: UTable; boundSchema?: Record<string, Table> } = {}
+  options: { ifNotExists?: boolean; originalUnboundTable?: UnboundTable; boundSchema?: Record<string, Table> } = {}
 ): Promise<string> {
   // If table is unbound, bind it first
   let boundTable: Table;
   let tableDialect: 'pg' | 'sqlite';
-  const originalUTable = isUTable(table) ? table : options.originalUTable;
+  const originalUnboundTable = isUTable(table) ? table : options.originalUnboundTable;
   
   if (isUTable(table)) {
     if (!dialect) {
@@ -192,9 +193,9 @@ export async function generateCreateScriptForTable(
           }
         } catch (e) {
           // If reference() fails, try to extract from the original unbound table
-          if (originalUTable) {
+          if (originalUnboundTable) {
             // Find the column in the original unbound table that has a reference
-            for (const [colKey, col] of Object.entries(originalUTable.columns)) {
+            for (const [colKey, col] of Object.entries(originalUnboundTable.columns)) {
               const colData = col as any;
               if (colData.modifiers) {
                 const refModifier = colData.modifiers.find((m: any) => m.method === 'references');
@@ -445,6 +446,22 @@ export async function generateCreateScriptForTable(
 }
 
 /**
+ * Generate CREATE TABLE SQL from a schema snapshot
+ * 
+ * @param snapshot - Schema snapshot (can be loaded from JSON file)
+ * @param dialect - SQL dialect ('sqlite' | 'pg')
+ * @param options - Options for SQL generation
+ * @returns CREATE TABLE SQL statements for all tables
+ */
+export function generateCreateScriptFromSnapshotFile(
+  snapshot: SchemaSnapshot,
+  dialect: 'sqlite' | 'pg',
+  options: { ifNotExists?: boolean } = {}
+): string {
+  return generateCreateScriptFromSnapshot(snapshot, dialect, options);
+}
+
+/**
  * Generate CREATE TABLE SQL for all tables in a schema
  * 
  * @param schema - Schema object containing tables
@@ -482,7 +499,7 @@ export async function generateCreateScriptForSchema(
     const originalTable = isUTable(table) ? table : undefined;
     const createSQL = await generateCreateScriptForTable(table, dialect, {
       ...options,
-      originalUTable: originalTable,
+      originalUnboundTable: originalTable,
       boundSchema: boundTables
     });
     statements.push(createSQL);
@@ -502,7 +519,7 @@ export async function generateCreateScriptForSchema(
  * @returns CREATE TABLE SQL statement(s)
  */
 export async function generateCreateScript(
-  input: Table | UTable | Schema<any>,
+  input: Table | UnboundTable | Schema<any>,
   dialect?: SQLDialect,
   options: { ifNotExists?: boolean } = {}
 ): Promise<string> {
@@ -512,5 +529,5 @@ export async function generateCreateScript(
   }
   
   // Otherwise, treat as a table
-  return await generateCreateScriptForTable(input as Table | UTable, dialect, options);
+  return await generateCreateScriptForTable(input as Table | UnboundTable, dialect, options);
 }

@@ -20,6 +20,7 @@ import {XPDatabaseTablePlus, XPDatabaseTablePlusWithColumns} from "./table";
 import type {SQLDialect} from "../xp-sql/dialects/types";
 import {connectToDriver} from "../xp-sql/drivers/options";
 import {getDialectFromName} from "../xp-sql/dialects/options";
+import {getSchemaJsonFromBoundTables} from "../xp-sql/utils/schema-extraction/extract-schema-metadata";
 
 
 
@@ -147,6 +148,20 @@ export class XPDatabaseConnectionPlus extends XPDatabaseConnection {
 
     getRuntimeTable(tableName: string, schemaName: string = 'public'): Promise<Table> {
         return this.dialect.getRuntimeTable(this.db, tableName, schemaName);
+    }
+
+    /**
+     * Get schema JSON representation
+     * Returns a JSON-serializable representation of all tables in this connection
+     * 
+     * @returns JSON-serializable schema metadata for all tables
+     */
+    async getSchemaJson(): Promise<Record<string, any>> {
+        // Wait for schema to be registered
+        await this.schemaPromise;
+        
+        const dialectName = this.dialect.name === 'postgresql' ? 'pg' : 'sqlite';
+        return getSchemaJsonFromBoundTables(this.schema, dialectName);
     }
     getTable<TTable extends Table>(table: TTable): XPDatabaseTablePlusWithColumns<TTable> {
         return new XPDatabaseTablePlus(this, table) as XPDatabaseTablePlusWithColumns<TTable>;

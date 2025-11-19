@@ -12,10 +12,10 @@ The migration system allows you to:
 
 ## Files
 
-- `migration-generator.ts` - Core migration generation logic
-- `schema-diff.ts` - Schema comparison and diffing utilities
-- `generate-migrations.ts` - CLI script for generating migrations
-- `migrations.ts` - Migration execution utilities (existing)
+- `migrations/migration-generator.ts` - Core migration generation logic
+- `schema-extraction/schema-diff.ts` - Schema comparison and diffing utilities
+- `migrations/generate-migrations.ts` - CLI script for generating migrations
+- `migrations/migrations.ts` - Migration execution utilities (existing)
 
 ## Usage
 
@@ -24,7 +24,7 @@ The migration system allows you to:
 Generate migrations from a schema file:
 
 ```bash
-npx tsx xp-deeby/xp-schema/xp-sql/utils/generate-migrations.ts <schema-file> <export-name> [migrations-dir] [migration-name]
+npx tsx xp-deeby/xp-schema/xp-sql/utils/migrations/generate-migrations.ts <schema-file> <export-name> [migrations-dir] [migration-name]
 ```
 
 **Example:**
@@ -40,7 +40,7 @@ npx tsx xp-deeby/xp-schema/xp-sql/utils/generate-migrations.ts ./schema.ts schem
 ### Programmatic Usage
 
 ```typescript
-import { generateMigrations } from 'xp-deeby/xp-schema/xp-sql/utils/migration-generator';
+import { generateMigrations } from 'xp-deeby/xp-schema/xp-sql/utils/migrations/migration-generator';
 import { schema } from './schema';
 
 const result = await generateMigrations({
@@ -59,7 +59,7 @@ console.log('Generated migrations:', result.migrationFiles);
 For more accurate incremental migrations, you can provide a database connection:
 
 ```typescript
-import { generateMigrations } from 'xp-deeby/xp-schema/xp-sql/utils/migration-generator';
+import { generateMigrations } from 'xp-deeby/xp-schema/xp-sql/utils/migrations/migration-generator';
 import { schema } from './schema';
 import { connect } from 'xp-deeby/xp-schema';
 
@@ -143,7 +143,7 @@ The system can detect:
 Use the existing `runMigrations` utility from `migrations.ts`:
 
 ```typescript
-import { runMigrations } from 'xp-deeby/xp-schema/xp-sql/utils/migrations';
+import { runMigrations } from 'xp-deeby/xp-schema/xp-sql/utils/migrations/migrations';
 import { db } from './database';
 import * as migrations from './migrations/sqlite';
 

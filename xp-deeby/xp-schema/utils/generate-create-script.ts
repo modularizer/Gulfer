@@ -167,7 +167,7 @@ export async function generateCreateScript(
   
   // Use the low-level function that uses getTableConfig()
   // Pass the dialect name string, not the dialect object
-  const drizzleUtils = await import('../xp-sql/utils/generate-create-script');
+  const drizzleUtils = await import('../xp-sql/utils/sql-generation/generate-create-script');
   const drizzleGenerateCreateScript = drizzleUtils.generateCreateScript;
   
   // Generate SQL using Drizzle's getTableConfig()

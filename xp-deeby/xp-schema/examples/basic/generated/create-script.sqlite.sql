@@ -2,7 +2,7 @@
 -- 
 -- This file is auto-generated. Do not edit manually.
 -- 
--- Generated at: 2025-11-19T17:43:28.668Z
+-- Generated at: 2025-11-19T19:11:17.631Z
 -- Dialect: sqlite
 --
 
