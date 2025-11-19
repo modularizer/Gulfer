@@ -1,9 +1,9 @@
 /**
- * Generated Type Declarations for Basic Schema Example
+ * Generated Type Declarations
  * 
  * This file is auto-generated. Do not edit manually.
  * 
- * Generated at: 2025-11-19T00:12:44.663Z
+ * Generated at: 2025-11-19T17:43:28.594Z
  */
 
 /**
@@ -34,6 +34,7 @@ export type UsersTableInsert = {
  * PostsTableRecord - Record type for posts table
  */
 export type PostsTableRecord = {
+  id: string;
   author: string;
   postedAt: Date | null;
   content: string | null;
@@ -43,6 +44,7 @@ export type PostsTableRecord = {
  * PostsTableInsert - Insert type for posts table
  */
 export type PostsTableInsert = {
+  id?: string;
   postedAt?: Date | null;
   content?: string | null;
   author: string;

@@ -1,9 +1,9 @@
--- Generated CREATE TABLE Script for Basic Schema Example
+-- Generated CREATE TABLE Script
 -- 
 -- This file is auto-generated. Do not edit manually.
 -- 
--- Generated at: 2025-11-19T01:57:05.880Z
--- Dialect: SQLite
+-- Generated at: 2025-11-19T17:43:28.668Z
+-- Dialect: sqlite
 --
 
 CREATE TABLE IF NOT EXISTS "users" (
@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 );
 
 CREATE TABLE IF NOT EXISTS "posts" (
+	"id" TEXT PRIMARY KEY NOT NULL,
 	"name" TEXT NOT NULL,
 	"posted_at" INTEGER,
 	"content" TEXT,

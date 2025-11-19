@@ -35,7 +35,7 @@ type AuthorRefType = typeof postsTable.author.$ref;
 export const schema = xpschema({
     users: usersTable,
     posts: postsTable
-});
+}, __filename);
 // // Step 4: Define the params to connect to a database
 // const connInfo = await createOrRetrieveRegistryEntry({
 //     name: 'my-db',

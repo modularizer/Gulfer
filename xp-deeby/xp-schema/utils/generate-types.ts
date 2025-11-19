@@ -41,10 +41,26 @@
  * });
  * ```
  */
+/**
+ * Check if we're running in a Node.js environment
+ */
+function isNodeEnvironment(): boolean {
+  return typeof process !== 'undefined' && 
+         process.versions != null && 
+         process.versions.node != null;
+}
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { Project, TypeFormatFlags, TypeChecker, VariableDeclaration,  } from 'ts-morph';
+/**
+ * Throw a helpful error if not in Node.js environment
+ */
+function requireNodeEnvironment(functionName: string): void {
+  if (!isNodeEnvironment()) {
+    throw new Error(
+      `${functionName} requires a Node.js environment. ` +
+      `This function cannot be used in web browsers or other non-Node.js environments.`
+    );
+  }
+}
 
 
 /**
@@ -59,12 +75,12 @@ export interface GenerateTypesOptions {
   /**
    * Name of the export (e.g., 'schema', 'usersTable', or 'default' for default export)
    */
-  exportName: string;
+  exportName?: string;
   
   /**
    * Path to write the generated types file
    */
-  outputPath: string;
+  outputPath?: string;
   
   /**
    * Optional: Name for the table (used when generating types for a single table)
@@ -166,6 +182,11 @@ function createTempTypeFile(
   tempDir: string,
   tableName?: string
 ): string {
+  requireNodeEnvironment('createTempTypeFile');
+  
+  const fs = require('fs');
+  const path = require('path');
+  
   const tempFilePath = path.join(tempDir, 'temp-types.ts');
   const sourcePath = path.resolve(sourceFile);
   const relativePath = path.relative(tempDir, sourcePath).replace(/\\/g, '/').replace(/\.ts$/, '');
@@ -203,10 +224,14 @@ function extractTypes(
   tempFilePath: string,
   sourceFilePath: string,
   exportName: string,
-  project: Project,
-  typeChecker: TypeChecker,
+  project: any,
+  typeChecker: any,
   tableName?: string
 ): { select?: string; insert?: string }[] | Map<string, { select?: string; insert?: string }> {
+  requireNodeEnvironment('extractTypes');
+  
+  const { TypeFormatFlags, VariableDeclaration } = require('ts-morph');
+  
   const tempSourceFile = project.addSourceFileAtPath(tempFilePath);
   
   if (tableName) {
@@ -251,7 +276,8 @@ function extractTypes(
     const originalSourceFile = project.addSourceFileAtPath(sourceFilePath);
     
     // Get the exported variable to determine table names
-    let exportedVar: VariableDeclaration | undefined;
+    const { VariableDeclaration } = require('ts-morph');
+    let exportedVar: any | undefined;
     if (exportName === 'default') {
       const defaultExport = originalSourceFile.getDefaultExportSymbol();
       if (defaultExport) {
@@ -289,6 +315,9 @@ function extractTypes(
     const results = new Map<string, { select?: string; insert?: string }>();
     
     // Re-create temp file with type aliases for each table
+    const fs = require('fs');
+    const path = require('path');
+    
     const tempDir = path.dirname(tempFilePath);
     const sourcePath = path.resolve(sourceFilePath);
     const relativePath = path.relative(tempDir, sourcePath).replace(/\\/g, '/').replace(/\.ts$/, '');
@@ -356,20 +385,53 @@ function extractTypes(
  * Generate fully expanded TypeScript types from a schema or table
  */
 export async function generateTypes(options: GenerateTypesOptions): Promise<GenerateTypesResult> {
+  requireNodeEnvironment('generateTypes');
+  
+  const fs = require('fs');
+  const path = require('path');
+  const { Project } = require('ts-morph');
+  
   const {
     sourceFile,
-    exportName,
-    outputPath,
+    exportName = 'schema',
     tableName,
     tsconfigPath,
     imports = [],
     headerComment
   } = options;
+  let outputPath = options.outputPath;
+
   
   // Resolve source file path
   const sourceFilePath = path.resolve(sourceFile);
   if (!fs.existsSync(sourceFilePath)) {
     throw new Error(`Source file not found: ${sourceFilePath}`);
+  }
+
+  // Handle outputPath: if not provided, use default; if provided, check if it's a directory
+  if (!outputPath) {
+    let g = path.join(path.dirname(sourceFilePath), 'generated');
+    if (!fs.existsSync(g)){
+      fs.mkdirSync(g, { recursive: true });
+    }
+    outputPath = path.join(g, 'generated-types.ts');
+  } else {
+    // Resolve the output path
+    outputPath = path.resolve(outputPath);
+    
+    // Check if outputPath is a directory (exists and is a directory, or doesn't exist and has no extension)
+    const isDirectory = fs.existsSync(outputPath) 
+      ? fs.statSync(outputPath).isDirectory()
+      : !path.extname(outputPath); // If doesn't exist, treat as directory if no extension
+    
+    if (isDirectory) {
+      // Ensure directory exists
+      if (!fs.existsSync(outputPath)) {
+        fs.mkdirSync(outputPath, { recursive: true });
+      }
+      // Join with default filename
+      outputPath = path.join(outputPath, 'generated-types.ts');
+    }
   }
   
   // Find tsconfig.json if not provided
@@ -531,8 +593,7 @@ export type ${typeName}TableInsert = ${insertTypeDef};
 export async function tryGenerateTypes(options: GenerateTypesOptions) {
 
     console.log('🔍 Generating types from schema...');
-    console.log(`Using ${options.sourceFile} export ${options.exportName}` + (options.tableName?`table ${options.tableName}`:''));
-    console.log(`Will write to ${options.outputPath}`)
+    console.log(`Using ${options.sourceFile} export ${options.exportName ?? 'schema'}` + (options.tableName?`table ${options.tableName}`:''));
 
     try {
         // Generate types for the entire schema
@@ -545,4 +606,12 @@ export async function tryGenerateTypes(options: GenerateTypesOptions) {
         }
 
     }
+}
+
+
+export function genTypesScript(filename: string, dst?: string) {
+    return tryGenerateTypes({sourceFile: filename, outputPath: dst}).then(r => {
+        if (!r) process.exit(1);
+        return r;
+    }, e => process.exit(1))
 }

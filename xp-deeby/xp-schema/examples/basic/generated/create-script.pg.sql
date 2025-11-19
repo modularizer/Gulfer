@@ -1,9 +1,9 @@
--- Generated CREATE TABLE Script for Basic Schema Example
+-- Generated CREATE TABLE Script
 -- 
 -- This file is auto-generated. Do not edit manually.
 -- 
--- Generated at: 2025-11-19T01:57:07.096Z
--- Dialect: PostgreSQL
+-- Generated at: 2025-11-19T17:43:28.658Z
+-- Dialect: pg
 --
 
 CREATE TABLE IF NOT EXISTS "users" (
@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 CREATE INDEX IF NOT EXISTS "user_name" ON "users" ("name");
 
 CREATE TABLE IF NOT EXISTS "posts" (
+	"id" VARCHAR(16) PRIMARY KEY NOT NULL,
 	"name" TEXT NOT NULL,
 	"posted_at" TIMESTAMP,
 	"content" VARCHAR(2000),
