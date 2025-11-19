@@ -23,7 +23,7 @@ export class XPSchemaPlus<Tables extends Record<string, Table | UTable<any>> = R
         super(tables);
     }
 
-    async gen({src, dst, types = true, creates = ['pg', 'sqlite'], migrations}: {src?: string, dst?: string, types?: boolean, creates?: string[] | boolean | undefined | null, migrations?: string[] | boolean | undefined | null} = {}) {
+    async gen({src, dst, types = true, creates = ['pg', 'sqlite'], migrations = true}: {src?: string, dst?: string, types?: boolean, creates?: string[] | boolean | undefined | null, migrations?: string[] | boolean | undefined | null} = {}) {
         if (types){
             await this.genTypesScript(src, dst);
         }

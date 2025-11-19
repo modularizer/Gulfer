@@ -218,9 +218,9 @@ const sqliteTimestamp = (name: string, opts?: TimestampOptions): TimestampColumn
         const wrappedBuilder = Object.assign(originalBuilder, {
             defaultNow(this: any): TimestampColumnBuilderWithDefaultNow {
                 // SQLite stores timestamps as Unix epoch (seconds since 1970-01-01)
-                // Use unixepoch('now') to get the current timestamp
+                // Use strftime('%s','now') to get the current timestamp
                 // Call the original .default() method to avoid recursion
-                const builderWithDefault = originalDefault?.(sql`(unixepoch('now'))`);
+                const builderWithDefault = originalDefault?.(sql`(strftime('%s','now'))`);
                 if (!builderWithDefault) {
                     throw new Error('default() method not available on builder');
                 }

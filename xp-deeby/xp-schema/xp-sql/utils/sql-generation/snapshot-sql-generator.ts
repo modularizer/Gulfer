@@ -184,7 +184,8 @@ export function generateCreateTableFromSnapshot(
   tableName: string,
   tableMetadata: TableMetadata,
   dialect: 'sqlite' | 'pg',
-  options: { ifNotExists?: boolean } = {}
+  options: { ifNotExists?: boolean } = {},
+  snapshot?: SchemaSnapshot
 ): string {
   const generator = getSQLGenerator(dialect);
   const columnDefs: string[] = [];
@@ -193,6 +194,12 @@ export function generateCreateTableFromSnapshot(
   for (const col of Object.values(tableMetadata.columns)) {
     const colSQL = generateColumnSQLFromMetadata(col, dialect);
     columnDefs.push(colSQL);
+    
+    // Add CHECK constraint for enum values (both PostgreSQL and SQLite)
+    if (col.enumValues && Array.isArray(col.enumValues) && col.enumValues.length > 0) {
+      const enumStr = col.enumValues.map((v: any) => `'${String(v).replace(/'/g, "''")}'`).join(',');
+      columnDefs.push(`CHECK ("${col.name}" IN (${enumStr}))`);
+    }
   }
   
   // Add primary key constraint
@@ -220,7 +227,46 @@ export function generateCreateTableFromSnapshot(
     const localColumns = fk.localColumns.map(name => `"${name}"`).join(', ');
     const refColumns = fk.refColumns.map(name => `"${name}"`).join(', ');
     if (localColumns && refColumns) {
-      columnDefs.push(`FOREIGN KEY (${localColumns}) REFERENCES "${fk.refTable}" (${refColumns})`);
+      // Validate: foreign key must reference a primary key or unique column
+      if (snapshot) {
+        const refTableMetadata = snapshot.tables[fk.refTable];
+        if (!refTableMetadata) {
+          throw new Error(
+            `Foreign key from table "${tableName}" references table "${fk.refTable}" which does not exist in the schema. ` +
+            `Foreign key: ${localColumns} -> ${fk.refTable}(${refColumns})`
+          );
+        }
+        
+        const refTablePKs = refTableMetadata.primaryKeys;
+        const refTableUniques = refTableMetadata.uniqueConstraints.flatMap(u => u.columns);
+        
+        // Check if all refColumns are either primary keys or unique
+        const allRefColsAreValid = fk.refColumns.every(col => 
+          refTablePKs.includes(col) || refTableUniques.includes(col)
+        );
+        
+        if (!allRefColsAreValid) {
+          const invalidColumns = fk.refColumns.filter(col => 
+            !refTablePKs.includes(col) && !refTableUniques.includes(col)
+          );
+          throw new Error(
+            `Invalid foreign key in table "${tableName}": ` +
+            `Foreign key ${localColumns} references "${fk.refTable}"(${refColumns}), ` +
+            `but column(s) ${invalidColumns.map(c => `"${c}"`).join(', ')} in "${fk.refTable}" are not primary keys or unique. ` +
+            `Foreign keys must reference primary keys or unique columns. ` +
+            `Referenced table "${fk.refTable}" has primary key: [${refTablePKs.map(c => `"${c}"`).join(', ')}] ` +
+            `and unique columns: [${refTableUniques.map(c => `"${c}"`).join(', ')}]`
+          );
+        }
+        
+        columnDefs.push(`FOREIGN KEY (${localColumns}) REFERENCES "${fk.refTable}" (${refColumns})`);
+      } else {
+        // No snapshot provided - validate later or throw error
+        throw new Error(
+          `Cannot validate foreign key from table "${tableName}": snapshot not provided. ` +
+          `Foreign key: ${localColumns} -> ${fk.refTable}(${refColumns})`
+        );
+      }
     }
   }
   
@@ -231,7 +277,60 @@ export function generateCreateTableFromSnapshot(
 }
 
 /**
+ * Topologically sort tables based on foreign key dependencies
+ * Returns table names in order: referenced tables before tables that reference them
+ */
+function sortTablesByDependencies(
+  tables: Record<string, TableMetadata>
+): string[] {
+  const tableNames = Object.keys(tables);
+  const sorted: string[] = [];
+  const visited = new Set<string>();
+  const visiting = new Set<string>(); // For cycle detection
+  
+  function visit(tableName: string) {
+    if (visiting.has(tableName)) {
+      // Cycle detected - this is an error
+      throw new Error(
+        `Circular foreign key dependency detected involving table "${tableName}". ` +
+        `Foreign keys cannot form cycles.`
+      );
+    }
+    
+    if (visited.has(tableName)) {
+      return; // Already processed
+    }
+    
+    visiting.add(tableName);
+    
+    const tableMetadata = tables[tableName];
+    if (tableMetadata) {
+      // Visit all tables that this table references first
+      for (const fk of tableMetadata.foreignKeys) {
+        if (tables[fk.refTable]) {
+          visit(fk.refTable);
+        }
+      }
+    }
+    
+    visiting.delete(tableName);
+    visited.add(tableName);
+    sorted.push(tableName);
+  }
+  
+  // Visit all tables
+  for (const tableName of tableNames) {
+    if (!visited.has(tableName)) {
+      visit(tableName);
+    }
+  }
+  
+  return sorted;
+}
+
+/**
  * Generate CREATE TABLE scripts for all tables in a snapshot
+ * Tables are ordered by foreign key dependencies (referenced tables first)
  */
 export function generateCreateScriptFromSnapshot(
   snapshot: SchemaSnapshot,
@@ -240,10 +339,25 @@ export function generateCreateScriptFromSnapshot(
 ): string {
   const statements: string[] = [];
   
-  // Generate CREATE TABLE for each table
-  for (const [tableName, tableMetadata] of Object.entries(snapshot.tables)) {
-    const createSQL = generateCreateTableFromSnapshot(tableName, tableMetadata, dialect, options);
+  // Sort tables by dependencies (topological sort)
+  const sortedTableNames = sortTablesByDependencies(snapshot.tables);
+  
+  // Generate CREATE TABLE for each table in dependency order
+  for (const tableName of sortedTableNames) {
+    const tableMetadata = snapshot.tables[tableName];
+    const createSQL = generateCreateTableFromSnapshot(tableName, tableMetadata, dialect, options, snapshot);
     statements.push(createSQL);
+    
+    // Generate CREATE INDEX statements for this table
+    if (tableMetadata.indexes && Array.isArray(tableMetadata.indexes) && tableMetadata.indexes.length > 0) {
+      for (const idx of tableMetadata.indexes) {
+        if (idx.name && idx.columns && idx.columns.length > 0) {
+          const indexColumns = idx.columns.map(name => `"${name}"`).join(', ');
+          const uniqueClause = idx.unique ? 'UNIQUE ' : '';
+          statements.push(`CREATE ${uniqueClause}INDEX IF NOT EXISTS "${idx.name}" ON "${tableName}" (${indexColumns});`);
+        }
+      }
+    }
   }
   
   return statements.join('\n\n');

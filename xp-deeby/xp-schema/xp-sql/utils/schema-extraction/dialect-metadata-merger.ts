@@ -35,6 +35,12 @@ export interface MetadataMerger {
    * Returns the raw value/object, not SQL-specific structures
    */
   extractDefaultValue(defaultArg: any): any;
+
+  /**
+   * Get the SQL expression for defaultNow() for this dialect
+   * Returns the structured default value object
+   */
+  getDefaultNowValue(): any;
 }
 
 /**
@@ -93,15 +99,22 @@ class PostgreSQLMetadataMerger implements MetadataMerger {
       typeString = abstractColumnType || 'TEXT';
     }
     
-    // Handle enum values
+    // Handle enum values - PostgreSQL doesn't support VARCHAR with enum values
+    // Use TEXT with CHECK constraint instead
     if (enumValues && Array.isArray(enumValues) && enumValues.length > 0) {
-      const enumStr = enumValues.map((v: any) => `'${String(v).replace(/'/g, "''")}'`).join(',');
-      if (abstractColumnType === 'varchar' || typeString.startsWith('VARCHAR')) {
-        typeString = `VARCHAR(${enumStr})`;
-      } else {
-        const baseType = typeString.split('(')[0];
-        typeString = `${baseType}(${enumStr})`;
+      // For PostgreSQL, we'll use TEXT with a CHECK constraint
+      // The CHECK constraint will be added in the SQL generation phase
+      // Just return the base type here
+      if (abstractColumnType === 'varchar' && typeString.startsWith('VARCHAR')) {
+        // Keep VARCHAR if it has a length, otherwise use TEXT
+        if (length) {
+          // Keep VARCHAR(length) - the CHECK constraint will be added separately
+          typeString = `VARCHAR(${length})`;
+        } else {
+          typeString = 'TEXT';
+        }
       }
+      // For other types, keep the base type - CHECK constraint will be added separately
     }
     
     return typeString;
@@ -132,6 +145,11 @@ class PostgreSQLMetadataMerger implements MetadataMerger {
     // For primitives, return as-is
     return defaultArg;
   }
+
+  getDefaultNowValue(): any {
+    // PostgreSQL uses CURRENT_TIMESTAMP
+    return this.extractDefaultValue({ queryChunks: [{ value: ['CURRENT_TIMESTAMP'] }] });
+  }
 }
 
 /**
@@ -158,7 +176,9 @@ class SQLiteMetadataMerger implements MetadataMerger {
       typeString = 'BLOB';
     } else if (abstractColumnType === 'boolean') {
       typeString = 'INTEGER'; // SQLite uses INTEGER for booleans
-    } else if (abstractColumnType === 'timestamp' || abstractColumnType === 'date' || abstractColumnType === 'time') {
+    } else if (abstractColumnType === 'timestamp') {
+      typeString = 'INTEGER'; // SQLite timestamps use INTEGER (Unix epoch) when using sqliteTimestamp
+    } else if (abstractColumnType === 'date' || abstractColumnType === 'time') {
       typeString = 'TEXT'; // SQLite uses TEXT for dates/times
     } else if (abstractColumnType === 'json' || abstractColumnType === 'jsonb') {
       typeString = 'TEXT'; // SQLite uses TEXT for JSON
@@ -166,12 +186,9 @@ class SQLiteMetadataMerger implements MetadataMerger {
       typeString = abstractColumnType || 'TEXT';
     }
     
-    // Handle enum values
-    if (enumValues && Array.isArray(enumValues) && enumValues.length > 0) {
-      const enumStr = enumValues.map((v: any) => `'${String(v).replace(/'/g, "''")}'`).join(',');
-      const baseType = typeString.split('(')[0];
-      typeString = `${baseType}(${enumStr})`;
-    }
+    // SQLite doesn't support enum syntax in type definition
+    // Enum values will be handled with CHECK constraints in SQL generation
+    // Don't modify typeString for enums in SQLite
     
     return typeString;
   }
@@ -188,14 +205,20 @@ class SQLiteMetadataMerger implements MetadataMerger {
   }
 
   extractDefaultValue(defaultArg: any): any {
-    // Same logic as PostgreSQL
+    // For SQL expressions, preserve the structure
     if (defaultArg && typeof defaultArg === 'object' && defaultArg.queryChunks) {
       return {
         type: 'sql',
         queryChunks: defaultArg.queryChunks,
       };
     }
+    // For primitives, return as-is
     return defaultArg;
+  }
+
+  getDefaultNowValue(): any {
+    // SQLite uses strftime('%s','now') for INTEGER timestamps (Unix epoch)
+    return this.extractDefaultValue({ queryChunks: [{ value: ['(strftime(\'%s\',\'now\'))'] }] });
   }
 }
 
@@ -223,9 +246,9 @@ export function convertAgnosticColumnToDialectSpecific(
   let processedHasDefault = agnosticCol.hasDefault;
   
   if (processedHasDefault && processedDefaultValue !== undefined) {
-    // If it's a defaultNow marker, convert to SQL expression
+    // If it's a defaultNow marker, get dialect-specific SQL expression from merger
     if (processedDefaultValue && typeof processedDefaultValue === 'object' && processedDefaultValue.method === 'defaultNow') {
-      processedDefaultValue = merger.extractDefaultValue({ queryChunks: [{ value: ['CURRENT_TIMESTAMP'] }] });
+      processedDefaultValue = merger.getDefaultNowValue();
       processedHasDefault = true;
     } else {
       // Let the merger determine if it's a database default and extract it properly
@@ -343,9 +366,9 @@ export function mergeUnboundWithBoundMetadata(
       let processedHasDefault = (unboundCol as any).hasDefault;
       
       if (processedHasDefault && processedDefaultValue !== undefined) {
-        // If it's a defaultNow marker, convert to SQL expression
+        // If it's a defaultNow marker, get dialect-specific SQL expression from merger
         if (processedDefaultValue && typeof processedDefaultValue === 'object' && processedDefaultValue.method === 'defaultNow') {
-          processedDefaultValue = merger.extractDefaultValue({ queryChunks: [{ value: ['CURRENT_TIMESTAMP'] }] });
+          processedDefaultValue = merger.getDefaultNowValue();
           processedHasDefault = true;
         } else {
           // Let the merger determine if it's a database default and extract it properly

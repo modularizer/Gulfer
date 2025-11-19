@@ -6,6 +6,8 @@
  * No database connection is required.
  */
 
+import { generateCreateScript as generateCreateScriptFromSchema } from '../xp-sql/utils/generators/unified-generator';
+
 /**
  * Check if we're running in a Node.js environment
  */
@@ -115,28 +117,29 @@ export async function generateCreateScript(
   }
   
   // Handle outputPath: if not provided, use default; if provided, check if it's a directory
+  let resolvedOutputPath: string;
   if (!outputPath) {
     let g = path.join(path.dirname(sourceFilePath), 'generated');
     if (!fs.existsSync(g)){
       fs.mkdirSync(g, { recursive: true });
     }
-    outputPath = path.join(g, `create-script.${dialect}.sql`);
+    resolvedOutputPath = path.join(g, `create-script.${dialect}.sql`);
   } else {
     // Resolve the output path
-    outputPath = path.resolve(outputPath);
+    resolvedOutputPath = path.resolve(outputPath);
     
     // Check if outputPath is a directory (exists and is a directory, or doesn't exist and has no extension)
-    const isDirectory = fs.existsSync(outputPath) 
-      ? fs.statSync(outputPath).isDirectory()
-      : !path.extname(outputPath); // If doesn't exist, treat as directory if no extension
+    const isDirectory = fs.existsSync(resolvedOutputPath) 
+      ? fs.statSync(resolvedOutputPath).isDirectory()
+      : !path.extname(resolvedOutputPath); // If doesn't exist, treat as directory if no extension
     
     if (isDirectory) {
       // Ensure directory exists
-      if (!fs.existsSync(outputPath)) {
-        fs.mkdirSync(outputPath, { recursive: true });
+      if (!fs.existsSync(resolvedOutputPath)) {
+        fs.mkdirSync(resolvedOutputPath, { recursive: true });
       }
       // Join with default filename
-      outputPath = path.join(outputPath, `create-script.${dialect}.sql`);
+      resolvedOutputPath = path.join(resolvedOutputPath, `create-script.${dialect}.sql`);
     }
   }
   // Load the schema/table from the source file
@@ -165,17 +168,15 @@ export async function generateCreateScript(
     throw new Error(`Export '${exportName}' not found in module`);
   }
   
-  // Use the low-level function that uses getTableConfig()
-  // Pass the dialect name string, not the dialect object
-  const drizzleUtils = await import('../xp-sql/utils/sql-generation/generate-create-script');
-  const drizzleGenerateCreateScript = drizzleUtils.generateCreateScript;
-  
-  // Generate SQL using Drizzle's getTableConfig()
-  // The function will get the dialect object internally if needed
-  const sql = await drizzleGenerateCreateScript(schemaOrTable, dialect, { ifNotExists });
+  // Generate SQL using unified generator (Step 1: extract dialect-agnostic, Step 2: convert to dialect-specific SQL)
+  // schemaOrTable should be a Schema object
+  if (!schemaOrTable || typeof schemaOrTable !== 'object' || !('tables' in schemaOrTable)) {
+    throw new Error('Expected a Schema object with a tables property');
+  }
+  const sql = await generateCreateScriptFromSchema(schemaOrTable, dialect, { ifNotExists });
   
   // Generate output file content
-  const outputDir = path.dirname(outputPath);
+  const outputDir = path.dirname(resolvedOutputPath);
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
@@ -189,15 +190,15 @@ export async function generateCreateScript(
 --
 
 `;
-  
+
   fileContent += sql.trim();
   
   // Write output file
-  fs.writeFileSync(outputPath, fileContent);
+  fs.writeFileSync(resolvedOutputPath, fileContent);
   
   return {
     sql: sql.trim(),
-    outputPath
+    outputPath: resolvedOutputPath
   };
 }
 

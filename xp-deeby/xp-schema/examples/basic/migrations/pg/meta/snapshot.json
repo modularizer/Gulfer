@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "timestamp": 1763579477640,
+  "timestamp": 1763582535807,
   "migrationName": "0001_initial",
   "tables": {
     "posts": {
@@ -8,21 +8,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "nullable": true,
-          "hasDefault": false,
           "type": "VARCHAR(16)",
-          "columnType": "PgVarchar",
-          "length": 16
+          "length": 16,
+          "nullable": true,
+          "hasDefault": false
         },
-        "name": {
-          "name": "name",
-          "nullable": false,
-          "hasDefault": false,
+        "author": {
+          "name": "author",
           "type": "TEXT",
-          "columnType": "PgText"
+          "nullable": false,
+          "hasDefault": false
         },
         "posted_at": {
           "name": "posted_at",
+          "type": "TIMESTAMP",
           "nullable": true,
           "hasDefault": true,
           "defaultValue": {
@@ -34,17 +33,14 @@
                 ]
               }
             ]
-          },
-          "type": "TIMESTAMP",
-          "columnType": "PgTimestamp"
+          }
         },
         "content": {
           "name": "content",
-          "nullable": true,
-          "hasDefault": false,
           "type": "VARCHAR(2000)",
-          "columnType": "PgVarchar",
-          "length": 2000
+          "length": 2000,
+          "nullable": true,
+          "hasDefault": false
         }
       },
       "primaryKeys": [
@@ -53,11 +49,11 @@
       "foreignKeys": [
         {
           "localColumns": [
-            "name"
+            "author"
           ],
           "refTable": "users",
           "refColumns": [
-            "gender"
+            "name"
           ]
         }
       ],
@@ -69,51 +65,45 @@
       "columns": {
         "id": {
           "name": "id",
-          "nullable": true,
-          "hasDefault": false,
           "type": "VARCHAR(16)",
-          "columnType": "PgVarchar",
-          "length": 16
+          "length": 16,
+          "nullable": true,
+          "hasDefault": false
         },
         "name": {
           "name": "name",
-          "nullable": true,
-          "hasDefault": false,
           "type": "TEXT",
-          "columnType": "PgText"
+          "nullable": true,
+          "hasDefault": false
         },
         "birthday": {
           "name": "birthday",
-          "nullable": false,
-          "hasDefault": false,
           "type": "TIMESTAMP",
-          "columnType": "PgTimestamp"
+          "nullable": false,
+          "hasDefault": false
         },
         "gender": {
           "name": "gender",
-          "nullable": true,
-          "hasDefault": false,
+          "type": "TEXT",
           "enumValues": [
             "male",
             "female"
           ],
-          "type": "TEXT('male','female')",
-          "columnType": "PgVarchar"
+          "nullable": true,
+          "hasDefault": false
         },
         "bio": {
           "name": "bio",
-          "nullable": true,
-          "hasDefault": false,
           "type": "TEXT",
-          "columnType": "PgText"
+          "nullable": true,
+          "hasDefault": false
         },
         "headline": {
           "name": "headline",
-          "nullable": true,
-          "hasDefault": false,
           "type": "VARCHAR(23)",
-          "columnType": "PgVarchar",
-          "length": 23
+          "length": 23,
+          "nullable": true,
+          "hasDefault": false
         }
       },
       "primaryKeys": [
@@ -127,8 +117,16 @@
           ]
         }
       ],
-      "indexes": []
+      "indexes": [
+        {
+          "name": "user_name",
+          "columns": [
+            "name"
+          ],
+          "unique": false
+        }
+      ]
     }
   },
-  "schemaHash": "325f8da3005359e70be90056f63fa3c846df1ddaf319fa2775245dcef873e763"
+  "schemaHash": "b00bdbedce805dbe40aea6eea80f3ca99796bc443984e4744eef5fef8ba858ae"
 }

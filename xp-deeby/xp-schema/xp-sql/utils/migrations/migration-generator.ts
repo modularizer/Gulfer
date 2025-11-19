@@ -5,10 +5,10 @@
  * Can generate both initial migrations and incremental migrations.
  */
 
-import type { Schema } from '../schema';
-import type { SQLDialect } from '../dialects/types';
-import { getDialectFromName } from '../dialects';
-import { bindTable, isUTable } from '../dialects/implementations/unbound';
+import type { Schema } from '../../schema';
+import type { SQLDialect } from '../../dialects/types';
+import { getDialectFromName } from '../../dialects';
+import { bindTable, isUTable } from '../../dialects/implementations/unbound';
 import { generateCreateScriptForTable, generateCreateScriptForSchema } from '../sql-generation/generate-create-script';
 import { diffSchemas, extractTableMetadata, compareTables, type TableMetadata, type SchemaDiff } from '../schema-extraction/schema-diff';
 import type { UTable } from '../../dialects/implementations/unbound';

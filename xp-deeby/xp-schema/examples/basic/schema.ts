@@ -22,7 +22,7 @@ type UserSelect = typeof usersTable.$inferSelect;
 
 const postsTable = table('posts', {
     id: uuid('id').primaryKey(),
-    author: text('name').notNull().references(() => usersTable.gender),
+    author: text('author').notNull().references(() => usersTable.name),
     postedAt: timestamp('posted_at').defaultNow(),
     content: varchar('content', {length: 2000}),
 })
