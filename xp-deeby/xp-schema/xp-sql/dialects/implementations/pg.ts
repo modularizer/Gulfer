@@ -36,7 +36,7 @@ import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {sql} from "drizzle-orm";
 import {customType} from "drizzle-orm/sqlite-core";
 import type {Table, ColumnBuilder} from "drizzle-orm";
-import {ColData} from "./unbound";
+import { extendDialectWithComposedBuilders } from './composed';
 
 // Type alias for extended column builder (used for type compatibility)
 type ExtendedColumnBuilder<TColData = any, TInferred = any, TIsPrimaryKey extends boolean = false> = ColumnBuilder;
@@ -70,7 +70,7 @@ const pgJson = (name: string, opts?: JsonOptions) => drizzleJson(name);
 const pgJsonb = (name: string, opts?: JsonOptions) => drizzleJsonb(name);
 const pgBlob = (name: string, opts?: BlobOptions) => bytea(name);
 
-import { extendDialectWithComposedBuilders } from './composed';
+
 
 const pgColumnBuildersBase: BaseDialectColumnBuilders = {
     text: pgText,

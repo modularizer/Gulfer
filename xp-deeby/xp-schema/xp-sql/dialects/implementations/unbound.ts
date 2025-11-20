@@ -5,11 +5,12 @@
  * that can be bound to any dialect when used with a database.
  */
 
-import type {ColumnBuilder, Table} from 'drizzle-orm';
+import type {ColumnBuilder, Table, SQL, Column} from 'drizzle-orm';
 import {sql} from 'drizzle-orm';
 import {
     DialectBuilders,
     BaseDialectColumnBuilders,
+    DialectColumnBuilders,
     SQLDialect,
     NumericConfig,
     VarcharConfig,
@@ -27,13 +28,13 @@ import {
     notImplementedForDialect, DrizzleColumnInfo,
     PrimaryKeyInfo,
     ForeignKeyInfo,
-    ForeignKeyAction,
     UniqueConstraintInfo,
     IndexInfo,
 } from "../types";
 import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {errors} from "@ts-morph/common";
 import NotImplementedError = errors.NotImplementedError;
+import {extendDialectWithComposedBuilders} from "./composed";
 
 // ============================================================================
 // Unbound Column
@@ -152,6 +153,17 @@ export class UColumn<
   }
 
   /**
+   * Implement SQLWrapper interface for compatibility with Drizzle's eq(), and(), etc.
+   * Returns a SQL object that references this column by name.
+   * This allows UColumn to be used directly with Drizzle's query builders.
+   */
+  getSQL(): SQL {
+    // Return a SQL object that references the column by name
+    // This makes UColumn compatible with Drizzle's SQLWrapper interface
+    return sql.raw(`"${this.data.name}"`);
+  }
+
+  /**
    * Add .notNull() modifier
    * Returns a builder with the base type (removes null from the type)
    * Preserves the default state, primary key state, and unique state
@@ -221,10 +233,8 @@ export class UColumn<
    * 
    * Note: Use `typeof` to access this as a type: `typeof column.$inferSelect`
    * This is a type-level property, not a runtime property.
-   * 
-   * Note: Using readonly property instead of 'declare' for Babel/Metro compatibility
    */
-  readonly $inferSelect!: TType;
+  declare readonly $inferSelect: TType;
   
   /**
    * Infer the insert type from this column
@@ -233,10 +243,8 @@ export class UColumn<
    * 
    * Note: Use `typeof` to access this as a type: `typeof column.$inferInsert`
    * This is a type-level property, not a runtime property.
-   * 
-   * Note: Using readonly property instead of 'declare' for Babel/Metro compatibility
    */
-  readonly $inferInsert!: ComputeColumnInsertType<TType, TFlags extends { hasDefault: true } ? true : false>;
+  declare readonly $inferInsert: ComputeColumnInsertType<TType, TFlags extends { hasDefault: true } ? true : false>;
 
   /**
    * Add .unique() modifier
@@ -254,27 +262,16 @@ export class UColumn<
   /**
    * Add .references() modifier for foreign key constraints
    * Usage: text('user_id').references(() => usersTable.id)
-   * Usage with options: text('user_id').references(() => usersTable.id, { onDelete: 'cascade' })
    * Stores the reference as a function, UColumn, ColData, or ColumnBuilder
    */
   references<TRefColumn extends UColumn<any, any> | ColData | ColumnBuilder>(
-    ref: TRefColumn | (() => TRefColumn),
-    options?: {
-      onDelete?: ForeignKeyAction;
-      onUpdate?: ForeignKeyAction;
-    }
+    ref: TRefColumn | (() => TRefColumn)
   ): UColumn<TType, TFlags & { ref: TRefColumn }> {
     // Store the reference (function, UColumn, ColData, or ColumnBuilder)
     this._ref = typeof ref === 'function' ? ref : ref;
-    // Store the reference and options in the modifier args
-    const refArg = typeof ref === 'function' ? ref : () => ref;
-    const args: any[] = [refArg];
-    if (options) {
-      args.push(options);
-    }
     this.data = {
       ...this.data,
-      modifiers: [...this.data.modifiers, { method: 'references', args }],
+      modifiers: [...this.data.modifiers, { method: 'references', args: [typeof ref === 'function' ? ref : () => ref] }],
     };
     return this as any;
   }
@@ -538,15 +535,7 @@ export function bindColumn(
     } else if (modifier.method === 'notNull') {
       builder = builder.notNull();
     } else if (modifier.method === 'default' && typeof builder.default === 'function') {
-      // Check if the default value is a function - if so, use $defaultFn if available
-      const defaultArg = modifier.args[0];
-      if (typeof defaultArg === 'function' && typeof (builder as any).$defaultFn === 'function') {
-        // Use $defaultFn for function defaults (Drizzle's recommended way)
-        builder = (builder as any).$defaultFn(defaultArg);
-      } else {
-        // Use .default() for literal values
-        builder = builder.default(...modifier.args);
-      }
+      builder = builder.default(...modifier.args);
     } else if (modifier.method === 'defaultNow') {
       // defaultNow() is equivalent to default(sql`CURRENT_TIMESTAMP`)
       // We'll use the default() method with a SQL function
@@ -556,18 +545,10 @@ export function bindColumn(
         console.warn(`defaultNow() not available on column builder, skipping`);
       }
     } else if (modifier.method === 'references' && typeof builder.references === 'function') {
-      const refFn = () => {
-        const col = modifier.args[0]();
-        return bindColumn(col, dialect);
-      };
-      // Check if FK options were provided (second argument)
-      const fkOptions = modifier.args.length > 1 ? modifier.args[1] : undefined;
-      if (fkOptions && typeof fkOptions === 'object') {
-        // Drizzle's references() accepts options as second parameter
-        builder = (builder.references as any)(refFn, fkOptions);
-      } else {
-        builder = builder.references(refFn);
-      }
+      builder = builder.references( () => {
+         const col = modifier.args[0]();
+         return bindColumn(col, dialect);
+      });
     } else if (modifier.method === '$type' && typeof builder.$type === 'function') {
       // $type is a TypeScript-only method, but we still need to call it
       // It takes no runtime arguments
@@ -885,7 +866,7 @@ export function unboundTable<
 >(
   name: string,
   columns: TColumns,
-  constraints?: (table: UTable<TColumns>) => Array<UIndex | UUnique | any>
+  constraints?: (table: UTable<any>) => Array<UIndex | UUnique | any>
 ): UTable<TColumns> {
   // Convert UnboundColumnBuilder instances to data
   // Use Record<string, ColData> for runtime storage (doesn't affect type inference)
@@ -1354,8 +1335,6 @@ function unboundVarchar<
     return new UColumn('varchar', name, opts) as any;
 }
 
-import { extendDialectWithComposedBuilders } from './composed';
-
 const unboundColumnBuildersBase: BaseDialectColumnBuilders = {
     text: (name: string, opts?: TextOptions) => new UColumn<string | null>('text', name, opts) as any,
     varchar: unboundVarchar as any,
@@ -1375,10 +1354,7 @@ const unboundColumnBuildersBase: BaseDialectColumnBuilders = {
     time: (name: string, opts?: TimeOptions) => new UColumn<string | null>('time', name, opts) as any,
     timestamp: (name: string, opts?: TimestampOptions) => new UColumn<Date | null>('timestamp', name, opts) as any,
 };
-
-// Extend with composed builders (uuid, uuidDefault, uuidPK)
 const unboundColumnBuilders = extendDialectWithComposedBuilders(unboundColumnBuildersBase);
-
 
 // Unbound index builder function
 const unboundIndex = (name: string): UIndex => {
@@ -1479,21 +1455,25 @@ export function varchar<
 ): UColumn<ExtractEnumType<TConfig> | null> {
     return unboundVarchar(name, opts);
 }
-export const json: (name: string, opts?: JsonOptions) => UColumn<any | null> = unboundColumnBuilders.json;
-export const jsonb: (name: string, opts?: JsonOptions) => UColumn<any | null> = unboundColumnBuilders.jsonb;
-export const integer: (name: string, opts?: IntegerOptions) => UColumn<number | null> = unboundColumnBuilders.integer;
-export const real: (name: string, opts?: RealOptions) => UColumn<number | null> = unboundColumnBuilders.real;
-export const doublePrecision: (name: string, opts?: RealOptions) => UColumn<number | null> = unboundColumnBuilders.doublePrecision;
-export const bigint: (name: string, opts?: BigintOptions) => UColumn<bigint | null> = unboundColumnBuilders.bigint;
-export const smallint: (name: string, opts?: SmallintOptions) => UColumn<number | null> = unboundColumnBuilders.smallint;
-export const pkserial: (name: string) => UColumn<number | null> = unboundColumnBuilders.pkserial;
-export const blob: (name: string, opts?: BlobOptions) => UColumn<Uint8Array | null> = unboundColumnBuilders.blob;
-export const numeric: (name: string, opts?: NumericConfig) => UColumn<string | null> = unboundColumnBuilders.numeric;
-export const bool: (name: string, opts?: BooleanOptions) => UColumn<boolean | null> = unboundColumnBuilders.bool;
-export const boolean: (name: string, opts?: BooleanOptions) => UColumn<boolean | null> = unboundColumnBuilders.boolean;
-export const timestamp: (name: string, opts?: TimestampOptions) => UColumn<Date | null> = unboundColumnBuilders.timestamp;
-export const time: (name: string, opts?: TimeOptions) => UColumn<string | null> = unboundColumnBuilders.time;
-export const date: (name: string, opts?: DateOptions) => UColumn<Date | null> = unboundColumnBuilders.date;
+export const json = unboundColumnBuilders.json;
+export const jsonb = unboundColumnBuilders.jsonb;
+export const integer = unboundColumnBuilders.integer;
+export const real = unboundColumnBuilders.real;
+export const doublePrecision = unboundColumnBuilders.doublePrecision;
+export const bigint = unboundColumnBuilders.bigint;
+export const smallint = unboundColumnBuilders.smallint;
+export const pkserial = unboundColumnBuilders.pkserial;
+export const blob = unboundColumnBuilders.blob;
+export const numeric = unboundColumnBuilders.numeric;
+export const bool = unboundColumnBuilders.bool;
+export const boolean = unboundColumnBuilders.boolean;
+export const timestamp = unboundColumnBuilders.timestamp;
+export const time = unboundColumnBuilders.time;
+export const date = unboundColumnBuilders.date;
+export const uuid = unboundColumnBuilders.uuid;
+export const uuidDefault = unboundColumnBuilders.uuidDefault;
+export const uuidPK = unboundColumnBuilders.uuidPK;
+
 
 // Export table builder with const modifier to preserve literal types
 // Using UColumn<any, any> in the constraint allows complex types while preserving literal structure
@@ -1512,7 +1492,3 @@ export const unique = unboundUnique;
 export const index = unboundIndex;
 export const check = unboundBuilders.check;
 
-// Export composed builders (they're added via extendDialectWithComposedBuilders)
-export const uuid = unboundColumnBuilders.uuid;
-export const uuidDefault = unboundColumnBuilders.uuidDefault;
-export const uuidPK = unboundColumnBuilders.uuidPK;
