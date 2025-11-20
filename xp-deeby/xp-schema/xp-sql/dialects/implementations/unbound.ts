@@ -25,6 +25,10 @@ import {
     BooleanOptions,
     JsonOptions,
     notImplementedForDialect, DrizzleColumnInfo,
+    PrimaryKeyInfo,
+    ForeignKeyInfo,
+    UniqueConstraintInfo,
+    IndexInfo,
 } from "../types";
 import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {errors} from "@ts-morph/common";
@@ -1386,7 +1390,39 @@ const unboundDialect: SQLDialect = {
         schemaName?: string,
     ): Promise<Table> => {
     throw new NotImplementedError("getRuntimeTable not implemented for unbound dialect");
-    }
+    },
+    
+    getTablePrimaryKeys: async (
+        db: DrizzleDatabaseConnectionDriver,
+        tableName: string,
+        schemaName?: string
+    ): Promise<PrimaryKeyInfo[]> => {
+        throw new NotImplementedError("getTablePrimaryKeys not implemented for unbound dialect");
+    },
+    
+    getTableForeignKeys: async (
+        db: DrizzleDatabaseConnectionDriver,
+        tableName: string,
+        schemaName?: string
+    ): Promise<ForeignKeyInfo[]> => {
+        throw new NotImplementedError("getTableForeignKeys not implemented for unbound dialect");
+    },
+    
+    getTableUniqueConstraints: async (
+        db: DrizzleDatabaseConnectionDriver,
+        tableName: string,
+        schemaName?: string
+    ): Promise<UniqueConstraintInfo[]> => {
+        throw new NotImplementedError("getTableUniqueConstraints not implemented for unbound dialect");
+    },
+    
+    getTableIndexes: async (
+        db: DrizzleDatabaseConnectionDriver,
+        tableName: string,
+        schemaName?: string
+    ): Promise<IndexInfo[]> => {
+        throw new NotImplementedError("getTableIndexes not implemented for unbound dialect");
+    },
 };
 
 

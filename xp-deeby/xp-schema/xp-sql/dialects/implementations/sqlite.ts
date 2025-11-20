@@ -18,6 +18,10 @@ import {
     BooleanOptions,
     JsonOptions, ColumnInfo, DrizzleColumnInfo, ColumnBuilderFn,
     TimestampColumnBuilderWithDefaultNow,
+    PrimaryKeyInfo,
+    ForeignKeyInfo,
+    UniqueConstraintInfo,
+    IndexInfo,
 } from "../types";
 import {DrizzleDatabaseConnectionDriver} from "../../drivers/types";
 import {sql} from "drizzle-orm";
@@ -493,6 +497,201 @@ async function getTableColumns(
         drizzleColumn: sqliteTypeToDrizzleColumn(row)
     }))
 }
+async function getTablePrimaryKeys(
+    db: DrizzleDatabaseConnectionDriver,
+    tableName: string,
+    schemaName: string = "public"
+): Promise<PrimaryKeyInfo[]> {
+    if (schemaName !== 'public') {
+        throw new Error("SQLite does not support schemas");
+    }
+    
+    // PRAGMA table_info returns pk column (0 = not PK, 1 = PK)
+    const result = await db.execute(
+        sql.raw(`PRAGMA table_info(${JSON.stringify(tableName)});`)
+    );
+
+    const pkColumns: string[] = [];
+    for (const row of result as any[]) {
+        if (row.pk === 1 || row.pk === '1') {
+            pkColumns.push(row.name);
+        }
+    }
+
+    if (pkColumns.length === 0) {
+        return [];
+    }
+
+    return [{
+        name: undefined, // SQLite doesn't name primary key constraints
+        columns: pkColumns,
+    }];
+}
+
+async function getTableForeignKeys(
+    db: DrizzleDatabaseConnectionDriver,
+    tableName: string,
+    schemaName: string = "public"
+): Promise<ForeignKeyInfo[]> {
+    if (schemaName !== 'public') {
+        throw new Error("SQLite does not support schemas");
+    }
+    
+    // PRAGMA foreign_key_list returns foreign key information
+    const result = await db.execute(
+        sql.raw(`PRAGMA foreign_key_list(${JSON.stringify(tableName)});`)
+    );
+
+    if (!result || result.length === 0) {
+        return [];
+    }
+
+    // PRAGMA foreign_key_list returns:
+    // id | seq | table | from | to | on_update | on_delete | match
+    const fkMap = new Map<number, {
+        columns: string[];
+        referencedTable: string;
+        referencedColumns: string[];
+        onUpdate?: string;
+        onDelete?: string;
+    }>();
+
+    for (const row of result as any[]) {
+        const id = row.id || row.seq || 0;
+        const fromColumn = row.from || row['from'];
+        const toColumn = row.to || row['to'];
+        const referencedTable = row.table;
+        const onUpdate = row.on_update || row.onUpdate;
+        const onDelete = row.on_delete || row.onDelete;
+
+        if (!fkMap.has(id)) {
+            fkMap.set(id, {
+                columns: [],
+                referencedTable,
+                referencedColumns: [],
+                onUpdate,
+                onDelete,
+            });
+        }
+        const fk = fkMap.get(id)!;
+        if (!fk.columns.includes(fromColumn)) {
+            fk.columns.push(fromColumn);
+        }
+        if (!fk.referencedColumns.includes(toColumn)) {
+            fk.referencedColumns.push(toColumn);
+        }
+    }
+
+    return Array.from(fkMap.values()).map(fk => ({
+        name: undefined, // SQLite doesn't always name foreign key constraints
+        columns: fk.columns,
+        referencedTable: fk.referencedTable,
+        referencedColumns: fk.referencedColumns,
+        onUpdate: fk.onUpdate as any,
+        onDelete: fk.onDelete as any,
+    }));
+}
+
+async function getTableUniqueConstraints(
+    db: DrizzleDatabaseConnectionDriver,
+    tableName: string,
+    schemaName: string = "public"
+): Promise<UniqueConstraintInfo[]> {
+    if (schemaName !== 'public') {
+        throw new Error("SQLite does not support schemas");
+    }
+    
+    // Get unique indexes (excluding primary keys)
+    const indexList = await db.execute(
+        sql.raw(`PRAGMA index_list(${JSON.stringify(tableName)});`)
+    );
+
+    const uniqueConstraints: UniqueConstraintInfo[] = [];
+
+    for (const indexRow of indexList as any[]) {
+        const indexName = indexRow.name;
+        const isUnique = indexRow.unique === 1 || indexRow.unique === '1';
+        
+        // Skip non-unique indexes and primary key indexes
+        if (!isUnique || indexName.startsWith('sqlite_autoindex_')) {
+            continue;
+        }
+
+        // Get columns in this index
+        const indexInfo = await db.execute(
+            sql.raw(`PRAGMA index_info(${JSON.stringify(indexName)});`)
+        );
+
+        const columns: string[] = [];
+        for (const infoRow of indexInfo as any[]) {
+            const columnName = infoRow.name;
+            if (columnName && !columns.includes(columnName)) {
+                columns.push(columnName);
+            }
+        }
+
+        if (columns.length > 0) {
+            uniqueConstraints.push({
+                name: indexName,
+                columns,
+            });
+        }
+    }
+
+    return uniqueConstraints;
+}
+
+async function getTableIndexes(
+    db: DrizzleDatabaseConnectionDriver,
+    tableName: string,
+    schemaName: string = "public"
+): Promise<IndexInfo[]> {
+    if (schemaName !== 'public') {
+        throw new Error("SQLite does not support schemas");
+    }
+    
+    // Get all indexes (excluding unique constraints which are handled separately)
+    const indexList = await db.execute(
+        sql.raw(`PRAGMA index_list(${JSON.stringify(tableName)});`)
+    );
+
+    const indexes: IndexInfo[] = [];
+
+    for (const indexRow of indexList as any[]) {
+        const indexName = indexRow.name;
+        const isUnique = indexRow.unique === 1 || indexRow.unique === '1';
+        
+        // Skip unique indexes (they're handled as unique constraints)
+        // Skip auto-generated indexes (primary key indexes)
+        if (isUnique || indexName.startsWith('sqlite_autoindex_')) {
+            continue;
+        }
+
+        // Get columns in this index
+        const indexInfo = await db.execute(
+            sql.raw(`PRAGMA index_info(${JSON.stringify(indexName)});`)
+        );
+
+        const columns: string[] = [];
+        for (const infoRow of indexInfo as any[]) {
+            const columnName = infoRow.name;
+            if (columnName && !columns.includes(columnName)) {
+                columns.push(columnName);
+            }
+        }
+
+        if (columns.length > 0) {
+            indexes.push({
+                name: indexName,
+                columns,
+                unique: false,
+            });
+        }
+    }
+
+    return indexes;
+}
+
 async function getRuntimeTable(
     db: DrizzleDatabaseConnectionDriver,
     tableName: string,
@@ -517,7 +716,11 @@ const sqliteDialect: SQLDialect = {
     getTableNames,
     getSchemaNames,
     getTableColumns,
-    getRuntimeTable
+    getRuntimeTable,
+    getTablePrimaryKeys,
+    getTableForeignKeys,
+    getTableUniqueConstraints,
+    getTableIndexes,
 
 };
 

@@ -2,28 +2,28 @@ import {errors} from "@ts-morph/common";
 import NotImplementedError = errors.NotImplementedError;
 import {DrizzleDatabaseConnectionDriver} from "../drivers/types";
 import type {ColumnBuilder, Table, Column} from "drizzle-orm";
-import {UColumn} from "./implementations/unbound";
 
 
 export interface ColumnLevelEntity {}
+export interface Column extends ColumnLevelEntity {}
 export interface Index extends ColumnLevelEntity {}
 export interface Constraint extends ColumnLevelEntity {}
 
 /**
  * ColumnBuilder with .references() method added
  */
-export type ColumnBuilderWithReferences<TType = any> = ColumnBuilder & {
+export type ColumnBuilderWithReferences = ColumnBuilder & {
     /**
      * Add a foreign key reference to another column
      * @param refFn Function that returns the column to reference
      */
-    references(refFn: () => Column | UColumn): ColumnBuilderWithReferences;
+    references(refFn: () => Column): ColumnBuilderWithReferences;
 };
 
 /**
  * Timestamp ColumnBuilder with .defaultNow() method added
  */
-export type TimestampColumnBuilderWithDefaultNow = ColumnBuilderWithReferences<Date> & {
+export type TimestampColumnBuilderWithDefaultNow = ColumnBuilderWithReferences & {
     /**
      * Set the default value to the current timestamp
      */
@@ -47,7 +47,7 @@ export const notImplementedForDialect = (feature: string = "Feature", dialect: s
     return notImplemented(`${feature} has not been implemented for dialect "${dialect}"`)
 }
 export type TableBuilderFn<T extends Columns = Columns> = (name: string, columns: T, constraintBuilder?: (table: Table) => (Constraint | Index)[]) => Table;
-export type ColumnBuilderFn<T extends ColumnOpts = ColumnOpts, TTypeBase = any> = <TType extends TTypeBase = TTypeBase>(name: string, opts?: T) => ColumnBuilderWithReferences<TType>;
+export type ColumnBuilderFn<T extends ColumnOpts = ColumnOpts> = (name: string, opts?: T) => ColumnBuilderWithReferences;
 export type TimestampColumnBuilderFn<T extends ColumnOpts = ColumnOpts> = (name: string, opts?: T) => TimestampColumnBuilderWithDefaultNow;
 export type IndexBuilderFn<T extends IndexOpts = IndexOpts> = (name: string, opts: T) => Index;
 export type UniqueConstraintBuilderFn<T extends ConstraintOpts = ConstraintOpts> = (name: string, opts: T) => Constraint;
@@ -173,23 +173,23 @@ export interface JsonOptions extends BaseColumnOptions {
 
 
 export interface DialectColumnBuilders  {
-    text: ColumnBuilderFn<TextOptions, string>;
-    varchar: ColumnBuilderFn<VarcharConfig, string>;
-    json: ColumnBuilderFn<JsonOptions, any>;
-    jsonb: ColumnBuilderFn<JsonOptions, any>;
-    integer: ColumnBuilderFn<IntegerOptions, any>;
-    bigint: ColumnBuilderFn<BigintOptions, number>;
-    smallint: ColumnBuilderFn<SmallintOptions, number>;
-    pkserial: ColumnBuilderFn<{}, string>;
-    real: ColumnBuilderFn<RealOptions, number>;
-    doublePrecision: ColumnBuilderFn<RealOptions, number>;
-    numeric: ColumnBuilderFn<NumericConfig, number>;
-    bool: ColumnBuilderFn<BooleanOptions, boolean>;
-    boolean: ColumnBuilderFn<BooleanOptions, boolean>;
-    date: ColumnBuilderFn<DateOptions, Date>;
-    time: ColumnBuilderFn<TimeOptions, Date>;
+    text: ColumnBuilderFn<TextOptions>;
+    varchar: ColumnBuilderFn<VarcharConfig>;
+    json: ColumnBuilderFn<JsonOptions>;
+    jsonb: ColumnBuilderFn<JsonOptions>;
+    integer: ColumnBuilderFn<IntegerOptions>;
+    bigint: ColumnBuilderFn<BigintOptions>;
+    smallint: ColumnBuilderFn<SmallintOptions>;
+    pkserial: ColumnBuilderFn;
+    real: ColumnBuilderFn<RealOptions>;
+    doublePrecision: ColumnBuilderFn<RealOptions>;
+    numeric: ColumnBuilderFn<NumericConfig>;
+    bool: ColumnBuilderFn<BooleanOptions>;
+    boolean: ColumnBuilderFn<BooleanOptions>;
+    date: ColumnBuilderFn<DateOptions>;
+    time: ColumnBuilderFn<TimeOptions>;
     timestamp: TimestampColumnBuilderFn<TimestampOptions>;
-    blob: ColumnBuilderFn<BlobOptions, Uint8Array>;
+    blob: ColumnBuilderFn<BlobOptions>;
 }
 export type ColumnType = keyof DialectColumnBuilders;
 
@@ -221,6 +221,44 @@ export interface DrizzleColumnInfo extends ColumnInfo{
     drizzleColumn: any;
 }
 
+/**
+ * Primary key constraint information
+ */
+export interface PrimaryKeyInfo {
+    name?: string; // Constraint name (may be undefined for unnamed constraints)
+    columns: string[]; // Column names that form the primary key
+}
+
+/**
+ * Foreign key constraint information
+ */
+export interface ForeignKeyInfo {
+    name?: string; // Constraint name (may be undefined for unnamed constraints)
+    columns: string[]; // Column names in this table
+    referencedTable: string; // Referenced table name
+    referencedColumns: string[]; // Referenced column names
+    onUpdate?: 'CASCADE' | 'RESTRICT' | 'SET NULL' | 'SET DEFAULT' | 'NO ACTION';
+    onDelete?: 'CASCADE' | 'RESTRICT' | 'SET NULL' | 'SET DEFAULT' | 'NO ACTION';
+}
+
+/**
+ * Unique constraint information
+ */
+export interface UniqueConstraintInfo {
+    name?: string; // Constraint name (may be undefined for unnamed constraints)
+    columns: string[]; // Column names that form the unique constraint
+}
+
+/**
+ * Index information
+ */
+export interface IndexInfo {
+    name: string; // Index name
+    columns: string[]; // Column names in the index
+    unique: boolean; // Whether the index is unique
+    partial?: boolean; // Whether the index is partial (has a WHERE clause)
+}
+
 export interface SQLDialect extends DialectBuilders{
     dialectName: string;
 
@@ -237,5 +275,41 @@ export interface SQLDialect extends DialectBuilders{
         tableName: string,
         schemaName?: string,
     ) => Promise<Table>;
+    
+    /**
+     * Get primary key constraints for a table
+     */
+    getTablePrimaryKeys: (
+        db: DrizzleDatabaseConnectionDriver,
+        tableName: string,
+        schemaName?: string
+    ) => Promise<PrimaryKeyInfo[]>;
+    
+    /**
+     * Get foreign key constraints for a table
+     */
+    getTableForeignKeys: (
+        db: DrizzleDatabaseConnectionDriver,
+        tableName: string,
+        schemaName?: string
+    ) => Promise<ForeignKeyInfo[]>;
+    
+    /**
+     * Get unique constraints for a table (excluding primary keys)
+     */
+    getTableUniqueConstraints: (
+        db: DrizzleDatabaseConnectionDriver,
+        tableName: string,
+        schemaName?: string
+    ) => Promise<UniqueConstraintInfo[]>;
+    
+    /**
+     * Get indexes for a table (excluding unique constraints and primary keys)
+     */
+    getTableIndexes: (
+        db: DrizzleDatabaseConnectionDriver,
+        tableName: string,
+        schemaName?: string
+    ) => Promise<IndexInfo[]>;
 }
 
