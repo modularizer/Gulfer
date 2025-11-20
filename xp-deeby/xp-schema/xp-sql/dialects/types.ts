@@ -12,7 +12,7 @@ export interface Constraint extends ColumnLevelEntity {}
 /**
  * ColumnBuilder with .references() method added
  */
-export type ColumnBuilderWithReferences<TType = any> = ColumnBuilder & {
+export type ColumnBuilderWithReferences<TType = any> = UColumn<TType> & {
     /**
      * Add a foreign key reference to another column
      * @param refFn Function that returns the column to reference

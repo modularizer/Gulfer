@@ -1,5 +1,5 @@
 import {
-    table, text, integer, uuid, uuidPK
+    table, text, integer, uuid, uuidPK, timestamp
 } from '../../../../xp-deeby/xp-schema';
 
 // ============================================================================
@@ -16,5 +16,5 @@ export const photos = table('photos', {
 
     hash: text('hash').notNull().unique(), // SHA256 hash of image
     data: text('data'), // Base64 storage (web) or file path (mobile) - optional, can be stored separately
-    createdAt: integer('created_at').notNull().default(() => Date.now()),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
 });
