@@ -6,29 +6,42 @@
  */
 
 import { xpschema } from '../../../../xp-deeby/xp-schema';
-import * as tables from './index';
+import {photos} from "./3-photos";
+import {mergeEntries} from "./6-data-merges";
+import {
+    eventFormats,
+    eventFormatStages,
+    eventParticipants,
+    eventStages,
+    events,
+    participantEventStageScores, participants, scoreFormats,
+    scores, sports,
+    teamMembers, venueEventFormats, venueEventFormatStages, venues
+} from "./2-generic-sports-schema";
+
 
 export const schema = xpschema({
     // Sports and formats
-    sports: tables.sports,
-    scoreFormats: tables.scoreFormats,
-    eventFormats: tables.eventFormats,
-    eventFormatStages: tables.eventFormatStages,
+    sports: sports,
+    scoreFormats: scoreFormats,
+    eventFormats: eventFormats,
+    eventFormatStages: eventFormatStages,
     // Venues
-    venues: tables.venues,
-    venueEventFormats: tables.venueEventFormats,
-    venueEventFormatStages: tables.venueEventFormatStages,
+    venues: venues,
+    venueEventFormats: venueEventFormats,
+    venueEventFormatStages: venueEventFormatStages,
     // Participants and teams
-    participants: tables.participants,
-    teamMembers: tables.teamMembers,
+    participants: participants,
+    teamMembers: teamMembers,
     // Events
-    events: tables.events,
-    eventParticipants: tables.eventParticipants,
-    eventStages: tables.eventStages,
-    participantEventStageScores: tables.participantEventStageScores,
-    namedScores: tables.scores, // named_scores table is exported as 'scores'
+    events: events,
+    eventParticipants: eventParticipants,
+    eventStages: eventStages,
+    participantEventStageScores: participantEventStageScores,
+    namedScores: scores, // named_scores table is exported as 'scores'
     // Other tables
-    photos: tables.photos,
-    mergeEntries: tables.mergeEntries,
+    photos: photos,
+    mergeEntries: mergeEntries,
 }, __filename);
 
+const r = schema.photos;

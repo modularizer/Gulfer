@@ -12,7 +12,7 @@
  * internal handling of function defaults on bound column builders.
  */
 
-import type { ColumnBuilderFn, VarcharConfig } from '../types';
+import type {BaseDialectColumnBuilders, ColumnBuilderFn, DialectColumnBuilders, VarcharConfig} from '../types';
 import type { ColumnBuilderWithReferences } from '../types';
 import { generateUUID } from '../../utils/misc/uuid';
 import { varchar as unboundVarchar, type UColumn } from './unbound';
@@ -115,9 +115,9 @@ export function createComposedBuilders(
  * This function takes any dialect's column builders and adds the composed builders
  * (uuid, uuidDefault, uuidPK) to it
  */
-export function extendDialectWithComposedBuilders<T extends { varchar: ColumnBuilderFn<VarcharConfig> }>(
-    builders: T
-): T & ComposedColumnBuilders {
+export function extendDialectWithComposedBuilders(
+    builders: BaseDialectColumnBuilders
+): DialectColumnBuilders {
     const composed = createComposedBuilders(builders.varchar);
     return {
         ...builders,

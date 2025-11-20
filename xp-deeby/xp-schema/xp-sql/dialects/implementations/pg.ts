@@ -12,7 +12,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import {
     DialectBuilders,
-    DialectColumnBuilders,
+    BaseDialectColumnBuilders,
     SQLDialect,
     TextOptions,
     IntegerOptions,
@@ -52,83 +52,27 @@ export const bytea = customType<{
     },
 });
 
-/**
- * Helper to extend a ColumnBuilder with our custom properties
- * When using dialect builders directly (not through unbound), we don't have
- * the original UColumn, so we create a minimal ColData for type inference
- * 
- * @template TIsPrimaryKey - Whether this column is a primary key (tracked at type level)
- */
-function extendPgColumnBuilder<TType = any, TIsPrimaryKey extends boolean = false>(
-    builder: any,
-    typeName: string,
-    inferredType: TType,
-    isPrimaryKey: TIsPrimaryKey = false as TIsPrimaryKey
-): ExtendedColumnBuilder<ColData, any, TIsPrimaryKey> {
-    const extended = builder as any;
-    
-    // Create a minimal ColData for type inference
-    // We can't fully infer types from Drizzle's ColumnBuilder, so we use a fallback
-    const colData: ColData = {
-        __unbound: true,
-        type: typeName,
-        name: '',
-        options: undefined,
-        modifiers: [],
-        nullable: true,
-    };
-    
-    // Override .primaryKey() to return a new ExtendedColumnBuilder with TIsPrimaryKey = true
-    const originalPrimaryKey = extended.primaryKey;
-    if (originalPrimaryKey) {
-        extended.primaryKey = function(this: any) {
-            const newBuilder = originalPrimaryKey.call(this);
-            return extendPgColumnBuilder(newBuilder, typeName, inferredType, true as TIsPrimaryKey);
-        };
-    }
-    
-    // $inferSelect and $inferInsert are type-only, no runtime implementation needed
-    // $ref is undefined for direct dialect builders (no foreign key tracking)
-    // __isPrimaryKey is type-only, no runtime implementation needed
-    
-    return extended as ExtendedColumnBuilder<ColData, any, TIsPrimaryKey>;
-}
 
 // Wrap Drizzle builders to match our typed interface and return ExtendedColumnBuilder
-const pgText = (name: string, opts?: TextOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleText(name), 'text', null as string | null);
-const pgVarchar = (name: string, opts?: VarcharConfig): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleVarchar(name, opts as any), 'varchar', null as string | null);
-const pgInteger = (name: string, opts?: IntegerOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleInteger(name), 'integer', null as number | null);
-const pgReal = (name: string, opts?: RealOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleReal(name), 'real', null as number | null);
-const pgDoublePrecision = (name: string, opts?: RealOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleDoublePrecision(name), 'doublePrecision', null as number | null);
-const pgBigint = (name: string, opts?: BigintOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleBigint(name, opts as any), 'bigint', null as bigint | null);
-const pgSmallint = (name: string, opts?: SmallintOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleSmallint(name), 'smallint', null as number | null);
-const pgNumeric = (name: string, opts?: NumericConfig): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleNumeric(name, opts), 'numeric', null as string | null);
-const pgBool = (name: string, opts?: BooleanOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleBool(name), 'bool', null as boolean | null);
-const pgTimestamp = (name: string, opts?: TimestampOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleTimestamp(name, opts as any), 'timestamp', null as Date | null);
-const pgTime = (name: string, opts?: TimeOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleTime(name, opts), 'time', null as string | null);
-const pgDate = (name: string, opts?: DateOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleDate(name, opts), 'date', null as Date | null);
-const pgJson = (name: string, opts?: JsonOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleJson(name), 'json', null as any | null);
-const pgJsonb = (name: string, opts?: JsonOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(drizzleJsonb(name), 'jsonb', null as any | null);
-const pgBlob = (name: string, opts?: BlobOptions): ExtendedColumnBuilder<ColData> => 
-    extendPgColumnBuilder(bytea(name), 'blob', null as Uint8Array | null);
+const pgText = (name: string, opts?: TextOptions) => drizzleText(name);
+const pgVarchar = (name: string, opts?: VarcharConfig) => drizzleVarchar(name, opts as any);
+const pgInteger = (name: string, opts?: IntegerOptions) => drizzleInteger(name);
+const pgReal = (name: string, opts?: RealOptions)=> drizzleReal(name);
+const pgDoublePrecision = (name: string, opts?: RealOptions) => drizzleDoublePrecision(name);
+const pgBigint = (name: string, opts?: BigintOptions) => drizzleBigint(name, opts as any);
+const pgSmallint = (name: string, opts?: SmallintOptions) => drizzleSmallint(name);
+const pgNumeric = (name: string, opts?: NumericConfig) => drizzleNumeric(name, opts);
+const pgBool = (name: string, opts?: BooleanOptions) => drizzleBool(name);
+const pgTimestamp = (name: string, opts?: TimestampOptions) => drizzleTimestamp(name, opts as any);
+const pgTime = (name: string, opts?: TimeOptions) => drizzleTime(name, opts);
+const pgDate = (name: string, opts?: DateOptions) => drizzleDate(name, opts);
+const pgJson = (name: string, opts?: JsonOptions) => drizzleJson(name);
+const pgJsonb = (name: string, opts?: JsonOptions) => drizzleJsonb(name);
+const pgBlob = (name: string, opts?: BlobOptions) => bytea(name);
 
 import { extendDialectWithComposedBuilders } from './composed';
 
-const pgColumnBuildersBase: DialectColumnBuilders = {
+const pgColumnBuildersBase: BaseDialectColumnBuilders = {
     text: pgText,
     varchar: pgVarchar,
     json: pgJson,
@@ -138,8 +82,7 @@ const pgColumnBuildersBase: DialectColumnBuilders = {
     doublePrecision: pgDoublePrecision,
     bigint: pgBigint,
     smallint: pgSmallint,
-    pkserial: (name: string): ExtendedColumnBuilder<ColData> => 
-        extendPgColumnBuilder(serial(name).primaryKey(), 'pkserial', null as number | null),
+    pkserial: (name: string) => serial(name).primaryKey(),
     blob: pgBlob,
     numeric: pgNumeric,
     bool: pgBool,
@@ -147,10 +90,10 @@ const pgColumnBuildersBase: DialectColumnBuilders = {
     timestamp: pgTimestamp,
     time: pgTime,
     date: pgDate,
-} as unknown as DialectColumnBuilders;
+};
 
 // Extend with composed builders (uuid, uuidDefault, uuidPK)
-const pgColumnBuilders = extendDialectWithComposedBuilders(pgColumnBuildersBase) as DialectColumnBuilders;
+const pgColumnBuilders = extendDialectWithComposedBuilders(pgColumnBuildersBase);
 // Wrap pgTable to add $primaryKey property while preserving the original type
 function pgTableExtended<
   TName extends string,

@@ -7,7 +7,21 @@
  */
 
 import type {SQL, Table} from 'drizzle-orm';
-import type {DbConnectionInfo, DrizzleDatabaseConnectionDriver, DrizzleTable, QueryResult} from './drivers/types';
+import type {
+  DbConnectionInfo, 
+  DrizzleDatabaseConnectionDriver, 
+  DrizzleTable, 
+  QueryResult, 
+  InitialSelectQueryBuilder, 
+  SelectQueryBuilder
+} from './drivers/types';
+
+// Import InferTableSelect to ensure we use the exact same type as the interface
+// We need to use a type import to get the type
+type InferTableSelect<TTable> = 
+  TTable extends { $inferSelect: infer T } 
+    ? T 
+    : Record<string, unknown>;
 import type { SQLDialect } from './dialects/types';
 import {isUTable, bindTable, UTable} from './dialects/implementations/unbound';
 import {connectToDriver} from "./drivers/options";
@@ -25,7 +39,7 @@ export async function connect(connInfo: DbConnectionInfo): Promise<XPDatabaseCon
  * Database wrapper that knows its dialect and binds unbound tables
  */
 export class XPDatabaseConnection {
-  private tableCache = new Map<UTable, Table>();
+  private tableCache = new Map<UTable<any>, Table>();
 
   constructor(
     public db: DrizzleDatabaseConnectionDriver,
@@ -43,7 +57,7 @@ export class XPDatabaseConnection {
    * Bind an unbound table to this database's dialect
    * Caches the result so subsequent uses are fast
    */
-  _bindTable<T extends UTable | Table>(table: T): Table {
+  _bindTable<T extends UTable<any> | Table>(table: T): Table {
     // If already bound, bindTable will return it as-is (or throw if dialect mismatch)
     // We only cache unbound tables
     if (isUTable(table)) {
@@ -73,29 +87,19 @@ export class XPDatabaseConnection {
   /**
    * Start a SELECT query
    * Automatically binds unbound tables when used
+   * Preserves type inference from tables via $inferSelect
    */
   select<TSelection extends Record<string, any> | any[] | undefined = undefined>(
     columns?: TSelection
-  ) {
-    const selectBuilder = this.db.select(columns);
-    
-    // Wrap the from() method to bind unbound tables
-    const originalFrom = selectBuilder.from.bind(selectBuilder);
-    selectBuilder.from = <TTable extends DrizzleTable | UTable>(
-      table: TTable
-    ) => {
-      const boundTable = this._bindTable(table as any);
-      return originalFrom(boundTable as any);
-    };
-
-    return selectBuilder;
+  ): InitialSelectQueryBuilder<TSelection> {
+    return this.db.select(columns);
   }
 
   /**
    * Start an INSERT query
    * Automatically binds unbound tables when used
    */
-  insert<TTable extends DrizzleTable | UTable, TRow extends Record<string, any> = Record<string, any>>(
+  insert<TTable extends DrizzleTable | UTable<any>, TRow extends Record<string, any> = Record<string, any>>(
     table: TTable
   ) {
     const boundTable = this._bindTable(table as any);
@@ -106,7 +110,7 @@ export class XPDatabaseConnection {
    * Start an UPDATE query
    * Automatically binds unbound tables when used
    */
-  update<TTable extends DrizzleTable | UTable, TRow extends Record<string, any> = Record<string, any>>(
+  update<TTable extends DrizzleTable | UTable<any>, TRow extends Record<string, any> = Record<string, any>>(
     table: TTable
   ) {
     const boundTable = this._bindTable(table as any);
@@ -117,7 +121,7 @@ export class XPDatabaseConnection {
    * Start a DELETE query
    * Automatically binds unbound tables when used
    */
-  delete<TTable extends DrizzleTable | UTable>(
+  delete<TTable extends DrizzleTable | UTable<any>>(
     table: TTable
   ) {
     const boundTable = this._bindTable(table as any);

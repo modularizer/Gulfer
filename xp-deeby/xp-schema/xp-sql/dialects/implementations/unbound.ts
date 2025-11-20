@@ -9,7 +9,7 @@ import type {ColumnBuilder, Table} from 'drizzle-orm';
 import {sql} from 'drizzle-orm';
 import {
     DialectBuilders,
-    DialectColumnBuilders,
+    BaseDialectColumnBuilders,
     SQLDialect,
     NumericConfig,
     VarcharConfig,
@@ -885,7 +885,7 @@ export function unboundTable<
 >(
   name: string,
   columns: TColumns,
-  constraints?: (table: UTable<any>) => Array<UIndex | UUnique | any>
+  constraints?: (table: UTable<TColumns>) => Array<UIndex | UUnique | any>
 ): UTable<TColumns> {
   // Convert UnboundColumnBuilder instances to data
   // Use Record<string, ColData> for runtime storage (doesn't affect type inference)
@@ -1356,7 +1356,7 @@ function unboundVarchar<
 
 import { extendDialectWithComposedBuilders } from './composed';
 
-const unboundColumnBuildersBase: DialectColumnBuilders = {
+const unboundColumnBuildersBase: BaseDialectColumnBuilders = {
     text: (name: string, opts?: TextOptions) => new UColumn<string | null>('text', name, opts) as any,
     varchar: unboundVarchar as any,
     json: (name: string, opts?: JsonOptions) => new UColumn<any | null>('json', name, opts) as any,
@@ -1377,7 +1377,7 @@ const unboundColumnBuildersBase: DialectColumnBuilders = {
 };
 
 // Extend with composed builders (uuid, uuidDefault, uuidPK)
-const unboundColumnBuilders = extendDialectWithComposedBuilders(unboundColumnBuildersBase) as DialectColumnBuilders;
+const unboundColumnBuilders = extendDialectWithComposedBuilders(unboundColumnBuildersBase);
 
 
 // Unbound index builder function
@@ -1479,21 +1479,21 @@ export function varchar<
 ): UColumn<ExtractEnumType<TConfig> | null> {
     return unboundVarchar(name, opts);
 }
-export const json: (name: string, opts?: JsonOptions) => UColumn<any | null> = unboundColumnBuilders.json as any;
-export const jsonb: (name: string, opts?: JsonOptions) => UColumn<any | null> = unboundColumnBuilders.jsonb as any;
-export const integer: (name: string, opts?: IntegerOptions) => UColumn<number | null> = unboundColumnBuilders.integer as any;
-export const real: (name: string, opts?: RealOptions) => UColumn<number | null> = unboundColumnBuilders.real as any;
-export const doublePrecision: (name: string, opts?: RealOptions) => UColumn<number | null> = unboundColumnBuilders.doublePrecision as any;
-export const bigint: (name: string, opts?: BigintOptions) => UColumn<bigint | null> = unboundColumnBuilders.bigint as any;
-export const smallint: (name: string, opts?: SmallintOptions) => UColumn<number | null> = unboundColumnBuilders.smallint as any;
-export const pkserial: (name: string) => UColumn<number | null> = unboundColumnBuilders.pkserial as any;
-export const blob: (name: string, opts?: BlobOptions) => UColumn<Uint8Array | null> = unboundColumnBuilders.blob as any;
-export const numeric: (name: string, opts?: NumericConfig) => UColumn<string | null> = unboundColumnBuilders.numeric as any;
-export const bool: (name: string, opts?: BooleanOptions) => UColumn<boolean | null> = unboundColumnBuilders.bool as any;
-export const boolean: (name: string, opts?: BooleanOptions) => UColumn<boolean | null> = unboundColumnBuilders.boolean as any;
-export const timestamp: (name: string, opts?: TimestampOptions) => UColumn<Date | null> = unboundColumnBuilders.timestamp as any;
-export const time: (name: string, opts?: TimeOptions) => UColumn<string | null> = unboundColumnBuilders.time as any;
-export const date: (name: string, opts?: DateOptions) => UColumn<Date | null> = unboundColumnBuilders.date as any;
+export const json: (name: string, opts?: JsonOptions) => UColumn<any | null> = unboundColumnBuilders.json;
+export const jsonb: (name: string, opts?: JsonOptions) => UColumn<any | null> = unboundColumnBuilders.jsonb;
+export const integer: (name: string, opts?: IntegerOptions) => UColumn<number | null> = unboundColumnBuilders.integer;
+export const real: (name: string, opts?: RealOptions) => UColumn<number | null> = unboundColumnBuilders.real;
+export const doublePrecision: (name: string, opts?: RealOptions) => UColumn<number | null> = unboundColumnBuilders.doublePrecision;
+export const bigint: (name: string, opts?: BigintOptions) => UColumn<bigint | null> = unboundColumnBuilders.bigint;
+export const smallint: (name: string, opts?: SmallintOptions) => UColumn<number | null> = unboundColumnBuilders.smallint;
+export const pkserial: (name: string) => UColumn<number | null> = unboundColumnBuilders.pkserial;
+export const blob: (name: string, opts?: BlobOptions) => UColumn<Uint8Array | null> = unboundColumnBuilders.blob;
+export const numeric: (name: string, opts?: NumericConfig) => UColumn<string | null> = unboundColumnBuilders.numeric;
+export const bool: (name: string, opts?: BooleanOptions) => UColumn<boolean | null> = unboundColumnBuilders.bool;
+export const boolean: (name: string, opts?: BooleanOptions) => UColumn<boolean | null> = unboundColumnBuilders.boolean;
+export const timestamp: (name: string, opts?: TimestampOptions) => UColumn<Date | null> = unboundColumnBuilders.timestamp;
+export const time: (name: string, opts?: TimeOptions) => UColumn<string | null> = unboundColumnBuilders.time;
+export const date: (name: string, opts?: DateOptions) => UColumn<Date | null> = unboundColumnBuilders.date;
 
 // Export table builder with const modifier to preserve literal types
 // Using UColumn<any, any> in the constraint allows complex types while preserving literal structure
@@ -1513,6 +1513,6 @@ export const index = unboundIndex;
 export const check = unboundBuilders.check;
 
 // Export composed builders (they're added via extendDialectWithComposedBuilders)
-export const uuid = (unboundColumnBuilders as any).uuid;
-export const uuidDefault = (unboundColumnBuilders as any).uuidDefault;
-export const uuidPK = (unboundColumnBuilders as any).uuidPK;
+export const uuid = unboundColumnBuilders.uuid;
+export const uuidDefault = unboundColumnBuilders.uuidDefault;
+export const uuidPK = unboundColumnBuilders.uuidPK;

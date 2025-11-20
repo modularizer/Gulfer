@@ -1,7 +1,7 @@
 import {sqliteTable, type SQLiteTableWithColumns, text as drizzleText, integer as drizzleInteger, unique, real as drizzleReal, index, customType, blob as drizzleBlob} from 'drizzle-orm/sqlite-core';
 import {
     DialectBuilders,
-    DialectColumnBuilders,
+    BaseDialectColumnBuilders,
     notImplementedForDialect,
     NumericConfig,
     SQLDialect,
@@ -151,54 +151,17 @@ export const dateTextMDY = customType<{
 
 
 
-/**
- * Helper to extend a ColumnBuilder with our custom properties
- * When using dialect builders directly (not through unbound), we don't have
- * the original UColumn, so we create a minimal ColData for type inference
- */
-function extendSqliteColumnBuilder<TType = any>(
-    builder: any,
-    typeName: string,
-    inferredType: TType
-): ExtendedColumnBuilder<ColData> {
-    const extended = builder as any;
-    
-    // Create a minimal ColData for type inference
-    // We can't fully infer types from Drizzle's ColumnBuilder, so we use a fallback
-    const colData: ColData = {
-        __unbound: true,
-        type: typeName,
-        name: '',
-        options: undefined,
-        modifiers: [],
-        nullable: true,
-    };
-    
-    // $inferSelect and $inferInsert are type-only, no runtime implementation needed
-    // $ref is undefined for direct dialect builders (no foreign key tracking)
-    
-    return extended as ExtendedColumnBuilder<ColData>;
-}
 
 // Wrap Drizzle builders to match our typed interface and return ExtendedColumnBuilder
-const sqliteText = (name: string, opts?: TextOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleText(name), 'text', null as string | null);
-const sqliteVarchar = (name: string, opts?: VarcharConfig): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleText(name, opts as any), 'varchar', null as string | null);
-const sqliteInteger = (name: string, opts?: IntegerOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleInteger(name, opts), 'integer', null as number | null);
-const sqliteReal = (name: string, opts?: RealOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleReal(name), 'real', null as number | null);
-const sqliteDoublePrecision = (name: string, opts?: RealOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleReal(name), 'doublePrecision', null as number | null);
-const sqliteBigint = (name: string, opts?: BigintOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleBlob(name, {mode: "bigint", ...opts} as any), 'bigint', null as bigint | null);
-const sqliteSmallint = (name: string, opts?: SmallintOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleInteger(name, opts), 'smallint', null as number | null);
-const sqliteNumeric = (name: string, opts?: NumericConfig): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(sqliteNumericImpl(name, opts), 'numeric', null as string | null);
-const sqliteBool = (name: string, opts?: BooleanOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleInteger(name, {mode: "boolean", ...opts} as any), 'bool', null as boolean | null);
+const sqliteText = (name: string, opts?: TextOptions) => drizzleText(name);
+const sqliteVarchar = (name: string, opts?: VarcharConfig) => drizzleText(name, opts as any);
+const sqliteInteger = (name: string, opts?: IntegerOptions) => drizzleInteger(name, opts);
+const sqliteReal = (name: string, opts?: RealOptions) => drizzleReal(name);
+const sqliteDoublePrecision = (name: string, opts?: RealOptions) => drizzleReal(name);
+const sqliteBigint = (name: string, opts?: BigintOptions) => drizzleBlob(name, {mode: "bigint", ...opts} as any);
+const sqliteSmallint = (name: string, opts?: SmallintOptions) => drizzleInteger(name, opts);
+const sqliteNumeric = (name: string, opts?: NumericConfig) => sqliteNumericImpl(name, opts);
+const sqliteBool = (name: string, opts?: BooleanOptions) => drizzleInteger(name, {mode: "boolean", ...opts} as any);
 /**
  * Extended SQLite timestamp builder with .defaultNow() method
  * Creates a timestamp column and adds a .defaultNow() method that sets the default to the current Unix timestamp
@@ -286,20 +249,15 @@ const sqliteTimestamp = (name: string, opts?: TimestampOptions): TimestampColumn
     
     return addDefaultNow(baseBuilder);
 };
-const sqliteTime = (name: string, opts?: TimeOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(timeText24h(name), 'time', null as Date | null);
-const sqliteDate = (name: string, opts?: DateOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(dateTextMDY(name), 'date', null as Date | null);
-const sqliteJson = (name: string, opts?: JsonOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleText(name, {mode: 'json', ...opts} as any), 'json', null as any | null);
-const sqliteJsonb = (name: string, opts?: JsonOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleText(name, {mode: 'json', ...opts} as any), 'jsonb', null as any | null);
-const sqliteBlob = (name: string, opts?: BlobOptions): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(drizzleBlob(name, opts), 'blob', null as Uint8Array | null);
+const sqliteTime = (name: string, opts?: TimeOptions) => timeText24h(name);
+const sqliteDate = (name: string, opts?: DateOptions) => dateTextMDY(name);
+const sqliteJson = (name: string, opts?: JsonOptions) => drizzleText(name, {mode: 'json', ...opts} as any);
+const sqliteJsonb = (name: string, opts?: JsonOptions) => drizzleText(name, {mode: 'json', ...opts} as any);
+const sqliteBlob = (name: string, opts?: BlobOptions) => drizzleBlob(name, opts);
 
 import { extendDialectWithComposedBuilders } from './composed';
 
-const sqliteColumnBuildersBase: DialectColumnBuilders = {
+const sqliteColumnBuildersBase: BaseDialectColumnBuilders = {
     text: sqliteText,
     varchar: sqliteVarchar,
     json: sqliteJson,
@@ -309,8 +267,7 @@ const sqliteColumnBuildersBase: DialectColumnBuilders = {
     doublePrecision: sqliteDoublePrecision,
     bigint: sqliteBigint,
     smallint: sqliteSmallint,
-    pkserial: (name: string): ExtendedColumnBuilder<ColData> => 
-        extendSqliteColumnBuilder(integer(name).primaryKey(), 'pkserial', null as number | null),
+    pkserial: (name: string) => integer(name);
     blob: sqliteBlob,
     numeric: sqliteNumeric,
     bool: sqliteBool,
@@ -318,10 +275,10 @@ const sqliteColumnBuildersBase: DialectColumnBuilders = {
     timestamp: sqliteTimestamp,
     time: sqliteTime,
     date: sqliteDate,
-} as unknown as DialectColumnBuilders;
+};
 
 // Extend with composed builders (uuid, uuidDefault, uuidPK)
-const sqliteColumnBuilders = extendDialectWithComposedBuilders(sqliteColumnBuildersBase) as DialectColumnBuilders;
+const sqliteColumnBuilders = extendDialectWithComposedBuilders(sqliteColumnBuildersBase);
 const dialectName = "sqlite";
 
 // Wrap sqliteTable to add $primaryKey property while preserving the original type
@@ -744,8 +701,7 @@ export const real = sqliteReal;
 export const doublePrecision = sqliteDoublePrecision;
 export const bigint = sqliteBigint;
 export const smallint = sqliteSmallint;
-export const pkserial = (name: string): ExtendedColumnBuilder<ColData> => 
-    extendSqliteColumnBuilder(integer(name).primaryKey(), 'pkserial', null as number | null);
+export const pkserial = (name: string) => integer(name);
 export const blob = sqliteBlob;
 // Export numeric (using the implementation)
 export const numeric = sqliteNumeric;

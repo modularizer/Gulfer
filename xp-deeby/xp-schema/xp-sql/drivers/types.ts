@@ -22,6 +22,15 @@ export type DrizzleTable = {
 export type QueryResultRow = Record<string, unknown>;
 
 /**
+ * Extract the inferred select type from a table
+ * Works with both Drizzle tables and UTable
+ */
+export type InferTableSelect<TTable> = 
+    TTable extends { $inferSelect: infer T } 
+        ? T 
+        : QueryResultRow;
+
+/**
  * Column metadata from query result
  */
 export interface QueryResultColumn {
@@ -42,10 +51,15 @@ export interface QueryResult<T = QueryResultRow> {
 }
 
 
-export interface InitialSelectQueryBuilder<T = QueryResultRow> {
-    from<TTable extends DrizzleTable>(
-        table: TTable | any
-    ): SelectQueryBuilder<T>;
+export interface InitialSelectQueryBuilder<TSelection = undefined> {
+    /**
+     * Add a table to the FROM clause
+     * Infers the row type from the table's $inferSelect property
+     * Works with both DrizzleTable and UTable (unbound tables)
+     */
+    from<TTable extends DrizzleTable | { $inferSelect: any }>(
+        table: TTable
+    ): SelectQueryBuilder<InferTableSelect<TTable>>;
 }
 /**
  * Select query builder - returned by db.select(...)
@@ -56,10 +70,12 @@ export interface SelectQueryBuilder<T = QueryResultRow> {
     /**
      * Add a table to the FROM clause (or change the FROM table)
      * Can be called multiple times for subqueries or table aliases
+     * When called, updates the inferred row type to match the new table
+     * Works with both DrizzleTable and UTable (unbound tables)
      */
-    from<TTable extends DrizzleTable>(
-        table: TTable | any
-    ): SelectQueryBuilder<T>;
+    from<TTable extends DrizzleTable | { $inferSelect: any }>(
+        table: TTable
+    ): SelectQueryBuilder<InferTableSelect<TTable>>;
 
     where(condition: SQL | undefined): SelectQueryBuilder<T>;
 
@@ -249,16 +265,11 @@ export type DrizzleDatabaseConnectionDriver<T extends DbConnectionInfo = DbConne
 
     /**
      * Start a SELECT query
+     * The row type will be inferred from the table passed to .from()
      */
-    select<
-        TSelection extends
-                | Record<string, any>
-            | any[]
-            | undefined = undefined,
-        TRow extends QueryResultRow = QueryResultRow
-    >(
+    select<TSelection extends Record<string, any> | any[] | undefined = undefined>(
         columns?: TSelection
-    ): InitialSelectQueryBuilder<TRow>;
+    ): InitialSelectQueryBuilder<TSelection>;
 
     /**
      * Start an INSERT query
