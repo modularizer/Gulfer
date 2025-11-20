@@ -5,50 +5,21 @@
 // They can be used regardless of which adapter driver is selected
 // Use varchar when length is specified (works with both SQLite and PostgreSQL)
 export {
-    table, text, varchar, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
-} from '../../xp-deeby/adapters';
+    table, text, varchar, integer, real, timestamp, jsonb, unique, index, bool, 
+    generateUUID, uuid, uuidDefault, uuidPK
+} from '../../xp-deeby/xp-schema';
 
 // ============================================================================
-// Adapter Types and Interface
+// Database Types and Interface
 // ============================================================================
-// Re-export types from xp-deeby
-export type { DrizzleDatabase as Database } from '../../xp-deeby/adapters/adapter';
-export type { Adapter } from '../../xp-deeby/adapters/adapter';
-export type { AdapterCapabilities } from '../../xp-deeby/adapters/implementations/types';
-// DatabaseAdapter is the same as Database (DrizzleDatabase)
-export type { DrizzleDatabase as DatabaseAdapter } from '../../xp-deeby/adapters/adapter';
+// Re-export types from xp-deeby/xp-schema
+export type { XPDatabaseConnectionPlus as Database } from '../../xp-deeby/xp-schema';
+export type { XPDatabaseConnectionPlus as DatabaseAdapter } from '../../xp-deeby/xp-schema';
 
 // ============================================================================
-// Adapter Factory
+// Connection Functions
 // ============================================================================
-export { getAdapter, setAdapter, createAdapter, createAdapterByType, getAdapterByType, type AdapterType } from './factory';
-// Re-export xp-deeby adapter capabilities helpers
-export { getCurrentAdapterType } from '../../xp-deeby/adapters';
-
-// ============================================================================
-// Adapter Implementations
-// ============================================================================
-// Note: Adapter classes are NOT exported directly to avoid loading
-// unnecessary dependencies. Use the factory functions instead:
-// - getAdapter() - auto-selects based on platform
-// - getAdapterByType(type) - explicitly select adapter type
-// - createAdapterByType(type) - create adapter without setting as current
-//
-// If you need direct access to adapter classes, import them explicitly:
-// import { PgliteAdapter } from './adapters/pglite';
-
-// ============================================================================
-// Database Listing Functions
-// ============================================================================
-export { listDatabases, listDatabasesWeb, registerDatabaseName, type DatabaseRegistryEntry } from './list-databases';
-// Import and re-export getRegistryEntries directly to avoid Metro bundling issues
-import { getRegistryEntries as _getRegistryEntries } from './list-databases';
-export const getRegistryEntries = _getRegistryEntries;
-
-// ============================================================================
-// Database Metadata Functions
-// ============================================================================
-export { getDatabaseMetadata, type DatabaseMetadata } from './database-metadata';
+export { connect, createOrRetrieveRegistryEntry, getRegistryEntries, getRegistryEntry } from '../../xp-deeby/xp-schema';
 
 // ============================================================================
 // Generic Adapter Functions
@@ -56,49 +27,81 @@ export { getDatabaseMetadata, type DatabaseMetadata } from './database-metadata'
 // These functions work with any adapter and can be imported before
 // the adapter driver is selected
 
-import type { DrizzleDatabase as Database } from '../../xp-deeby/adapters/adapter';
-import { getAdapter } from './factory';
-import { registerDatabaseEntry } from '../../xp-deeby/adapters';
+import type { XPDatabaseConnectionPlus as Database } from '../../xp-deeby/xp-schema';
+import { connect, createOrRetrieveRegistryEntry, getRegistryEntry } from '../../xp-deeby/xp-schema';
+import type { DbConnectionInfo } from '../../xp-deeby/xp-schema/xp-sql/drivers/types';
 
 /**
  * Get or create a database by name using the registry
  * 
- * This is a generic function that works with any adapter.
- * The adapter is automatically selected based on platform, or can be set explicitly.
+ * This function uses the xp-deeby registry system to get or create a database connection.
  * 
  * @param name - The logical name of the database (e.g., "gulfer-test")
- * @returns A database instance
+ * @param adapterType - Optional adapter type ('pglite' | 'postgres' | 'sqlite-mobile')
+ * @returns A database instance (XPDatabaseConnectionPlus)
  */
-export async function getDatabaseByName(name: string): Promise<Database> {
-  const adapter = await getAdapter();
+export async function getDatabaseByName(name: string, adapterType?: 'pglite' | 'postgres' | 'sqlite-mobile'): Promise<Database> {
+  // Try to get existing registry entry
+  let entry = await getRegistryEntry(name);
   
-  // Get or create registry entry
-  const entry = await adapter.getRegistryEntry(name);
-  await registerDatabaseEntry(entry);
+  // If not found, create a new entry based on adapter type or platform
+  if (!entry) {
+    // Determine driver and dialect based on adapterType or platform
+    let driverName: 'pglite' | 'postgres' | 'sqlite-mobile' = 'pglite';
+    let dialectName: 'pg' | 'sqlite' = 'pg';
+    
+    if (adapterType) {
+      driverName = adapterType;
+      dialectName = adapterType === 'postgres' || adapterType === 'pglite' ? 'pg' : 'sqlite';
+    } else {
+      // Auto-detect platform
+      if (typeof window !== 'undefined') {
+        // Web platform - use pglite
+        driverName = 'pglite';
+        dialectName = 'pg';
+      } else {
+        // Mobile/Node - use sqlite-mobile for mobile, pglite for node
+        // For now, default to pglite
+        driverName = 'pglite';
+        dialectName = 'pg';
+      }
+    }
+    
+    const newEntry: DbConnectionInfo = {
+      name,
+      driverName,
+      dialectName,
+    };
+    
+    entry = await createOrRetrieveRegistryEntry(newEntry);
+  }
   
-  // Open database from registry
-  await adapter.openFromRegistry(entry);
-  return adapter.getDatabase();
+  if (!entry) {
+    throw new Error(`Failed to create or retrieve registry entry for database: ${name}`);
+  }
+  
+  // Connect to the database
+  return await connect(entry);
 }
 
 /**
  * Delete a database by name
  * 
- * This is a generic function that works with any adapter.
- * For web adapters, this deletes the IndexedDB database.
+ * This function deletes a database based on the platform.
+ * For web, it deletes from IndexedDB. For mobile, it deletes the SQLite file.
  * 
  * @param name - The logical name of the database (e.g., "gulfer-test")
  *               For web, this is converted to "gulfer_db_{name}" for IndexedDB
  */
 export async function deleteDatabaseByName(name: string): Promise<void> {
-  const adapter = await getAdapter();
-  const capabilities = adapter.getCapabilities();
-  const platform = capabilities.hostPlatforms.web ? 'web' : capabilities.hostPlatforms.mobile ? 'mobile' : 'node';
+  // Detect platform
+  const isWeb = typeof window !== 'undefined';
+  const isMobile = typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
   
-  if (platform === 'web') {
+  if (isWeb) {
     // For web, delete from IndexedDB
     // Convert logical name to IndexedDB name: "gulfer-test" -> "gulfer_db_gulfer-test"
-    const indexedDB = typeof window !== 'undefined' ? window.indexedDB : null;
+    const indexedDB = window.indexedDB;
     if (indexedDB) {
       return new Promise<void>((resolve, reject) => {
         const deleteRequest = indexedDB.deleteDatabase(`gulfer_db_${name}`);
@@ -114,34 +117,24 @@ export async function deleteDatabaseByName(name: string): Promise<void> {
         };
       });
     }
-  } else if (platform === 'mobile') {
+  } else if (isMobile) {
     // For mobile, delete the SQLite file
-    const { SqliteMobileAdapter } = await import('../../xp-deeby/adapters/implementations/sqlite-mobile/database');
-    if (adapter instanceof SqliteMobileAdapter) {
-      const dbName = `${name}.db`;
-      const SQLite = await import('expo-sqlite');
-      await SQLite.deleteDatabaseAsync(dbName);
-    }
+    const dbName = `${name}.db`;
+    const SQLite = await import('expo-sqlite');
+    await SQLite.deleteDatabaseAsync(dbName);
   } else {
-    throw new Error(`Database deletion not supported for platform: ${platform}`);
+    throw new Error(`Database deletion not supported for this platform`);
   }
 }
 
 /**
  * Get all table names in the database
  * 
- * This is a generic function that works with any adapter that supports it.
- * The adapter must have a database opened via openFromRegistry.
+ * This function requires a database connection to be passed in.
  * 
+ * @param db - The database connection (XPDatabaseConnectionPlus)
  * @returns Array of table names (excluding system tables and migration tables)
  */
-export async function getTableNames(): Promise<string[]> {
-  const adapter = await getAdapter();
-  
-  if (!adapter.getTableNames) {
-    const capabilities = adapter.getCapabilities();
-    throw new Error(`Adapter does not support getTableNames: ${capabilities.adapterType}`);
-  }
-  
-  return await adapter.getTableNames();
+export async function getTableNames(db: Database): Promise<string[]> {
+  return await db.getTableNames();
 }

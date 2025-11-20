@@ -359,12 +359,14 @@ export async function generateCreateScriptForTable(
       
       let fkSQL = `FOREIGN KEY (${localColumnsStr}) REFERENCES "${refTableName}" (${refColumnsStr})`;
       
-      // Add ON UPDATE and ON DELETE if specified
+      // Add ON UPDATE and ON DELETE if specified (normalize to uppercase for SQL)
       if (fk.onUpdate) {
-        fkSQL += ` ON UPDATE ${fk.onUpdate}`;
+        const onUpdate = typeof fk.onUpdate === 'string' ? fk.onUpdate.toUpperCase() : fk.onUpdate;
+        fkSQL += ` ON UPDATE ${onUpdate}`;
       }
       if (fk.onDelete) {
-        fkSQL += ` ON DELETE ${fk.onDelete}`;
+        const onDelete = typeof fk.onDelete === 'string' ? fk.onDelete.toUpperCase() : fk.onDelete;
+        fkSQL += ` ON DELETE ${onDelete}`;
       }
       
       columnDefs.push(fkSQL);

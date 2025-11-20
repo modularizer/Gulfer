@@ -95,9 +95,31 @@ export const connectToPostgres: connectFn<PostgresConnectionInfo> = async (
     // Wrap in Drizzle
     const db = drizzle(client) as any;
     db.raw = client;
-    db.close = () => db.end();
     db.connInfo = { ...info, dialectName: 'pg', driverName: 'postgres' };
     Object.assign(db, driverDetails);
+    
+    // Normalize execute() to return consistent QueryResult format
+    const originalExecute = db.execute.bind(db);
+    db.execute = async (query: any) => {
+        const result = await originalExecute(query);
+        // postgres-js returns array directly, normalize to QueryResult format
+        if (Array.isArray(result)) {
+            return { rows: result };
+        } else if (result && typeof result === 'object' && 'rows' in result) {
+            // Already in {rows: [...]} format
+            return {
+                rows: result.rows || [],
+                columns: result.columns,
+                rowCount: result.rowCount || result.rows?.length,
+                affectedRows: result.affectedRows,
+            };
+        } else {
+            // Fallback: wrap in QueryResult format
+            return { rows: result ? [result] : [] };
+        }
+    };
+    
+    db.close = () => db.end();
     db.deleteDatabase = async (conn: PostgresConnectionInfo) => {
 
         // Kick everyone out of the target DB

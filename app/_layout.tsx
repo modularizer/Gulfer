@@ -1,8 +1,8 @@
 import { Stack } from 'expo-router';
 
-// Early initialization - import adapters to trigger auto-initialization
-// This ensures PGlite and registry are set up before any database operations
-import '../xp-deeby/adapters';
+// Early initialization - import xp-schema to ensure it's available
+// This ensures the registry system is set up before any database operations
+import '../xp-deeby/xp-schema';
 
 export default function RootLayout() {
   return (

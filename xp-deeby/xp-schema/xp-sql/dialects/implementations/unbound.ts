@@ -27,6 +27,7 @@ import {
     notImplementedForDialect, DrizzleColumnInfo,
     PrimaryKeyInfo,
     ForeignKeyInfo,
+    ForeignKeyAction,
     UniqueConstraintInfo,
     IndexInfo,
 } from "../types";
@@ -220,8 +221,10 @@ export class UColumn<
    * 
    * Note: Use `typeof` to access this as a type: `typeof column.$inferSelect`
    * This is a type-level property, not a runtime property.
+   * 
+   * Note: Using readonly property instead of 'declare' for Babel/Metro compatibility
    */
-  declare readonly $inferSelect: TType;
+  readonly $inferSelect!: TType;
   
   /**
    * Infer the insert type from this column
@@ -230,8 +233,10 @@ export class UColumn<
    * 
    * Note: Use `typeof` to access this as a type: `typeof column.$inferInsert`
    * This is a type-level property, not a runtime property.
+   * 
+   * Note: Using readonly property instead of 'declare' for Babel/Metro compatibility
    */
-  declare readonly $inferInsert: ComputeColumnInsertType<TType, TFlags extends { hasDefault: true } ? true : false>;
+  readonly $inferInsert!: ComputeColumnInsertType<TType, TFlags extends { hasDefault: true } ? true : false>;
 
   /**
    * Add .unique() modifier
@@ -249,16 +254,27 @@ export class UColumn<
   /**
    * Add .references() modifier for foreign key constraints
    * Usage: text('user_id').references(() => usersTable.id)
+   * Usage with options: text('user_id').references(() => usersTable.id, { onDelete: 'cascade' })
    * Stores the reference as a function, UColumn, ColData, or ColumnBuilder
    */
   references<TRefColumn extends UColumn<any, any> | ColData | ColumnBuilder>(
-    ref: TRefColumn | (() => TRefColumn)
+    ref: TRefColumn | (() => TRefColumn),
+    options?: {
+      onDelete?: ForeignKeyAction;
+      onUpdate?: ForeignKeyAction;
+    }
   ): UColumn<TType, TFlags & { ref: TRefColumn }> {
     // Store the reference (function, UColumn, ColData, or ColumnBuilder)
     this._ref = typeof ref === 'function' ? ref : ref;
+    // Store the reference and options in the modifier args
+    const refArg = typeof ref === 'function' ? ref : () => ref;
+    const args: any[] = [refArg];
+    if (options) {
+      args.push(options);
+    }
     this.data = {
       ...this.data,
-      modifiers: [...this.data.modifiers, { method: 'references', args: [typeof ref === 'function' ? ref : () => ref] }],
+      modifiers: [...this.data.modifiers, { method: 'references', args }],
     };
     return this as any;
   }
@@ -522,7 +538,15 @@ export function bindColumn(
     } else if (modifier.method === 'notNull') {
       builder = builder.notNull();
     } else if (modifier.method === 'default' && typeof builder.default === 'function') {
-      builder = builder.default(...modifier.args);
+      // Check if the default value is a function - if so, use $defaultFn if available
+      const defaultArg = modifier.args[0];
+      if (typeof defaultArg === 'function' && typeof (builder as any).$defaultFn === 'function') {
+        // Use $defaultFn for function defaults (Drizzle's recommended way)
+        builder = (builder as any).$defaultFn(defaultArg);
+      } else {
+        // Use .default() for literal values
+        builder = builder.default(...modifier.args);
+      }
     } else if (modifier.method === 'defaultNow') {
       // defaultNow() is equivalent to default(sql`CURRENT_TIMESTAMP`)
       // We'll use the default() method with a SQL function
@@ -532,10 +556,18 @@ export function bindColumn(
         console.warn(`defaultNow() not available on column builder, skipping`);
       }
     } else if (modifier.method === 'references' && typeof builder.references === 'function') {
-      builder = builder.references( () => {
-         const col = modifier.args[0]();
-         return bindColumn(col, dialect);
-      });
+      const refFn = () => {
+        const col = modifier.args[0]();
+        return bindColumn(col, dialect);
+      };
+      // Check if FK options were provided (second argument)
+      const fkOptions = modifier.args.length > 1 ? modifier.args[1] : undefined;
+      if (fkOptions && typeof fkOptions === 'object') {
+        // Drizzle's references() accepts options as second parameter
+        builder = (builder.references as any)(refFn, fkOptions);
+      } else {
+        builder = builder.references(refFn);
+      }
     } else if (modifier.method === '$type' && typeof builder.$type === 'function') {
       // $type is a TypeScript-only method, but we still need to call it
       // It takes no runtime arguments
@@ -1322,7 +1354,9 @@ function unboundVarchar<
     return new UColumn('varchar', name, opts) as any;
 }
 
-const unboundColumnBuilders: DialectColumnBuilders = {
+import { extendDialectWithComposedBuilders } from './composed';
+
+const unboundColumnBuildersBase: DialectColumnBuilders = {
     text: (name: string, opts?: TextOptions) => new UColumn<string | null>('text', name, opts) as any,
     varchar: unboundVarchar as any,
     json: (name: string, opts?: JsonOptions) => new UColumn<any | null>('json', name, opts) as any,
@@ -1341,6 +1375,9 @@ const unboundColumnBuilders: DialectColumnBuilders = {
     time: (name: string, opts?: TimeOptions) => new UColumn<string | null>('time', name, opts) as any,
     timestamp: (name: string, opts?: TimestampOptions) => new UColumn<Date | null>('timestamp', name, opts) as any,
 };
+
+// Extend with composed builders (uuid, uuidDefault, uuidPK)
+const unboundColumnBuilders = extendDialectWithComposedBuilders(unboundColumnBuildersBase) as DialectColumnBuilders;
 
 
 // Unbound index builder function
@@ -1474,3 +1511,8 @@ export function table<
 export const unique = unboundUnique;
 export const index = unboundIndex;
 export const check = unboundBuilders.check;
+
+// Export composed builders (they're added via extendDialectWithComposedBuilders)
+export const uuid = (unboundColumnBuilders as any).uuid;
+export const uuidDefault = (unboundColumnBuilders as any).uuidDefault;
+export const uuidPK = (unboundColumnBuilders as any).uuidPK;

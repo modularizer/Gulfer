@@ -1,8 +1,6 @@
-import {xpschema, createOrRetrieveRegistryEntry, table, text, varchar, timestamp, index, jsonb, generateUUID} from '../../index';
+import {xpschema, createOrRetrieveRegistryEntry, table, text, varchar, timestamp, index, jsonb, uuid, generateUUID} from '../../index';
 
 
-// Step 1: Define custom column builders
-const uuid = (name: string) => varchar(name, {length: 16}).default(generateUUID);
 
 
 // Step 2: Define Schema

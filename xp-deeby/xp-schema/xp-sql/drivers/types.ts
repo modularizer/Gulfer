@@ -22,9 +22,24 @@ export type DrizzleTable = {
 export type QueryResultRow = Record<string, unknown>;
 
 /**
- * Generic query result
+ * Column metadata from query result
  */
-export type QueryResult<T = QueryResultRow> = T[];
+export interface QueryResultColumn {
+    name: string;
+    dataType?: string;
+    nullable?: boolean;
+}
+
+/**
+ * Generic query result with consistent format across all drivers
+ * Includes rows array and optional metadata (column descriptions, etc.)
+ */
+export interface QueryResult<T = QueryResultRow> {
+    rows: T[];
+    columns?: QueryResultColumn[];
+    rowCount?: number;
+    affectedRows?: number;
+}
 
 
 export interface InitialSelectQueryBuilder<T = QueryResultRow> {
@@ -38,6 +53,14 @@ export interface InitialSelectQueryBuilder<T = QueryResultRow> {
  * T = row type the query resolves to
  */
 export interface SelectQueryBuilder<T = QueryResultRow> {
+    /**
+     * Add a table to the FROM clause (or change the FROM table)
+     * Can be called multiple times for subqueries or table aliases
+     */
+    from<TTable extends DrizzleTable>(
+        table: TTable | any
+    ): SelectQueryBuilder<T>;
+
     where(condition: SQL | undefined): SelectQueryBuilder<T>;
 
     innerJoin<TTable extends DrizzleTable>(
@@ -74,11 +97,11 @@ export interface SelectQueryBuilder<T = QueryResultRow> {
 
     /**
      * Thenable – Drizzle builders are promises
-     * that resolve to an array of rows.
+     * that resolve to an array of rows (not a QueryResult object).
      */
-    then<TResult1 = QueryResult<T>, TResult2 = never>(
+    then<TResult1 = T[], TResult2 = never>(
         onfulfilled?:
-            | ((value: QueryResult<T>) => TResult1 | PromiseLike<TResult1>)
+            | ((value: T[]) => TResult1 | PromiseLike<TResult1>)
             | undefined
             | null,
         onrejected?:

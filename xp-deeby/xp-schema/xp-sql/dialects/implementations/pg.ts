@@ -126,7 +126,9 @@ const pgJsonb = (name: string, opts?: JsonOptions): ExtendedColumnBuilder<ColDat
 const pgBlob = (name: string, opts?: BlobOptions): ExtendedColumnBuilder<ColData> => 
     extendPgColumnBuilder(bytea(name), 'blob', null as Uint8Array | null);
 
-const pgColumnBuilders: DialectColumnBuilders = {
+import { extendDialectWithComposedBuilders } from './composed';
+
+const pgColumnBuildersBase: DialectColumnBuilders = {
     text: pgText,
     varchar: pgVarchar,
     json: pgJson,
@@ -145,8 +147,10 @@ const pgColumnBuilders: DialectColumnBuilders = {
     timestamp: pgTimestamp,
     time: pgTime,
     date: pgDate,
-
 } as unknown as DialectColumnBuilders;
+
+// Extend with composed builders (uuid, uuidDefault, uuidPK)
+const pgColumnBuilders = extendDialectWithComposedBuilders(pgColumnBuildersBase) as DialectColumnBuilders;
 // Wrap pgTable to add $primaryKey property while preserving the original type
 function pgTableExtended<
   TName extends string,
@@ -304,13 +308,15 @@ function pgTypeToDrizzleColumn(col: ColumnInfo): any {
     return isNullable ? base : base.notNull();
 }
 async function getTableNames(db: DrizzleDatabaseConnectionDriver, schemaName: string = 'public'): Promise<string[]>   {
-    return (await db.execute(sql`
+    const result = await db.execute(sql`
                     SELECT table_name 
                     FROM information_schema.tables 
                     WHERE table_schema = ${schemaName} 
                     AND table_type = 'BASE TABLE'
                     ORDER BY table_name
-              `)).map((row: any) => row.table_name);
+              `);
+    // All drivers now return QueryResult format with rows property
+    return result.rows.map((row: any) => row.table_name);
 }
 async function getSchemaNames(
     db: DrizzleDatabaseConnectionDriver,
@@ -329,13 +335,13 @@ async function getSchemaNames(
         return false;
     };
 
-    const rows = await db.execute(sql`
+    const result = await db.execute(sql`
     SELECT schema_name
     FROM information_schema.schemata
     ORDER BY schema_name
   `);
 
-    return rows
+    return result.rows
         .map((row: any) => row.schema_name)
         .filter(name => !(options?.excludeBuiltins && isBuiltin(name)));
 }
@@ -350,7 +356,7 @@ async function getTableColumns(db: DrizzleDatabaseConnectionDriver, tableName: s
         ORDER BY ordinal_position
       `);
 
-    const info = result.map((row: any) => ({
+    const info = result.rows.map((row: any) => ({
         name: row.name,
         dataType: row.dataType || row.data_type || 'unknown',
         isNullable: row.isNullable !== undefined ? row.isNullable : row.is_nullable === 'YES',
@@ -381,13 +387,13 @@ async function getTablePrimaryKeys(
         ORDER BY kcu.ordinal_position
     `);
 
-    if (!result || result.length === 0) {
+    if (!result || !result.rows || result.rows.length === 0) {
         return [];
     }
 
     // Group by constraint name (though typically there's only one PK per table)
     const pkMap = new Map<string, { name?: string; columns: string[] }>();
-    for (const row of result as any[]) {
+    for (const row of result.rows as any[]) {
         const constraintName = row.constraintName || row.constraint_name;
         const columnName = row.columnName || row.column_name;
         
@@ -438,7 +444,7 @@ async function getTableForeignKeys(
         ORDER BY tc.constraint_name, kcu.ordinal_position
     `);
 
-    if (!result || result.length === 0) {
+    if (!result || !result.rows || result.rows.length === 0) {
         return [];
     }
 
@@ -452,7 +458,7 @@ async function getTableForeignKeys(
         onDelete?: string;
     }>();
 
-    for (const row of result as any[]) {
+    for (const row of result.rows as any[]) {
         const constraintName = row.constraintName || row.constraint_name;
         const columnName = row.columnName || row.column_name;
         const referencedTable = row.referencedTableName || row.referenced_table_name;
@@ -510,13 +516,13 @@ async function getTableUniqueConstraints(
         ORDER BY tc.constraint_name, kcu.ordinal_position
     `);
 
-    if (!result || result.length === 0) {
+    if (!result || !result.rows || result.rows.length === 0) {
         return [];
     }
 
     // Group by constraint name
     const uniqueMap = new Map<string, { name?: string; columns: string[] }>();
-    for (const row of result as any[]) {
+    for (const row of result.rows as any[]) {
         const constraintName = row.constraintName || row.constraint_name;
         const columnName = row.columnName || row.column_name;
 
@@ -566,13 +572,13 @@ async function getTableIndexes(
         ORDER BY i.indexname, array_position(ind.indkey, a.attnum)
     `);
 
-    if (!result || result.length === 0) {
+    if (!result || !result.rows || result.rows.length === 0) {
         return [];
     }
 
     // Group by index name
     const indexMap = new Map<string, { name: string; columns: string[]; unique: boolean }>();
-    for (const row of result as any[]) {
+    for (const row of result.rows as any[]) {
         const indexName = row.indexName || row.indexname;
         const columnName = row.columnName || row.attname;
         const isUnique = row.isUnique || row.indisunique;
@@ -638,6 +644,9 @@ export default pgDialect;
 // Export all column builders
 export const text = pgText;
 export const varchar = pgVarchar;
+export const uuid = pgColumnBuilders.uuid;
+export const uuidDefault = pgColumnBuilders.uuidDefault;
+export const uuidPK = pgColumnBuilders.uuidPK;
 export const json = pgJson;
 export const jsonb = pgJsonb;
 export const integer = pgInteger;

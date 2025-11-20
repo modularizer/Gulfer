@@ -93,8 +93,19 @@ export async function generateCreateScript(
 ): Promise<GenerateCreateScriptResult> {
   requireNodeEnvironment('generateCreateScript');
   
-  const fs = require('fs');
-  const path = require('path');
+  // Use eval to make require truly dynamic and avoid Metro bundler analysis
+  // This prevents Metro from trying to bundle Node.js modules
+  const getNodeRequire = () => {
+    if (typeof window !== 'undefined') {
+      throw new Error('This function only works in Node.js environment');
+    }
+    // Use Function constructor to create a require that Metro can't analyze
+    return new Function('return require')();
+  };
+  
+  const nodeRequire = getNodeRequire();
+  const fs = nodeRequire('fs');
+  const path = nodeRequire('path');
   
   const {
     sourceFile,
@@ -144,16 +155,17 @@ export async function generateCreateScript(
   }
   // Load the schema/table from the source file
   const modulePath = sourceFilePath.replace(/\.ts$/, '');
-  if (require.cache[modulePath]) {
-    delete require.cache[modulePath];
+  const requireCache = nodeRequire.cache;
+  if (requireCache && requireCache[modulePath]) {
+    delete requireCache[modulePath];
   }
   
   let module: any;
   try {
-    module = require(modulePath);
+    module = nodeRequire(modulePath);
   } catch (error) {
     try {
-      module = require(sourceFilePath);
+      module = nodeRequire(sourceFilePath);
     } catch (e) {
       throw new Error(
         `Failed to import module from ${sourceFilePath}. ` +

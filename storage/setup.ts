@@ -32,7 +32,6 @@ import { setupSchemaByName } from './schema';
 import { SportsDataServices } from './schema/generic-sports-data';
 import type { Sport } from './schema/generic-sports-data/sports';
 import { golf } from './sports';
-import {AdapterType} from "../xp-deeby/adapters/abstract/capabilities";
 
 /**
  * Set up storage with database and services
@@ -67,7 +66,7 @@ export async function setupStorage(
   name: string,
   options?: {
     sports?: Record<string, Sport>;
-    adapterType?: AdapterType;
+    adapterType?: 'pglite' | 'postgres' | 'sqlite-mobile';
   }
 ): Promise<SportsDataServices> {
   const { sports, adapterType } = options || {};

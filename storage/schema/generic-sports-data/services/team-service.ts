@@ -17,9 +17,9 @@ import {
   type TeamWithDetails,
 } from '../query-builders';
 import { eq, and, like } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { Participant } from '../tables';
-import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema';
 
 export class TeamService extends BaseService {
   /**

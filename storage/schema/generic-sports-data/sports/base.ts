@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import type { Database } from '../../../../xp-deeby/adapters';
+import type { XPDatabaseConnectionPlus as Database } from '../../../../xp-deeby/xp-schema';
 import type { Sport as SportRecord, ScoreFormat, EventFormat, Venue, Event, Participant } from '../tables';
 import type { ScoringMethod } from '../scoring';
 import { SportService, ScoreFormatService, EventFormatService, VenueService, VenueEventFormatService, EventService, VenueEventFormatWithDetails, StageMetadataInput, EventFormatWithDetails, StageInput } from '../services';

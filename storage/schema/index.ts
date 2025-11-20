@@ -15,7 +15,7 @@
 export * from './generic-sports-data/tables';
 
 // Export all accounts tables
-export * from './accounts/schema/tables';
+export * from './accounts/schema';
 
 // Export schema setup function (only handles migrations)
 export { setupSchemaByName } from './setup';

@@ -7,10 +7,8 @@
  */
 
 // Export all table definitions
-export * from './1-base';
-export * from './2-generic-sports-schema';
-export * from './3-photos';
-export * from './6-data-merges';
+export {schema} from './schema';
+
 
 // Export type definitions (these use Drizzle's type inference)
 export * from './types';

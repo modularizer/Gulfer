@@ -18,7 +18,7 @@
  */
 
 import { eq, and, type SQL } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import { applyQueryModifiers, type QueryBuilderState } from '../../../../xp-deeby/utils';
 import type {
   Participant,
@@ -31,7 +31,7 @@ import type {
   ParticipantEventStageScoreInsert,
 } from '../tables';
 import { generateUUID } from '../../../../xp-deeby/utils';
-import {Database} from "../../../../xp-deeby/adapters";
+import type {XPDatabaseConnectionPlus as Database} from "../../../../xp-deeby/xp-schema";
 
 // ============================================================================
 // Meta-Types: Raw Drizzle Join Result Types (camelCase)

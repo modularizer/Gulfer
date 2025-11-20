@@ -16,7 +16,8 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { runGolfTest, runBasicPgliteTest } from '../storage/tests/golf';
-import { getRegistryEntries, getAdapter, saveRegistryEntries, AdapterType } from '../xp-deeby/adapters';
+import { getRegistryEntries, removeRegistryEnty } from '../xp-deeby/xp-schema';
+import { deleteDatabaseByName } from '../storage/adapters';
 import { useRouter } from 'expo-router';
 
 interface LogEntry {
@@ -92,18 +93,10 @@ export default function DbTestPage() {
     try {
       setIsRunning(true);
       addLog('🗑️  Deleting database...', 'log');
-      // Delete database using adapter
-      const registry = await getRegistryEntries();
-      const entry = registry.find(e => e.name === 'gulfer-test');
-      if (entry) {
-        const adapter = await getAdapter(entry.adapterType as AdapterType);
-        if (adapter.deleteDatabase) {
-          await adapter.deleteDatabase(entry);
-        }
-        // Remove from registry
-        const updated = registry.filter(e => e.name !== 'gulfer-test');
-        await saveRegistryEntries(updated);
-      }
+      // Delete database using the new system
+      await deleteDatabaseByName('gulfer-test');
+      // Remove from registry
+      await removeRegistryEnty('gulfer-test');
       addLog('✅ Database deleted successfully!', 'success');
       setLogs([]);
       setIsComplete(false);

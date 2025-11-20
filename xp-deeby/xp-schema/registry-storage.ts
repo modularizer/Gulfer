@@ -24,10 +24,12 @@ export async function getRegistryEntry(name: string) {
     return (await getRegistryEntries({name}))[0];
 }
 
-export async function createOrRetrieveRegistryEntry(entry: DbConnectionInfo) {
+export async function createOrRetrieveRegistryEntry(entry: DbConnectionInfo): Promise<DbConnectionInfo> {
     const existing = await getRegistryEntry(entry.name);
     if (existing) return existing;
     await saveRegistryEntry(entry);
+    // Return the entry we just saved
+    return entry;
 }
 
 

@@ -15,8 +15,11 @@ export class XPDatabaseTablePlus<TTable extends Table = Table> {
         
         // Expose columns as properties for runtime access
         // TypeScript types are provided by the intersection type below
-        for (const [k, v] of Object.entries(this.table.columns)) {
-            (this as any)[k] = v;
+        // Guard against undefined/null columns (can happen during table initialization)
+        if (this.table.columns && typeof this.table.columns === 'object') {
+            for (const [k, v] of Object.entries(this.table.columns)) {
+                (this as any)[k] = v;
+            }
         }
     }
 

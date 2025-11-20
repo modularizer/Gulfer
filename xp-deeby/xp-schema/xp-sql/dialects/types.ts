@@ -83,6 +83,8 @@ export interface VarcharConfig<TEnum extends readonly string[] | string[] | unde
     length?: TLength;
 }
 
+
+
 /**
  * Integer column options
  */
@@ -190,6 +192,10 @@ export interface DialectColumnBuilders  {
     time: ColumnBuilderFn<TimeOptions>;
     timestamp: TimestampColumnBuilderFn<TimestampOptions>;
     blob: ColumnBuilderFn<BlobOptions>;
+    // Composed builders (automatically added via extendDialectWithComposedBuilders)
+    uuid: (name: string, options?: { length?: number }) => ColumnBuilderWithReferences;
+    uuidDefault: (name: string, options?: { length?: number }) => ColumnBuilderWithReferences;
+    uuidPK: (name: string, options?: { length?: number }) => ColumnBuilderWithReferences;
 }
 export type ColumnType = keyof DialectColumnBuilders;
 
@@ -230,6 +236,16 @@ export interface PrimaryKeyInfo {
 }
 
 /**
+ * Foreign key action type - accepts both lowercase and uppercase
+ */
+export type ForeignKeyAction = 
+  | 'CASCADE' | 'cascade'
+  | 'RESTRICT' | 'restrict'
+  | 'SET NULL' | 'set null'
+  | 'SET DEFAULT' | 'set default'
+  | 'NO ACTION' | 'no action';
+
+/**
  * Foreign key constraint information
  */
 export interface ForeignKeyInfo {
@@ -237,8 +253,8 @@ export interface ForeignKeyInfo {
     columns: string[]; // Column names in this table
     referencedTable: string; // Referenced table name
     referencedColumns: string[]; // Referenced column names
-    onUpdate?: 'CASCADE' | 'RESTRICT' | 'SET NULL' | 'SET DEFAULT' | 'NO ACTION';
-    onDelete?: 'CASCADE' | 'RESTRICT' | 'SET NULL' | 'SET DEFAULT' | 'NO ACTION';
+    onUpdate?: ForeignKeyAction;
+    onDelete?: ForeignKeyAction;
 }
 
 /**

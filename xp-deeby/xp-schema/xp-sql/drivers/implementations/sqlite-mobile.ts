@@ -46,10 +46,38 @@ const connectToSqliteMobile: connectFn<SqliteMobileConnectionInfo> = async (
     const db = drizzle(expoDb) as any; // ExpoSQLiteDatabase
 
     db.raw = expoDb;
-    // Polyfill `.execute` using `.run`
-    db.execute ??= (query: SQL) => db.run(query);
     db.connInfo = { ...info, dialectName: 'sqlite', driverName: 'sqlite-mobile' };
     Object.assign(db, driverDetails);
+    
+    // Normalize execute() to return consistent QueryResult format
+    const originalExecute = db.execute?.bind(db) || db.run?.bind(db);
+    db.execute = async (query: SQL) => {
+        const result = await originalExecute(query);
+        // Expo SQLite's run() returns {changes: number, lastInsertRowId: number}
+        // Drizzle's execute() may return array or result object
+        if (Array.isArray(result)) {
+            return { rows: result };
+        } else if (result && typeof result === 'object') {
+            if ('rows' in result) {
+                // Already has rows property
+                return {
+                    rows: result.rows || [],
+                    columns: result.columns,
+                    rowCount: result.rowCount || result.rows?.length,
+                    affectedRows: result.affectedRows || result.changes,
+                };
+            } else if ('changes' in result) {
+                // Expo SQLite run() result format
+                return {
+                    rows: [],
+                    rowCount: 0,
+                    affectedRows: result.changes || 0,
+                };
+            }
+        }
+        // Fallback: wrap in QueryResult format
+        return { rows: result ? [result] : [] };
+    };
 
     if (info.enableForeignKeys) {
         await db.execute(`PRAGMA foreign_keys = ON` as unknown as SQL);

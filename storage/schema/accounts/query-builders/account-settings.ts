@@ -6,15 +6,15 @@
  */
 
 import { eq, and, type SQL } from 'drizzle-orm';
-import type { Database } from '../../../../xp-deeby/adapters';
-import * as schema from '../schema/tables';
+import type { XPDatabaseConnectionPlus as Database } from '../../../../xp-deeby/xp-schema';
+import * as schema from '../schema';
 import { applyQueryModifiers, type QueryBuilderState } from '../../../../xp-deeby/utils';
 import type {
   Account,
   SettingOption,
   AccountSettingOption,
   AccountSettingOptionInsert,
-} from '../schema/tables';
+} from '../schema';
 
 // ============================================================================
 // Meta-Types: Raw Drizzle Join Result Types (camelCase)

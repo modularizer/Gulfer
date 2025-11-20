@@ -17,11 +17,10 @@
  * ```
  */
 
-import {Database} from '../../xp-deeby/adapters';
-import { getDatabaseByName } from '../../xp-deeby/adapters';
+import type {XPDatabaseConnectionPlus as Database} from '../../xp-deeby/xp-schema';
+import { getDatabaseByName } from '../../storage/adapters';
 import { setupDatabase } from './generic-sports-data/setup';
 import { setupDatabase as setupAccountsDatabase } from './accounts/setup';
-import {AdapterType} from "../../xp-deeby/adapters/abstract/capabilities";
 
 /**
  * Set up database schema by name
@@ -41,7 +40,7 @@ import {AdapterType} from "../../xp-deeby/adapters/abstract/capabilities";
  * - Module-specific (generic-sports-data and accounts tracked separately)
  * 
  * @param name - The name of the database (without .db extension)
- * @param adapterType - Optional adapter type. If not provided, auto-selects based on platform
+ * @param adapterType - Optional adapter type ('pglite' | 'postgres' | 'sqlite-mobile'). If not provided, auto-selects based on platform
  * @returns The database instance with all tables created and migrations applied
  * 
  * @example
@@ -55,7 +54,7 @@ import {AdapterType} from "../../xp-deeby/adapters/abstract/capabilities";
  */
 export async function setupSchemaByName(
   name: string,
-  adapterType?: AdapterType
+  adapterType?: 'pglite' | 'postgres' | 'sqlite-mobile'
 ): Promise<Database> {
 
   // Step 1: Get or create database by name

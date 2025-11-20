@@ -1,6 +1,6 @@
 import {
-    table, text, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
-} from '../../../../../xp-deeby/adapters';
+    table, text, integer, real, jsonb, unique, bool, uuid
+} from '../../../../../xp-deeby/xp-schema';
 import {baseColumns, latLngIdx} from '../1-base';
 
 

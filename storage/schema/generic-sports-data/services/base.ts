@@ -6,7 +6,7 @@
  */
 
 import { eq, inArray, type SQL } from 'drizzle-orm';
-import {Database} from "../../../../xp-deeby/adapters";
+import type {XPDatabaseConnectionPlus as Database} from "../../../../xp-deeby/xp-schema";
 
 export abstract class BaseService {
   protected db: Database;

@@ -1,6 +1,6 @@
 import {
-    table, text, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
-} from '../../../../../xp-deeby/adapters';
+    table, text, integer, timestamp, bool, uuid
+} from '../../../../../xp-deeby/xp-schema';
 import {baseColumns, latLngIdx} from '../1-base';
 import {scoreColumns, sports} from "./1-generic-sports-and-formats";
 import {venueEventFormats, venueEventFormatStages} from "./2-generic-sport-venues";
@@ -56,7 +56,7 @@ export const participantEventStageScores = table('participant_event_stage_scores
     eventStageId: text('event_stage_id').references(() => eventStages.id, { onDelete: 'set null' }),
     participantId: uuid('participant_id').notNull().references(() => participants.id, { onDelete: 'cascade' }),
     ...scoreColumns,
-    completedAt: timestamp('completed_at').$defaultFn(() => new Date()), // When this stage was recorded
+    completedAt: timestamp('completed_at').default(() => new Date()), // When this stage was recorded
     complete: integer('complete', { mode: 'boolean' }).default(0).notNull(), // Is this stage complete? Use 0 instead of false for PostgreSQL compatibility
 }, (table) => [
     latLngIdx(table),

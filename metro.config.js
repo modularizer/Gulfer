@@ -8,6 +8,10 @@ config.resolver.blockList = [
   // Block build/generation scripts
   /storage\/schema\/.*\/generate.*\.ts$/,
   /storage\/schema\/.*\/generate-all.*\.ts$/,
+  // Block Node.js-only utility scripts that use require()
+  /xp-deeby\/xp-schema\/utils\/generate-create-script\.ts$/,
+  /xp-deeby\/xp-schema\/utils\/generate-types\.ts$/,
+  /xp-deeby\/xp-schema\/xp-sql\/utils\/migrations\/migration-generator\.ts$/,
 ];
 
 // Exclude ts-morph and packages that use import.meta from being resolved
@@ -25,6 +29,27 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       type: 'empty',
     };
   }
+  
+  // Block Node.js-only utility modules that use require() and can't run in web
+  // These are development tools that should only be used in Node.js
+  const nodeOnlyModules = [
+    'xp-deeby/xp-schema/utils/generate-types',
+    'xp-deeby/xp-schema/utils/generate-create-script',
+    'xp-deeby/xp-schema/xp-sql/utils/migrations/migration-generator',
+    '../utils/generate-types',
+    '../utils/generate-create-script',
+    '../xp-sql/utils/migrations/migration-generator',
+    './utils/generate-types',
+    './utils/generate-create-script',
+    './xp-sql/utils/migrations/migration-generator',
+  ];
+  
+  if (nodeOnlyModules.some(pattern => moduleName.includes(pattern) || moduleName.endsWith(pattern))) {
+    return {
+      type: 'empty',
+    };
+  }
+  
   // Allow @electric-sql/pglite and drizzle-orm/pglite to be bundled
   // We'll transform import.meta using Babel
   // Use default resolution for everything else

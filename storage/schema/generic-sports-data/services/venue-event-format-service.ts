@@ -10,11 +10,11 @@
 
 import { BaseService } from './base';
 import { eq, and } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { VenueEventFormat, Venue, EventFormat, VenueEventFormatStage, VenueEventFormatStageInsert } from '../tables';
 import { upsertEntity } from '../query-builders';
 import { queryStages, type StageWithDetails } from '../query-builders';
-import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema';
 import { VenueService } from './venue-service';
 import { EventFormatService, type EventFormatWithDetails } from './event-format-service';
 

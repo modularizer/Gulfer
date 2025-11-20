@@ -8,9 +8,9 @@
 import { BaseService } from './base';
 import { queryVenues, upsertVenueWithDetails, type VenueWithDetails } from '../query-builders';
 import { eq, inArray, like } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { Venue, Event } from '../tables';
-import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema';
 
 export class VenueService extends BaseService {
   /**

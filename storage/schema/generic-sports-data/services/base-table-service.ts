@@ -13,7 +13,7 @@ import { eq, and } from 'drizzle-orm';
 import * as schema from '../tables';
 import type { Photo, PhotoInsert } from '../tables';
 import { upsertEntity } from '../query-builders';
-import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema';
 
 /**
  * Base columns that most entities share

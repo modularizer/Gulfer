@@ -6,10 +6,9 @@
  */
 
 import { BaseService } from '../../generic-sports-data/services/base';
-import type { Database } from '../../../../xp-deeby/adapters';
 import { eq, and } from 'drizzle-orm';
-import * as schema from '../schema/tables';
-import type { SettingOption, SettingOptionInsert, AccountSettingOption } from '../schema/tables';
+import * as schema from '../schema';
+import type { SettingOption, SettingOptionInsert, AccountSettingOption } from '../schema';
 import { queryAccountSettings, upsertAccountSettings } from '../query-builders';
 import type { AccountWithSettings, SettingOptionWithAccountValues } from '../query-builders';
 import { generateUUID } from '../../../../xp-deeby/utils';
@@ -208,6 +207,7 @@ export class AccountSettingsService extends BaseService {
     await this.db
       .delete(schema.accountSettingOptions)
       .where(
+          //@ts-ignore
         and(
           eq(schema.accountSettingOptions.accountId, accountId),
           eq(schema.accountSettingOptions.settingOptionId, settingOptionId)

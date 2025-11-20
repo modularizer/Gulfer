@@ -7,9 +7,8 @@
 
 import {setupStorage} from '../../setup';
 import {golf} from '../../sports';
-import {getDatabaseByName} from '../../../xp-deeby/adapters';
+import {getDatabaseByName} from '../../../storage/adapters';
 import {sql} from 'drizzle-orm';
-import {AdapterType} from "../../../xp-deeby/adapters/implementations/types";
 
 export async function runGolfTest(addLog: (message: string, type?: 'log' | 'error' | 'success') => void) {
   addLog('🏌️  Starting storage test...\n', 'log');
@@ -18,7 +17,7 @@ export async function runGolfTest(addLog: (message: string, type?: 'log' | 'erro
   addLog('📦 Setting up database...', 'log');
   addLog('   Using adapter: pglite (PostgreSQL in WASM, no headers needed!)', 'log');
   const storage = await setupStorage('gulfer-test', {
-    adapterType: AdapterType.PGLITE,
+    adapterType: 'pglite',
     sports: { golf },
   });
 
@@ -181,11 +180,11 @@ export async function runBasicPgliteTest(addLog: (message: string, type?: 'log' 
   try {
     // Step 1: Get database instance using registry
     addLog('📦 Getting database instance...', 'log');
-    // getDatabaseByName returns the adapter (which implements DrizzleDatabase)
+    // getDatabaseByName returns XPDatabaseConnectionPlus
     const db = await getDatabaseByName('gulfer-test-basic');
-    const capabilities = db.getCapabilities();
-    const platform = capabilities.hostPlatforms.web ? 'web' : capabilities.hostPlatforms.mobile ? 'mobile' : 'node';
-    addLog(`   Adapter: ${capabilities.adapterType} (${platform})`, 'log');
+    const dialectName = db.dialect.name;
+    const platform = typeof window !== 'undefined' ? 'web' : 'mobile';
+    addLog(`   Dialect: ${dialectName} (${platform})`, 'log');
     addLog('✅ Database instance obtained!\n', 'success');
 
     // Step 2: Create a simple table
@@ -219,13 +218,16 @@ export async function runBasicPgliteTest(addLog: (message: string, type?: 'log' 
     addLog('🔍 Selecting record...', 'log');
     const selectResult = await db.execute(sql`
       SELECT * FROM test_users WHERE id = ${testId}
-    `) as any[];
+    `);
     
-    if (!selectResult || selectResult.length === 0) {
+    // db.execute() now returns { rows: [...] } format
+    const rows = Array.isArray(selectResult) ? selectResult : (selectResult?.rows || []);
+    
+    if (!rows || rows.length === 0) {
       throw new Error('Failed to retrieve inserted record');
     }
     
-    const selectedRecord = selectResult[0];
+    const selectedRecord = rows[0];
     addLog(`   Retrieved: ${JSON.stringify(selectedRecord)}`, 'log');
     
     if (selectedRecord.id !== testId || selectedRecord.name !== testName) {
@@ -251,13 +253,16 @@ export async function runBasicPgliteTest(addLog: (message: string, type?: 'log' 
     addLog('🔍 Verifying update...', 'log');
     const verifyResult = await db.execute(sql`
       SELECT * FROM test_users WHERE id = ${testId}
-    `) as any[];
+    `);
     
-    if (!verifyResult || verifyResult.length === 0) {
+    // db.execute() now returns { rows: [...] } format
+    const verifyRows = Array.isArray(verifyResult) ? verifyResult : (verifyResult?.rows || []);
+    
+    if (!verifyRows || verifyRows.length === 0) {
       throw new Error('Failed to retrieve updated record');
     }
     
-    const updatedRecord = verifyResult[0];
+    const updatedRecord = verifyRows[0];
     addLog(`   Retrieved: ${JSON.stringify(updatedRecord)}`, 'log');
     
     if (updatedRecord.name !== updatedName || updatedRecord.email !== updatedEmail || updatedRecord.age !== updatedAge) {
@@ -276,9 +281,12 @@ export async function runBasicPgliteTest(addLog: (message: string, type?: 'log' 
     addLog('🔍 Verifying deletion...', 'log');
     const deleteVerifyResult = await db.execute(sql`
       SELECT * FROM test_users WHERE id = ${testId}
-    `) as any[];
+    `);
     
-    if (deleteVerifyResult && deleteVerifyResult.length > 0) {
+    // db.execute() now returns { rows: [...] } format
+    const deleteRows = Array.isArray(deleteVerifyResult) ? deleteVerifyResult : (deleteVerifyResult?.rows || []);
+    
+    if (deleteRows && deleteRows.length > 0) {
       throw new Error('Record was not deleted');
     }
     addLog('✅ Deletion verified!\n', 'success');

@@ -259,7 +259,17 @@ export function generateCreateTableFromSnapshot(
           );
         }
         
-        columnDefs.push(`FOREIGN KEY (${localColumns}) REFERENCES "${fk.refTable}" (${refColumns})`);
+        let fkSQL = `FOREIGN KEY (${localColumns}) REFERENCES "${fk.refTable}" (${refColumns})`;
+        
+        // Add ON UPDATE and ON DELETE if specified
+        if (fk.onUpdate) {
+          fkSQL += ` ON UPDATE ${fk.onUpdate}`;
+        }
+        if (fk.onDelete) {
+          fkSQL += ` ON DELETE ${fk.onDelete}`;
+        }
+        
+        columnDefs.push(fkSQL);
       } else {
         // No snapshot provided - validate later or throw error
         throw new Error(
@@ -621,7 +631,19 @@ export function generateMigrationFromSnapshotDiff(
       const localColumns = fk.localColumns.map(name => `"${name}"`).join(', ');
       const refColumns = fk.refColumns.map(name => `"${name}"`).join(', ');
       if (localColumns && refColumns) {
-        statements.push(`ALTER TABLE "${tableName}" ADD FOREIGN KEY (${localColumns}) REFERENCES "${fk.refTable}" (${refColumns});`);
+        let fkSQL = `ALTER TABLE "${tableName}" ADD FOREIGN KEY (${localColumns}) REFERENCES "${fk.refTable}" (${refColumns})`;
+        
+        // Add ON UPDATE and ON DELETE if specified (normalize to uppercase for SQL)
+        if (fk.onUpdate) {
+          const onUpdate = typeof fk.onUpdate === 'string' ? fk.onUpdate.toUpperCase() : fk.onUpdate;
+          fkSQL += ` ON UPDATE ${onUpdate}`;
+        }
+        if (fk.onDelete) {
+          const onDelete = typeof fk.onDelete === 'string' ? fk.onDelete.toUpperCase() : fk.onDelete;
+          fkSQL += ` ON DELETE ${onDelete}`;
+        }
+        
+        statements.push(fkSQL + ';');
       }
     }
     

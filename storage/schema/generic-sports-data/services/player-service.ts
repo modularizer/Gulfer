@@ -10,9 +10,9 @@
 import { BaseService } from './base';
 import { queryParticipants, upsertParticipantWithDetails, findTeamsForPlayer, type ParticipantWithDetails } from '../query-builders';
 import { eq, and, inArray, like } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { Participant } from '../tables';
-import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema';
 
 // Version constant to force Metro to detect class method changes
 // Increment this when adding/modifying class methods to ensure hot reload works

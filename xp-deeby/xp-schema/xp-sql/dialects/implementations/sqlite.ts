@@ -297,7 +297,9 @@ const sqliteJsonb = (name: string, opts?: JsonOptions): ExtendedColumnBuilder<Co
 const sqliteBlob = (name: string, opts?: BlobOptions): ExtendedColumnBuilder<ColData> => 
     extendSqliteColumnBuilder(drizzleBlob(name, opts), 'blob', null as Uint8Array | null);
 
-const sqliteColumnBuilders: DialectColumnBuilders = {
+import { extendDialectWithComposedBuilders } from './composed';
+
+const sqliteColumnBuildersBase: DialectColumnBuilders = {
     text: sqliteText,
     varchar: sqliteVarchar,
     json: sqliteJson,
@@ -317,6 +319,9 @@ const sqliteColumnBuilders: DialectColumnBuilders = {
     time: sqliteTime,
     date: sqliteDate,
 } as unknown as DialectColumnBuilders;
+
+// Extend with composed builders (uuid, uuidDefault, uuidPK)
+const sqliteColumnBuilders = extendDialectWithComposedBuilders(sqliteColumnBuildersBase) as DialectColumnBuilders;
 const dialectName = "sqlite";
 
 // Wrap sqliteTable to add $primaryKey property while preserving the original type
@@ -456,14 +461,13 @@ async function getTableNames(
     if (schemaName !== 'public') {
         throw new Error("SQLite does not support schemas")
     }
-    return (
-        await db.execute(sql`
+    const result = await db.execute(sql`
       SELECT name AS table_name
       FROM sqlite_master
       WHERE type = 'table'
       ORDER BY name
-    `)
-    ).map((row: any) => row.table_name);
+    `);
+    return result.rows.map((row: any) => row.table_name);
 }
 async function getSchemaNames(
     db: DrizzleDatabaseConnectionDriver,
@@ -487,7 +491,7 @@ async function getTableColumns(
 
     // SQLite PRAGMA table_info returns:
     // cid | name | type | notnull | dflt_value | pk
-    const info = (result as any[]).map((row) => ({
+    const info = result.rows.map((row: any) => ({
         name: row.name,
         dataType: row.type || "unknown",
         isNullable: !row.notnull, // notnull: 1 => NOT NULL, 0 => NULLABLE
@@ -512,7 +516,7 @@ async function getTablePrimaryKeys(
     );
 
     const pkColumns: string[] = [];
-    for (const row of result as any[]) {
+    for (const row of result.rows as any[]) {
         if (row.pk === 1 || row.pk === '1') {
             pkColumns.push(row.name);
         }
@@ -542,7 +546,7 @@ async function getTableForeignKeys(
         sql.raw(`PRAGMA foreign_key_list(${JSON.stringify(tableName)});`)
     );
 
-    if (!result || result.length === 0) {
+    if (!result || !result.rows || result.rows.length === 0) {
         return [];
     }
 
@@ -556,7 +560,7 @@ async function getTableForeignKeys(
         onDelete?: string;
     }>();
 
-    for (const row of result as any[]) {
+    for (const row of result.rows as any[]) {
         const id = row.id || row.seq || 0;
         const fromColumn = row.from || row['from'];
         const toColumn = row.to || row['to'];
@@ -608,7 +612,7 @@ async function getTableUniqueConstraints(
 
     const uniqueConstraints: UniqueConstraintInfo[] = [];
 
-    for (const indexRow of indexList as any[]) {
+    for (const indexRow of indexList.rows as any[]) {
         const indexName = indexRow.name;
         const isUnique = indexRow.unique === 1 || indexRow.unique === '1';
         
@@ -623,7 +627,7 @@ async function getTableUniqueConstraints(
         );
 
         const columns: string[] = [];
-        for (const infoRow of indexInfo as any[]) {
+        for (const infoRow of indexInfo.rows as any[]) {
             const columnName = infoRow.name;
             if (columnName && !columns.includes(columnName)) {
                 columns.push(columnName);
@@ -657,7 +661,7 @@ async function getTableIndexes(
 
     const indexes: IndexInfo[] = [];
 
-    for (const indexRow of indexList as any[]) {
+    for (const indexRow of indexList.rows as any[]) {
         const indexName = indexRow.name;
         const isUnique = indexRow.unique === 1 || indexRow.unique === '1';
         
@@ -673,7 +677,7 @@ async function getTableIndexes(
         );
 
         const columns: string[] = [];
-        for (const infoRow of indexInfo as any[]) {
+        for (const infoRow of indexInfo.rows as any[]) {
             const columnName = infoRow.name;
             if (columnName && !columns.includes(columnName)) {
                 columns.push(columnName);
@@ -730,6 +734,9 @@ export default sqliteDialect;
 // Export all column builders
 export const text = sqliteText;
 export const varchar = sqliteVarchar;
+export const uuid = sqliteColumnBuilders.uuid;
+export const uuidDefault = sqliteColumnBuilders.uuidDefault;
+export const uuidPK = sqliteColumnBuilders.uuidPK;
 export const json = sqliteJson;
 export const jsonb = sqliteJsonb;
 export const integer = sqliteInteger;

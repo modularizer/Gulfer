@@ -17,7 +17,7 @@
  * ```
  */
 
-import type { Database } from '../../../../xp-deeby/adapters';
+import type { XPDatabaseConnectionPlus as Database } from '../../../../xp-deeby/xp-schema';
 import { PlayerService, PLAYER_SERVICE_VERSION } from './player-service';
 import { TeamService } from './team-service';
 import { EventService } from './event-service';

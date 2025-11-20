@@ -67,9 +67,9 @@ export class XPDatabaseConnectionPlus extends XPDatabaseConnection {
 
     registerSchema(schema?: Record<string, Table> | string): Promise<void> {
         if (!schema) {
-            return this.detectRuntimeSchema().then(this.registerSchema)
+            return this.detectRuntimeSchema().then((detectedSchema) => this.registerSchema(detectedSchema))
         }else if (typeof schema === "string"){
-            return this.detectRuntimeSchema(schema).then(this.registerSchema)
+            return this.detectRuntimeSchema(schema).then((detectedSchema) => this.registerSchema(detectedSchema))
         }
         this.schema = schema;
         for (let [tableName, table] of Object.entries(schema)) {

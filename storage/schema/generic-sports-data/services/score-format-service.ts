@@ -7,10 +7,10 @@
 
 import { BaseTableService } from './base-table-service';
 import { eq, like, and } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { ScoreFormat } from '../tables';
 import { upsertEntity } from '../query-builders';
-import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema';
 
 export class ScoreFormatService extends BaseTableService<ScoreFormat> {
   protected getTableName(): string {

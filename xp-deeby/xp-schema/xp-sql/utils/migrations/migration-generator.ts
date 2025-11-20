@@ -42,6 +42,18 @@ function requireNodeEnvironment(functionName: string): void {
 }
 
 /**
+ * Get Node.js require function dynamically to avoid Metro bundler analysis
+ * This prevents Metro from trying to bundle Node.js modules
+ */
+function getNodeRequire(): NodeRequire {
+  if (typeof window !== 'undefined') {
+    throw new Error('This function only works in Node.js environment');
+  }
+  // Use Function constructor to create a require that Metro can't analyze
+  return new Function('return require')();
+}
+
+/**
  * Migration file structure
  */
 export interface MigrationFile {
@@ -120,9 +132,10 @@ export interface GenerateMigrationResult {
 function loadExistingMigrations(migrationsPath: string): MigrationFile[] {
   requireNodeEnvironment('loadExistingMigrations');
   
-  const fs = require('fs');
-  const path = require('path');
-  const crypto = require('crypto');
+  const nodeRequire = getNodeRequire();
+  const fs = nodeRequire('fs');
+  const path = nodeRequire('path');
+  const crypto = nodeRequire('crypto');
   
   if (!fs.existsSync(migrationsPath)) {
     return [];
@@ -165,7 +178,8 @@ function loadExistingMigrations(migrationsPath: string): MigrationFile[] {
  * Stored directly in the dialect directory as snapshot.json
  */
 function getSnapshotPath(migrationsDir: string, dialect: string): string {
-  const path = require('path');
+  const nodeRequire = getNodeRequire();
+  const path = nodeRequire('path');
   return path.join(migrationsDir, dialect, 'snapshot.json');
 }
 
@@ -173,7 +187,8 @@ function getSnapshotPath(migrationsDir: string, dialect: string): string {
  * Get the path to the create script (overwritten each migration)
  */
 function getCreateScriptPath(migrationsDir: string, dialect: string): string {
-  const path = require('path');
+  const nodeRequire = getNodeRequire();
+  const path = nodeRequire('path');
   return path.join(migrationsDir, dialect, 'create.sql');
 }
 
@@ -181,7 +196,8 @@ function getCreateScriptPath(migrationsDir: string, dialect: string): string {
  * Get the path to a versioned schema diff JSON for a specific migration
  */
 function getVersionedDiffPath(migrationsDir: string, dialect: string, migrationName: string): string {
-  const path = require('path');
+  const nodeRequire = getNodeRequire();
+  const path = nodeRequire('path');
   return path.join(migrationsDir, dialect, `${migrationName}.diff.json`);
 }
 
@@ -191,7 +207,8 @@ function getVersionedDiffPath(migrationsDir: string, dialect: string, migrationN
 function loadLastSnapshot(migrationsDir: string, dialect: string): SchemaSnapshot | null {
   requireNodeEnvironment('loadLastSnapshot');
   
-  const fs = require('fs');
+  const nodeRequire = getNodeRequire();
+  const fs = nodeRequire('fs');
   const snapshotPath = getSnapshotPath(migrationsDir, dialect);
   
   console.log(`🔍 Looking for snapshot at: ${snapshotPath}`);
@@ -248,9 +265,10 @@ function saveSnapshot(
 ): void {
   requireNodeEnvironment('saveSnapshot');
   
-  const fs = require('fs');
-  const path = require('path');
-  const crypto = require('crypto');
+  const nodeRequire = getNodeRequire();
+  const fs = nodeRequire('fs');
+  const path = nodeRequire('path');
+  const crypto = nodeRequire('crypto');
   
   const snapshotPath = getSnapshotPath(migrationsDir, dialect);
   const snapshotDir = path.dirname(snapshotPath);
@@ -425,7 +443,19 @@ function generateMigrationSQL(
     for (const fk of tableDiff.addedForeignKeys) {
       const localCols = fk.localColumns.map(c => `"${c}"`).join(', ');
       const refCols = fk.refColumns.map(c => `"${c}"`).join(', ');
-      statements.push(`ALTER TABLE "${tableName}" ADD FOREIGN KEY (${localCols}) REFERENCES "${fk.refTable}" (${refCols});`);
+      let fkSQL = `ALTER TABLE "${tableName}" ADD FOREIGN KEY (${localCols}) REFERENCES "${fk.refTable}" (${refCols})`;
+      
+      // Add ON UPDATE and ON DELETE if specified (normalize to uppercase for SQL)
+      if (fk.onUpdate) {
+        const onUpdate = typeof fk.onUpdate === 'string' ? fk.onUpdate.toUpperCase() : fk.onUpdate;
+        fkSQL += ` ON UPDATE ${onUpdate}`;
+      }
+      if (fk.onDelete) {
+        const onDelete = typeof fk.onDelete === 'string' ? fk.onDelete.toUpperCase() : fk.onDelete;
+        fkSQL += ` ON DELETE ${onDelete}`;
+      }
+      
+      statements.push(fkSQL + ';');
     }
     
     // Handle removed unique constraints
@@ -468,9 +498,10 @@ export async function generateMigrations(
 ): Promise<GenerateMigrationResult> {
   requireNodeEnvironment('generateMigrations');
   
-  const fs = require('fs');
-  const path = require('path');
-  const crypto = require('crypto');
+  const nodeRequire = getNodeRequire();
+  const fs = nodeRequire('fs');
+  const path = nodeRequire('path');
+  const crypto = nodeRequire('crypto');
   
   const {
     migrationsDir,
@@ -598,7 +629,8 @@ export async function generateMigrations(
     
     // Calculate current schema hash after metadata extraction
     // This allows us to skip migration generation if schema hasn't actually changed
-    const crypto = require('crypto');
+    const nodeRequire = getNodeRequire();
+    const crypto = nodeRequire('crypto');
     const sortedTableNames = Object.keys(currentMetadata).sort();
     const sortedTables: Record<string, TableMetadata> = {};
     for (const tableName of sortedTableNames) {
@@ -934,8 +966,18 @@ async function loadSchemaFromFile(
 ): Promise<Schema<any>> {
   requireNodeEnvironment('loadSchemaFromFile');
   
-  const fs = require('fs');
-  const path = require('path');
+  // Use eval to make require truly dynamic and avoid Metro bundler analysis
+  const getNodeRequire = () => {
+    if (typeof window !== 'undefined') {
+      throw new Error('This function only works in Node.js environment');
+    }
+    // Use Function constructor to create a require that Metro can't analyze
+    return new Function('return require')();
+  };
+  
+  const nodeRequire = getNodeRequire();
+  const fs = nodeRequire('fs');
+  const path = nodeRequire('path');
   
   const schemaFilePath = path.resolve(schemaFile);
   
@@ -945,16 +987,17 @@ async function loadSchemaFromFile(
   
   // Clear require cache to ensure fresh import
   const modulePath = schemaFilePath.replace(/\.ts$/, '').replace(/\.js$/, '');
-  if (require.cache[modulePath]) {
-    delete require.cache[modulePath];
+  const requireCache = nodeRequire.cache;
+  if (requireCache && requireCache[modulePath]) {
+    delete requireCache[modulePath];
   }
   
   let module: any;
   try {
-    module = require(modulePath);
+    module = nodeRequire(modulePath);
   } catch (error) {
     try {
-      module = require(schemaFilePath);
+      module = nodeRequire(schemaFilePath);
     } catch (e) {
       throw new Error(
         `Failed to import module from ${schemaFilePath}. ` +
@@ -999,7 +1042,8 @@ export async function generateMigrationsFromFile(
   // If migrationsDir is not provided, default to './migrations' relative to source file
   let resolvedMigrationsDir = migrationsDir;
   if (!resolvedMigrationsDir) {
-    const path = require('path');
+    const nodeRequire = getNodeRequire();
+    const path = nodeRequire('path');
     const sourceDir = path.dirname(path.resolve(sourceFile));
     resolvedMigrationsDir = path.join(sourceDir, 'migrations');
   }

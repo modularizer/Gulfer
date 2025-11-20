@@ -8,9 +8,9 @@
 import { BaseService } from './base';
 import { queryEvents, upsertEventWithDetails, type EventWithDetails } from '../query-builders';
 import { eq, and, inArray, gte, lte, type SQL } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { Event, Participant, Photo, EventStage } from '../tables';
-import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema';
 import { VenueEventFormatService } from './venue-event-format-service';
 
 export class EventService extends BaseService {
@@ -184,7 +184,7 @@ export class EventService extends BaseService {
         
         console.log(`[createEvent] Venue event format has ${venueEventFormatWithStages.stages.length} root stages`);
         console.log(`[createEvent] After flattening: ${allVenueStages.length} total stages`);
-        console.log(`[createEvent] Venue stages breakdown:`, allVenueStages.map(s => ({
+        console.log(`[createEvent] Venue stages breakdown:`, allVenueStages.map((s: any) => ({
           id: s.venueEventFormatStage?.id,
           name: s.venueEventFormatStage?.name,
           number: s.venueEventFormatStage?.number,

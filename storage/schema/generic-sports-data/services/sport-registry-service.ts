@@ -20,7 +20,7 @@
  * ```
  */
 
-import type { Database } from '../../../../xp-deeby/adapters';
+import type { XPDatabaseConnectionPlus as Database } from '../../../../xp-deeby/xp-schema';
 import type { Sport } from '../sports';
 import type { SportsDataServices } from './sports-data-services';
 

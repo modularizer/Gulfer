@@ -7,7 +7,7 @@
 
 import { BaseTableService } from './base-table-service';
 import { like, eq } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { Sport } from '../tables';
 import { generateUUID } from '../../../../xp-deeby/utils';
 

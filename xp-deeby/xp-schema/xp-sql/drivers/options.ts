@@ -22,6 +22,7 @@ export function detectDriverFromConnectionInfo(connInfo: DbConnectionInfo): XPDr
         case 'sqlite-mobile':
             return XPDriverName.SQLITE_MOBILE;
         case 'pg':
+        case 'pglite':
             return XPDriverName.PGLITE;
         case 'postgres':
             return XPDriverName.POSTGRES;

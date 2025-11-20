@@ -8,6 +8,7 @@
 
 import type { UTable } from '../dialects/implementations/unbound';
 import type { DialectAgnosticColumnMetadata, DialectAgnosticTableMetadata } from './dialect-agnostic-schema';
+import type { ForeignKeyAction } from '../../dialects/types';
 
 /**
  * Extract column metadata from unbound column data
@@ -72,12 +73,20 @@ function extractColumnMetadataFromUnbound(
 /**
  * Extract foreign key from unbound column's reference modifier
  */
+import type { ForeignKeyAction } from '../../dialects/types';
+
 function extractForeignKeyFromUnbound(
   columnName: string,
   refModifier: { method: string; args: any[] },
   unboundTable: UTable<any>,
   allUnboundTables?: Record<string, UTable<any>>
-): { localColumns: string[]; refTable: string; refColumns: string[] } {
+): { 
+  localColumns: string[]; 
+  refTable: string; 
+  refColumns: string[];
+  onDelete?: ForeignKeyAction;
+  onUpdate?: ForeignKeyAction;
+} {
   if (refModifier.method !== 'references' || !refModifier.args || refModifier.args.length === 0) {
     throw new Error(
       `Invalid references modifier on column "${columnName}" in table "${unboundTable.__name}": ` +
@@ -172,11 +181,53 @@ function extractForeignKeyFromUnbound(
       );
     }
     
-    return {
+    // Extract FK options from the second argument if present
+    const fkOptions = refModifier.args.length > 1 && refModifier.args[1] 
+      ? refModifier.args[1] 
+      : undefined;
+    
+    const result: {
+      localColumns: string[];
+      refTable: string;
+      refColumns: string[];
+      onDelete?: ForeignKeyAction;
+      onUpdate?: ForeignKeyAction;
+    } = {
       localColumns: [columnName],
       refTable,
       refColumns: [refColumnName],
     };
+    
+    if (fkOptions && typeof fkOptions === 'object') {
+      if (fkOptions.onDelete) {
+        // Normalize to uppercase to match SQL standard, but accept both cases
+        const onDelete = typeof fkOptions.onDelete === 'string' 
+          ? fkOptions.onDelete.toUpperCase() as ForeignKeyAction
+          : fkOptions.onDelete;
+        // Validate it's a valid action (accept both cases)
+        const validActions: string[] = ['CASCADE', 'RESTRICT', 'SET NULL', 'SET DEFAULT', 'NO ACTION', 
+                                        'cascade', 'restrict', 'set null', 'set default', 'no action'];
+        if (validActions.includes(onDelete as string)) {
+          // Store as uppercase for SQL generation
+          result.onDelete = (typeof onDelete === 'string' ? onDelete.toUpperCase() : onDelete) as ForeignKeyAction;
+        }
+      }
+      if (fkOptions.onUpdate) {
+        // Normalize to uppercase to match SQL standard, but accept both cases
+        const onUpdate = typeof fkOptions.onUpdate === 'string' 
+          ? fkOptions.onUpdate.toUpperCase() as ForeignKeyAction
+          : fkOptions.onUpdate;
+        // Validate it's a valid action (accept both cases)
+        const validActions: string[] = ['CASCADE', 'RESTRICT', 'SET NULL', 'SET DEFAULT', 'NO ACTION',
+                                        'cascade', 'restrict', 'set null', 'set default', 'no action'];
+        if (validActions.includes(onUpdate as string)) {
+          // Store as uppercase for SQL generation
+          result.onUpdate = (typeof onUpdate === 'string' ? onUpdate.toUpperCase() : onUpdate) as ForeignKeyAction;
+        }
+      }
+    }
+    
+    return result;
   } catch (e) {
     // If we can't resolve the reference, throw an error
     throw new Error(

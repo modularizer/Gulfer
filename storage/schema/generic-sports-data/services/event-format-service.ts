@@ -9,7 +9,7 @@
 
 import { BaseTableService } from './base-table-service';
 import { eq, like } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { EventFormat, Sport, ScoreFormat, EventFormatStage} from '../tables';
 import { queryStages, upsertStagesWithDetails, type StageWithDetails } from '../query-builders';
 import { generateUUID } from '../../../../xp-deeby/utils';

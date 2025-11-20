@@ -1,6 +1,6 @@
 import {
     table, text, integer, real, timestamp, jsonb, unique, index, bool, uuid, uuidPK, uuidDefault
-} from '../../../../../xp-deeby/adapters';
+} from '../../../../xp-deeby/xp-schema';
 import {accounts} from "./accounts";
 
 

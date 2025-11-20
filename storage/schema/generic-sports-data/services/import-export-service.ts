@@ -7,10 +7,10 @@
 
 import { BaseService } from './base';
 import { eq, and } from 'drizzle-orm';
-import * as schema from '../tables';
+import {schema} from '../tables';
 import type { MergeEntry, MergeEntryInsert } from '../tables';
 import { upsertEntity } from '../query-builders';
-import { generateUUID } from '../../../../xp-deeby/xp-schema/xp-sql/utils/uuid';
+import { generateUUID } from '../../../../xp-deeby/xp-schema';
 
 /**
  * Foreign storage identifier
@@ -189,6 +189,7 @@ export class ImportExportService extends BaseService {
               continue;
             } else if (mergeStrategy === 'overwrite') {
               // Update existing entity
+
               await upsertEntity(this.db, table, {
                 ...row,
                 id: existingMerge.localId,

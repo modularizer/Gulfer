@@ -3,7 +3,7 @@
 // Participants Table (stores players AND teams)
 // ============================================================================
 import {baseColumns, latLngIdx} from "../1-base";
-import {index, integer, table, text, timestamp, unique} from "../../../../../xp-deeby/adapters";
+import {varchar, integer, table, text, timestamp, unique} from "../../../../../xp-deeby/xp-schema";
 
 export enum Sex {
     MALE = 'MALE',
@@ -14,7 +14,7 @@ export enum Sex {
 
 export const participantColumns = {
     ...baseColumns,
-    sex: text("sex", { enum: [Sex.MALE, Sex.FEMALE, Sex.MIXED, Sex.UNKNOWN],}).notNull().default(Sex.UNKNOWN),
+    sex: varchar("sex", { enum: [Sex.MALE, Sex.FEMALE, Sex.MIXED, Sex.UNKNOWN],}).notNull().default(Sex.UNKNOWN),
     birthday: timestamp("birthday"),
     isTeam: integer('is_team', { mode: 'boolean' }).default(0), // Use 0 instead of false for PostgreSQL compatibility
     createdAt: timestamp("createdAt"),
@@ -36,8 +36,8 @@ export const teamMembers = table('team_members', {
     id: text('id').primaryKey().notNull(),
     teamId: text('team_id').notNull().references(() => participants.id, { onDelete: 'cascade' }),
     participantId: text('participant_id').notNull().references(() => participants.id, { onDelete: 'cascade' }),
-}, (table) => ({
-    teamPlayerUnique: unique().on(table.teamId, table.participantId),
-}));
+}, (table) => [
+    unique('team_participants').on(table.teamId, table.participantId)
+]);
 
 

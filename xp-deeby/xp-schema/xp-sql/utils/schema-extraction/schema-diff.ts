@@ -37,6 +37,8 @@ export interface ColumnMetadata {
 /**
  * Table metadata extracted from a schema
  */
+import type { ForeignKeyAction } from '../dialects/types';
+
 export interface TableMetadata {
   name: string;
   columns: Record<string, ColumnMetadata>;
@@ -45,6 +47,8 @@ export interface TableMetadata {
     localColumns: string[];
     refTable: string;
     refColumns: string[];
+    onDelete?: ForeignKeyAction;
+    onUpdate?: ForeignKeyAction;
   }>;
   uniqueConstraints: Array<{
     name?: string;

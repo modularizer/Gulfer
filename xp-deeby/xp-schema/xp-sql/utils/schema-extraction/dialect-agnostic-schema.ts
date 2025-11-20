@@ -5,6 +5,8 @@
  * that can be extracted from unbound tables and then converted to dialect-specific SQL.
  */
 
+import type { ForeignKeyAction } from '../../dialects/types';
+
 /**
  * Dialect-agnostic column metadata
  * Contains only abstract type information, no SQL-specific strings
@@ -34,6 +36,8 @@ export interface DialectAgnosticTableMetadata {
     localColumns: string[];
     refTable: string;
     refColumns: string[];
+    onDelete?: ForeignKeyAction;
+    onUpdate?: ForeignKeyAction;
   }>;
   uniqueConstraints: Array<{
     name?: string;

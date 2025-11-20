@@ -19,8 +19,8 @@
  */
 
 import { eq, type SQL } from 'drizzle-orm';
-import type { Database } from '../../../../xp-deeby/adapters';
-import * as schema from '../tables';
+import type { XPDatabaseConnectionPlus as Database } from '../../../../xp-deeby/xp-schema';
+import {schema} from '../tables';
 import { applyQueryModifiers, type QueryBuilderState } from '../../../../xp-deeby/utils';
 import type {
   Venue,
