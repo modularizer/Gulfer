@@ -3,6 +3,11 @@
 A simple offline scorecard app for golf and disc-golf.
 View it live at [https://modularizer.github.io/Gulfer/](https://modularizer.github.io/Gulfer/)
 
+## How it Started
+💡 Gulfer started as an idea on Skunkpad (often searched as “Skunk Pad”), a place where I develop and track project ideas.
+See it here: [https://skunkpad.com/torin/Gulfer](https://skunkpad.com/torin/Gulfer)
+
+
 ## Overview
 Gulfer is meant to **minimize time spent on your phone at the course** at the course. 
 
